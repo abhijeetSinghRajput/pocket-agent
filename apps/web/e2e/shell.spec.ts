@@ -1,0 +1,52 @@
+import { expect, test, type Page } from '@playwright/test';
+
+const ROUTES = [
+  { path: '/', heading: 'Overview' },
+  { path: '/agents', heading: 'Agents' },
+  { path: '/approvals', heading: 'Approvals' },
+  { path: '/activity', heading: 'Activity' },
+  { path: '/devices', heading: 'Devices' },
+  { path: '/settings', heading: 'Settings' },
+];
+
+async function expectNoHorizontalOverflow(page: Page) {
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  expect(overflow).toBeLessThanOrEqual(0);
+}
+
+for (const { path, heading } of ROUTES) {
+  test(`${path} renders without horizontal overflow`, async ({ page }) => {
+    const errors: string[] = [];
+    page.on('pageerror', (e) => errors.push(e.message));
+    await page.goto(path);
+    await expect(page.getByRole('heading', { level: 1, name: heading })).toBeVisible();
+    await expectNoHorizontalOverflow(page);
+    expect(errors).toEqual([]);
+  });
+}
+
+test('placeholder sections never show mock data', async ({ page }) => {
+  for (const path of ['/agents', '/approvals', '/activity', '/devices']) {
+    await page.goto(path);
+    await expect(page.getByTestId('not-yet-available')).toContainText(/Arrives in M\d/);
+  }
+});
+
+test('overview shows real backend health', async ({ page }) => {
+  await page.goto('/');
+  const card = page.getByTestId('api-status');
+  await expect(card.getByText('Operational')).toBeVisible({ timeout: 15_000 });
+  await expect(card.getByText('Database')).toBeVisible();
+  await expect(card.getByText('Redis')).toBeVisible();
+});
+
+test('theme toggle switches between light and dark and persists', async ({ page }) => {
+  await page.emulateMedia({ colorScheme: 'light' });
+  await page.goto('/');
+  const html = page.locator('html');
+  await expect(html).not.toHaveClass(/dark/);
+  await page.getByTestId('theme-toggle').filter({ visible: true }).click();
+  await expect(html).toHaveClass(/dark/);
+  await page.reload();
+  await expect(html).toHaveClass(/dark/);
+});

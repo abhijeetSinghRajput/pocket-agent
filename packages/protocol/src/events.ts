@@ -101,7 +101,11 @@ export type AgentToBackend = z.infer<typeof AgentToBackend>;
 export const CommandExecute = defineEvent(
   'command.execute',
   z.discriminatedUnion('commandType', [
-    z.object({ commandId: z.uuid(), commandType: z.literal('instruction'), text: z.string().min(1).max(20_000) }),
+    z.object({
+      commandId: z.uuid(),
+      commandType: z.literal('instruction'),
+      text: z.string().min(1).max(20_000),
+    }),
     z.object({
       commandId: z.uuid(),
       commandType: z.literal('session.start'),
@@ -113,7 +117,12 @@ export const CommandExecute = defineEvent(
 export const CommandStop = defineEvent('command.stop', z.object({ commandId: z.uuid() }));
 export const ApprovalDecision = defineEvent(
   'approval.decision',
-  z.object({ approvalId: z.uuid(), requestId: id, decision: z.enum(['allow', 'deny']), message: text.optional() }),
+  z.object({
+    approvalId: z.uuid(),
+    requestId: id,
+    decision: z.enum(['allow', 'deny']),
+    message: text.optional(),
+  }),
 );
 export const DeviceRevoke = defineEvent('device.revoke', z.object({ reason: z.string().max(200) }));
 export const ConfigUpdate = defineEvent(
@@ -152,7 +161,10 @@ export const ApprovalUpdated = defineEvent(
   'approval.updated',
   z.object({ approvalId: z.uuid(), status: ApprovalStatus }),
 );
-export const NotificationCreated = defineEvent('notification.created', z.object({ notificationId: z.uuid() }));
+export const NotificationCreated = defineEvent(
+  'notification.created',
+  z.object({ notificationId: z.uuid() }),
+);
 
 export const BackendToWeb = z.discriminatedUnion('eventType', [
   DeviceStatusChanged,

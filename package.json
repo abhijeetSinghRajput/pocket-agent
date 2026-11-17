@@ -21,7 +21,8 @@
     "check": "pnpm format:check && pnpm typecheck && pnpm lint && pnpm test",
     "infra:up": "docker compose -f infrastructure/docker/docker-compose.yml up -d --wait",
     "infra:down": "docker compose -f infrastructure/docker/docker-compose.yml down",
-    "db:migrate": "pnpm --filter @agentdock/api db:migrate"
+    "db:migrate": "pnpm --filter @agentdock/api db:migrate",
+    "test:integration": "pnpm build:packages && pnpm --filter @agentdock/api test:integration"
   },
   "devDependencies": {
     "prettier": "3.9.10",

@@ -20,7 +20,12 @@ const base = () => ({ v: PROTOCOL_VERSION, eventId: randomUUID(), timestamp: new
 
 describe('envelope parsing', () => {
   it('accepts a valid heartbeat', () => {
-    const msg = { ...base(), deviceId: 'dev_1', eventType: 'device.heartbeat', payload: { activeSessions: 2 } };
+    const msg = {
+      ...base(),
+      deviceId: 'dev_1',
+      eventType: 'device.heartbeat',
+      payload: { activeSessions: 2 },
+    };
     expect(AgentToBackend.parse(msg)).toEqual(msg);
   });
 
@@ -30,17 +35,32 @@ describe('envelope parsing', () => {
   });
 
   it('rejects unsupported protocol versions', () => {
-    const r = AgentToBackend.safeParse({ ...base(), v: 2, eventType: 'device.heartbeat', payload: { activeSessions: 0 } });
+    const r = AgentToBackend.safeParse({
+      ...base(),
+      v: 2,
+      eventType: 'device.heartbeat',
+      payload: { activeSessions: 0 },
+    });
     expect(r.success).toBe(false);
   });
 
   it('rejects a non-uuid eventId (dedupe key must be well-formed)', () => {
-    const r = AgentToBackend.safeParse({ ...base(), eventId: '1', eventType: 'device.heartbeat', payload: { activeSessions: 0 } });
+    const r = AgentToBackend.safeParse({
+      ...base(),
+      eventId: '1',
+      eventType: 'device.heartbeat',
+      payload: { activeSessions: 0 },
+    });
     expect(r.success).toBe(false);
   });
 
   it('rejects unexpected top-level fields (strict envelope)', () => {
-    const r = AgentToBackend.safeParse({ ...base(), eventType: 'device.heartbeat', payload: { activeSessions: 0 }, admin: true });
+    const r = AgentToBackend.safeParse({
+      ...base(),
+      eventType: 'device.heartbeat',
+      payload: { activeSessions: 0 },
+      admin: true,
+    });
     expect(r.success).toBe(false);
   });
 

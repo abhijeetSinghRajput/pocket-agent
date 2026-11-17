@@ -1,0 +1,29 @@
+{
+  "name": "@agentdock/local-agent",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "AgentDock Local Agent: runs on the user's PC and connects outbound to the AgentDock API.",
+  "bin": {
+    "agentdock": "./dist/cli.js"
+  },
+  "scripts": {
+    "dev": "tsx src/cli.ts",
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint . --max-warnings=0",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@agentdock/protocol": "workspace:*",
+    "commander": "15.0.0"
+  },
+  "devDependencies": {
+    "@agentdock/config": "workspace:*",
+    "@types/node": "26.6.6",
+    "eslint": "10.14.0",
+    "tsx": "4.23.15",
+    "typescript": "6.0.3",
+    "vitest": "5.1.0"
+  }
+}

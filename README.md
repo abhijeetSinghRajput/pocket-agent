@@ -11,15 +11,15 @@ own computer. From a phone or desktop browser you can watch sessions, approve pe
 
 ## Repository layout
 
-| Path | What it is |
-|---|---|
-| `apps/web` | Next.js dashboard (responsive, PWA later) |
-| `apps/api` | Fastify API + WebSocket gateway, Prisma/Postgres, Redis |
-| `apps/local-agent` | PC-side agent and CLI |
-| `packages/protocol` | Shared Zod schemas: WS envelope, events, DTOs, status machines |
-| `packages/config` | Shared tsconfig and ESLint presets |
-| `infrastructure/docker` | Local Postgres + Redis (dev only) |
-| `poc/` | Throwaway integration experiments (not built or shipped) |
+| Path                    | What it is                                                     |
+| ----------------------- | -------------------------------------------------------------- |
+| `apps/web`              | Next.js dashboard (responsive, PWA later)                      |
+| `apps/api`              | Fastify API + WebSocket gateway, Prisma/Postgres, Redis        |
+| `apps/local-agent`      | PC-side agent and CLI                                          |
+| `packages/protocol`     | Shared Zod schemas: WS envelope, events, DTOs, status machines |
+| `packages/config`       | Shared tsconfig and ESLint presets                             |
+| `infrastructure/docker` | Local Postgres + Redis (dev only)                              |
+| `poc/`                  | Throwaway integration experiments (not built or shipped)       |
 
 ## Development setup
 
@@ -32,16 +32,24 @@ cp apps/api/.env.example apps/api/.env
 cp apps/web/.env.example apps/web/.env.local
 pnpm infra:up              # Postgres 17 + Redis 7 on 127.0.0.1
 pnpm db:migrate            # apply Prisma migrations
-pnpm dev:api               # http://localhost:4000/health
+pnpm dev:api               # http://localhost:4000/health (binds 127.0.0.1; set HOST=0.0.0.0 to test from a phone on your LAN)
 pnpm dev:web               # http://localhost:3000
 ```
 
 Quality gate (run before closing any milestone):
 
 ```bash
-pnpm check                 # prettier --check, typecheck, lint, unit/integration tests
-pnpm test:e2e              # Playwright (desktop + mobile viewports)
+pnpm check                 # prettier --check, typecheck, lint (zero warnings), unit tests
+pnpm test:integration      # API against real Postgres + Redis (needs infra:up + db:migrate)
+pnpm test:e2e              # Playwright: desktop, mobile and 360px viewports (first: pnpm --filter @agentdock/web exec playwright install chromium)
 ```
+
+### Windows notes
+
+- The web app builds with webpack (`next build --webpack`). On PCs with **Smart App Control /
+  Application Control** turned on, Windows blocks Next's unsigned native Turbopack binary. The webpack
+  build is officially supported and works there.
+- If `corepack enable` fails with `EPERM`, run `corepack enable --install-directory "%APPDATA%\npm" pnpm`.
 
 ## Configuration
 

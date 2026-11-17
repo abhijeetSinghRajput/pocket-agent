@@ -1,0 +1,310 @@
+// AgentDock data model. Postgres is the source of truth; Redis holds only transient state.
+// Enum values mirror packages/protocol/src/enums.ts (checked by test/schema-sync.test.ts).
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Platform {
+  windows
+  macos
+  linux
+}
+
+enum DeviceStatus {
+  Online
+  Offline
+  Revoked
+}
+
+enum SessionMode {
+  managed
+  observed
+}
+
+enum AgentStatus {
+  Starting
+  Running
+  WaitingForInput
+  WaitingForPermission
+  Completed
+  Failed
+  Stopped
+  Disconnected
+}
+
+enum CommandStatus {
+  Pending
+  Delivered
+  Accepted
+  Executing
+  Completed
+  Failed
+  Expired
+}
+
+enum ApprovalStatus {
+  Pending
+  Approved
+  Denied
+  Expired
+  Cancelled
+}
+
+enum ActorType {
+  user
+  device
+  system
+}
+
+model User {
+  id           String   @id @default(uuid(7)) @db.Uuid
+  name         String
+  /// Stored lower-cased; uniqueness is case-insensitive by construction.
+  email        String   @unique
+  passwordHash String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  authSessions      AuthSession[]
+  pairingCodes      PairingCode[]
+  devices           Device[]
+  commands          Command[]
+  approvals         Approval[]
+  notifications     Notification[]
+  notificationPrefs NotificationPreference[]
+  pushSubscriptions PushSubscription[]
+  auditLogs         AuditLog[]
+
+  @@map("users")
+}
+
+/// Browser login session. Only a hash of the cookie token is stored.
+model AuthSession {
+  id        String    @id @default(uuid(7)) @db.Uuid
+  userId    String    @db.Uuid
+  tokenHash String    @unique
+  userAgent String?
+  ip        String?
+  createdAt DateTime  @default(now())
+  expiresAt DateTime
+  revokedAt DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("auth_sessions")
+}
+
+/// Short-lived, single-use code used to pair a PC. Only the hash is stored.
+model PairingCode {
+  id         String    @id @default(uuid(7)) @db.Uuid
+  userId     String    @db.Uuid
+  codeHash   String    @unique
+  createdAt  DateTime  @default(now())
+  expiresAt  DateTime
+  consumedAt DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("pairing_codes")
+}
+
+model Device {
+  id              String       @id @default(uuid(7)) @db.Uuid
+  userId          String       @db.Uuid
+  name            String
+  platform        Platform
+  agentVersion    String
+  status          DeviceStatus @default(Offline)
+  /// sha256 of the high-entropy device secret; the secret itself is never stored.
+  secretHash      String       @unique
+  /// Remote approval is opt-in per device (architecture: Approved constraints #3).
+  remoteApprovalEnabled Boolean @default(false)
+  awayMode        Boolean      @default(false)
+  lastHeartbeatAt DateTime?
+  revokedAt       DateTime?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sessions  AgentSession[]
+  events    AgentEvent[]
+  approvals Approval[]
+
+  @@index([userId])
+  @@map("devices")
+}
+
+model AgentSession {
+  id                String      @id @default(uuid(7)) @db.Uuid
+  deviceId          String      @db.Uuid
+  /// Provider id from packages/protocol (e.g. "claude-code").
+  provider          String
+  mode              SessionMode
+  externalSessionId String
+  projectName       String
+  projectPath       String
+  status            AgentStatus @default(Starting)
+  /// SessionCapabilities from packages/protocol.
+  capabilities      Json
+  /// Provider-specific metadata.
+  metadata          Json?
+  currentTask       String?
+  startedAt         DateTime    @default(now())
+  lastActivityAt    DateTime    @default(now())
+  endedAt           DateTime?
+
+  device    Device       @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  events    AgentEvent[]
+  commands  Command[]
+  approvals Approval[]
+
+  /// Reconnects must not create duplicate sessions.
+  @@unique([deviceId, externalSessionId])
+  @@index([deviceId, status])
+  @@map("agent_sessions")
+}
+
+/// Append-only activity log of agent events. eventId is the protocol dedupe key.
+/// Retention: payloads older than 30 days are pruned (job added in M3).
+model AgentEvent {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  eventId   String   @unique @db.Uuid
+  deviceId  String   @db.Uuid
+  sessionId String?  @db.Uuid
+  eventType String
+  payload   Json
+  createdAt DateTime @default(now())
+
+  device  Device        @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  session AgentSession? @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, createdAt])
+  @@index([deviceId, createdAt])
+  @@map("agent_events")
+}
+
+model Command {
+  id             String        @id @default(uuid(7)) @db.Uuid
+  sessionId      String        @db.Uuid
+  userId         String        @db.Uuid
+  commandType    String
+  payload        Json
+  status         CommandStatus @default(Pending)
+  /// Client-supplied; makes retries safe.
+  idempotencyKey String
+  error          String?
+  createdAt      DateTime      @default(now())
+  deliveredAt    DateTime?
+  completedAt    DateTime?
+  expiresAt      DateTime
+
+  session AgentSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  user    User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, idempotencyKey])
+  @@index([sessionId, createdAt])
+  @@map("commands")
+}
+
+/// A permission request bound to one user, device, session and request (tool_use_id).
+model Approval {
+  id              String         @id @default(uuid(7)) @db.Uuid
+  sessionId       String         @db.Uuid
+  deviceId        String         @db.Uuid
+  userId          String         @db.Uuid
+  /// Provider request id (Claude Code tool_use_id).
+  requestId       String
+  toolName        String
+  requestPayload  Json
+  status          ApprovalStatus @default(Pending)
+  decisionMessage String?
+  decidedByUserId String?        @db.Uuid
+  createdAt       DateTime       @default(now())
+  expiresAt       DateTime
+  decidedAt       DateTime?
+
+  session AgentSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  device  Device       @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  user    User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, requestId])
+  @@index([userId, status])
+  @@map("approvals")
+}
+
+model Notification {
+  id        String    @id @default(uuid(7)) @db.Uuid
+  userId    String    @db.Uuid
+  type      String
+  priority  String
+  title     String
+  body      String
+  /// Deep-link target etc.
+  data      Json?
+  /// Prevents duplicate notifications for the same underlying event.
+  dedupeKey String?
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, dedupeKey])
+  @@index([userId, createdAt])
+  @@map("notifications")
+}
+
+model NotificationPreference {
+  id       String  @id @default(uuid(7)) @db.Uuid
+  userId   String  @db.Uuid
+  category String
+  enabled  Boolean @default(true)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, category])
+  @@map("notification_preferences")
+}
+
+model PushSubscription {
+  id         String    @id @default(uuid(7)) @db.Uuid
+  userId     String    @db.Uuid
+  platform   String
+  token      String    @unique
+  userAgent  String?
+  createdAt  DateTime  @default(now())
+  lastUsedAt DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("push_subscriptions")
+}
+
+/// Append-only security audit trail: approval decisions, setting changes, pairing, revocation.
+/// The application never updates or deletes rows here.
+model AuditLog {
+  id         String    @id @default(uuid(7)) @db.Uuid
+  userId     String    @db.Uuid
+  actorType  ActorType
+  actorId    String?
+  action     String
+  targetType String
+  targetId   String?
+  metadata   Json?
+  ip         String?
+  createdAt  DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([targetType, targetId])
+  @@map("audit_logs")
+}

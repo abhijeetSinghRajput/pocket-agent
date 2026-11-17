@@ -10,3 +10,9 @@ coverage/
 # PoC artifacts (contain raw hook payloads)
 poc/**/events.jsonl
 poc/claude-integration/hooks.settings.json
+# Generated code
+**/src/generated/
+playwright-report/
+test-results/
+*.tsbuildinfo
+next-env.d.ts

@@ -1,0 +1,48 @@
+import { expect, test } from '@playwright/test';
+
+test.describe('mobile navigation', () => {
+  test.skip(({ isMobile }) => !isMobile, 'mobile only');
+
+  test('bottom nav reaches every section, including those under More', async ({ page }) => {
+    await page.goto('/');
+    const nav = page.getByTestId('bottom-nav');
+    await expect(nav).toBeVisible();
+
+    await nav.getByRole('link', { name: 'Approvals' }).click();
+    await expect(page).toHaveURL(/\/approvals$/);
+    await expect(nav.getByRole('link', { name: 'Approvals' })).toHaveAttribute('aria-current', 'page');
+
+    await nav.getByRole('button', { name: 'More' }).click();
+    const sheet = page.getByRole('dialog', { name: 'More' });
+    await sheet.getByRole('link', { name: 'Devices' }).click();
+    await expect(page).toHaveURL(/\/devices$/);
+    await expect(sheet).toBeHidden();
+  });
+
+  test('touch targets in the bottom nav are at least 44px tall', async ({ page }) => {
+    await page.goto('/');
+    const heights = await page
+      .getByTestId('bottom-nav')
+      .locator('a, button')
+      .evaluateAll((els) => els.map((e) => e.getBoundingClientRect().height));
+    expect(heights.length).toBe(5);
+    for (const h of heights) expect(h).toBeGreaterThanOrEqual(44);
+  });
+
+  test('page content is not hidden behind the bottom nav', async ({ page }) => {
+    await page.goto('/settings');
+    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+    const navTop = await page.getByTestId('bottom-nav').evaluate((n) => n.getBoundingClientRect().top);
+    const lastBottom = await page
+      .getByRole('heading', { name: 'Notifications' })
+      .evaluate((n) => n.closest('section')!.getBoundingClientRect().bottom);
+    expect(lastBottom).toBeLessThanOrEqual(navTop);
+  });
+});
+
+test('desktop shows the sidebar instead of the bottom nav', async ({ page, isMobile }) => {
+  test.skip(isMobile, 'desktop only');
+  await page.goto('/');
+  await expect(page.getByTestId('bottom-nav')).toBeHidden();
+  await expect(page.getByRole('navigation', { name: 'Main' }).filter({ visible: true })).toHaveCount(1);
+});

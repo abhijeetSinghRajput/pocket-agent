@@ -1,0 +1,12 @@
+node_modules/
+.next/
+dist/
+coverage/
+.turbo/
+*.log
+.env
+.env.*
+!.env.example
+# PoC artifacts (contain raw hook payloads)
+poc/**/events.jsonl
+poc/claude-integration/hooks.settings.json

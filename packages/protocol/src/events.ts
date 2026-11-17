@@ -1,0 +1,166 @@
+import { z } from 'zod';
+import { SessionCapabilities } from './capabilities.js';
+import { defineEvent } from './envelope.js';
+import {
+  AgentStatus,
+  ApprovalStatus,
+  CommandStatus,
+  DeviceStatus,
+  Platform,
+  ProviderId,
+  SessionMode,
+} from './enums.js';
+
+/** Long tool inputs/outputs are truncated on the PC before they are sent (see architecture §7). */
+export const MAX_TEXT_FIELD = 8 * 1024;
+const text = z.string().max(MAX_TEXT_FIELD);
+const id = z.string().min(1).max(200);
+
+const SessionRef = z.object({
+  provider: ProviderId,
+  mode: SessionMode,
+  externalSessionId: id,
+  projectPath: z.string().max(1024),
+  projectName: z.string().max(200),
+});
+
+const ToolCall = z.object({
+  toolUseId: id,
+  toolName: z.string().max(200),
+  /** Allow-listed, truncated JSON of the tool input. */
+  input: text,
+});
+
+// ───────────────────────────── Local Agent → Backend ─────────────────────────────
+
+export const DeviceConnected = defineEvent(
+  'device.connected',
+  z.object({ agentVersion: z.string().max(50), platform: Platform, hostname: z.string().max(200) }),
+);
+export const DeviceHeartbeat = defineEvent(
+  'device.heartbeat',
+  z.object({ activeSessions: z.number().int().nonnegative() }),
+);
+export const AgentSessionStarted = defineEvent(
+  'agent.session.started',
+  SessionRef.extend({ capabilities: SessionCapabilities, status: AgentStatus }),
+);
+export const AgentSessionUpdated = defineEvent(
+  'agent.session.updated',
+  z.object({ externalSessionId: id, status: AgentStatus, currentTask: text.optional() }),
+);
+export const AgentSessionEnded = defineEvent(
+  'agent.session.ended',
+  z.object({ externalSessionId: id, reason: z.string().max(200) }),
+);
+export const AgentToolStarted = defineEvent('agent.tool.started', ToolCall);
+export const AgentToolCompleted = defineEvent('agent.tool.completed', ToolCall.extend({ output: text }));
+export const AgentToolFailed = defineEvent('agent.tool.failed', ToolCall.extend({ error: text }));
+export const AgentPermissionRequested = defineEvent(
+  'agent.permission.requested',
+  ToolCall.extend({ requestId: id, expiresAt: z.iso.datetime({ offset: true }) }),
+);
+export const AgentPermissionResolved = defineEvent(
+  'agent.permission.resolved',
+  z.object({ requestId: id, outcome: z.enum(['remote', 'local', 'timeout', 'cancelled']) }),
+);
+export const AgentOutput = defineEvent(
+  'agent.output',
+  z.object({ role: z.enum(['assistant', 'user', 'system']), text }),
+);
+export const AgentError = defineEvent('agent.error', z.object({ message: text }));
+export const CommandAck = defineEvent(
+  'command.ack',
+  z.object({ commandId: z.uuid(), status: CommandStatus, error: text.optional() }),
+);
+export const ApprovalDecisionAck = defineEvent(
+  'approval.decision.ack',
+  z.object({ approvalId: z.uuid(), result: z.enum(['applied', 'stale']) }),
+);
+
+export const AgentToBackend = z.discriminatedUnion('eventType', [
+  DeviceConnected,
+  DeviceHeartbeat,
+  AgentSessionStarted,
+  AgentSessionUpdated,
+  AgentSessionEnded,
+  AgentToolStarted,
+  AgentToolCompleted,
+  AgentToolFailed,
+  AgentPermissionRequested,
+  AgentPermissionResolved,
+  AgentOutput,
+  AgentError,
+  CommandAck,
+  ApprovalDecisionAck,
+]);
+export type AgentToBackend = z.infer<typeof AgentToBackend>;
+
+// ───────────────────────────── Backend → Local Agent ─────────────────────────────
+
+export const CommandExecute = defineEvent(
+  'command.execute',
+  z.discriminatedUnion('commandType', [
+    z.object({ commandId: z.uuid(), commandType: z.literal('instruction'), text: z.string().min(1).max(20_000) }),
+    z.object({
+      commandId: z.uuid(),
+      commandType: z.literal('session.start'),
+      projectPath: z.string().max(1024),
+      text: z.string().min(1).max(20_000),
+    }),
+  ]),
+);
+export const CommandStop = defineEvent('command.stop', z.object({ commandId: z.uuid() }));
+export const ApprovalDecision = defineEvent(
+  'approval.decision',
+  z.object({ approvalId: z.uuid(), requestId: id, decision: z.enum(['allow', 'deny']), message: text.optional() }),
+);
+export const DeviceRevoke = defineEvent('device.revoke', z.object({ reason: z.string().max(200) }));
+export const ConfigUpdate = defineEvent(
+  'config.update',
+  z.object({ remoteApprovalEnabled: z.boolean(), awayMode: z.boolean() }),
+);
+export const Ack = defineEvent('ack', z.object({ ackEventId: z.uuid() }));
+
+export const BackendToAgent = z.discriminatedUnion('eventType', [
+  CommandExecute,
+  CommandStop,
+  ApprovalDecision,
+  DeviceRevoke,
+  ConfigUpdate,
+  Ack,
+]);
+export type BackendToAgent = z.infer<typeof BackendToAgent>;
+
+// ───────────────────────────── Backend → Web ─────────────────────────────
+
+export const DeviceStatusChanged = defineEvent(
+  'device.status.changed',
+  z.object({ status: DeviceStatus, lastHeartbeatAt: z.iso.datetime({ offset: true }).nullable() }),
+);
+export const AgentStatusChanged = defineEvent('agent.status.changed', z.object({ status: AgentStatus }));
+export const AgentEventCreated = defineEvent(
+  'agent.event.created',
+  z.object({ agentEventId: z.uuid(), eventType: z.string().max(100) }),
+);
+export const CommandStatusChanged = defineEvent(
+  'command.status.changed',
+  z.object({ commandId: z.uuid(), status: CommandStatus }),
+);
+export const ApprovalCreated = defineEvent('approval.created', z.object({ approvalId: z.uuid() }));
+export const ApprovalUpdated = defineEvent(
+  'approval.updated',
+  z.object({ approvalId: z.uuid(), status: ApprovalStatus }),
+);
+export const NotificationCreated = defineEvent('notification.created', z.object({ notificationId: z.uuid() }));
+
+export const BackendToWeb = z.discriminatedUnion('eventType', [
+  DeviceStatusChanged,
+  AgentStatusChanged,
+  AgentEventCreated,
+  CommandStatusChanged,
+  ApprovalCreated,
+  ApprovalUpdated,
+  NotificationCreated,
+]);
+export type BackendToWeb = z.infer<typeof BackendToWeb>;

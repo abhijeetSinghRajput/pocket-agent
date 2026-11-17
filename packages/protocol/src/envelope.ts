@@ -19,3 +19,19 @@ export function defineEvent<const T extends string, P extends z.ZodType>(eventTy
 
 /** Upper bound for any single frame; larger frames are rejected before parsing. */
 export const MAX_FRAME_BYTES = 256 * 1024;
+
+/** Builds a message with a fresh eventId and timestamp. Validate with the direction's union before sending. */
+export function createEvent<T extends string, P>(
+  eventType: T,
+  payload: P,
+  extra: { deviceId?: string; sessionId?: string } = {},
+) {
+  return {
+    v: PROTOCOL_VERSION,
+    eventId: globalThis.crypto.randomUUID(),
+    timestamp: new Date().toISOString(),
+    ...extra,
+    eventType,
+    payload,
+  };
+}

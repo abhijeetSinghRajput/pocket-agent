@@ -1,3 +1,4 @@
+export * from './api.js';
 export * from './capabilities.js';
 export * from './enums.js';
 export * from './envelope.js';

@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
+import { AccountSection } from '@/components/account-section';
 import { PageHeader } from '@/components/page';
 import { ThemeSelector } from '@/components/theme';
 import { Badge } from '@/components/ui/badge';
@@ -34,14 +35,12 @@ export default function SettingsPage() {
         <Section title="Theme" description="Choose how AgentDock looks on this device.">
           <ThemeSelector />
         </Section>
-        <Section title="Account" description="Name, email and password.">
-          <Badge variant="accent">Arrives in M2</Badge>
-        </Section>
+        <AccountSection />
         <Section
-          title="Security"
-          description="Active sessions, device credentials and remote-approval opt-in."
+          title="Remote approval"
+          description="Off by default. Turn it on per device to answer Claude Code permission requests from here."
         >
-          <Badge variant="accent">Arrives in M2–M5</Badge>
+          <Badge variant="accent">Arrives in M5</Badge>
         </Section>
         <Section title="Notifications" description="Push categories, quiet hours and history.">
           <Badge variant="accent">Arrives in M6</Badge>

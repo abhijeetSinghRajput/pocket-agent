@@ -21,9 +21,27 @@ export const EnvSchema = z.object({
         .filter(Boolean),
     )
     .pipe(z.array(z.url()).min(1)),
+  /** Prefix for every Redis key, so environments/tests can share one Redis safely. */
+  REDIS_KEY_PREFIX: z.string().default('agentdock:'),
+  /** Absolute lifetime of a browser login session. */
+  SESSION_TTL_DAYS: z.coerce.number().int().min(1).max(90).default(30),
+  /** Defaults to true in production. Only set false for plain-http local development. */
+  COOKIE_SECURE: z
+    .enum(['true', 'false'])
+    .optional()
+    .transform((v) => (v === undefined ? undefined : v === 'true')),
+  /** Multiplies every per-IP rate limit. Production may only tighten (≤ 1); E2E raises it. */
+  RATE_LIMIT_SCALE: z.coerce.number().min(0.01).max(1000).default(1),
+  /** Set false to close sign-ups (e.g. a self-hosted single-user install). */
+  REGISTRATION_ENABLED: z
+    .enum(['true', 'false'])
+    .default('true')
+    .transform((v) => v === 'true'),
+  /** Parent domain for the session cookie in production (e.g. ".agentdock.app"); unset = host-only. */
+  COOKIE_DOMAIN: z.string().optional(),
 });
 
-export type Env = z.infer<typeof EnvSchema>;
+export type Env = Omit<z.infer<typeof EnvSchema>, 'COOKIE_SECURE'> & { COOKIE_SECURE: boolean };
 
 export class EnvError extends Error {
   constructor(readonly issues: string[]) {
@@ -38,10 +56,16 @@ export function loadEnv(source: Record<string, string | undefined> = process.env
   if (!result.success) {
     throw new EnvError(result.error.issues.map((i) => `${i.path.join('.') || '(root)'}: ${i.message}`));
   }
-  const env = result.data;
+  const env = {
+    ...result.data,
+    COOKIE_SECURE: result.data.COOKIE_SECURE ?? result.data.NODE_ENV === 'production',
+  };
   if (env.NODE_ENV === 'production') {
     const insecure = env.WEB_ORIGINS.filter((o) => !o.startsWith('https://'));
     if (insecure.length) throw new EnvError([`WEB_ORIGINS: production origins must use https`]);
+    if (!env.COOKIE_SECURE) throw new EnvError(['COOKIE_SECURE: cannot be false in production']);
+    if (env.RATE_LIMIT_SCALE > 1)
+      throw new EnvError(['RATE_LIMIT_SCALE: cannot loosen limits in production']);
   }
   return env;
 }

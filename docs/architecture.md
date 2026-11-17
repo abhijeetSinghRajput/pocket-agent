@@ -119,7 +119,7 @@ Postgres is the source of truth. The MVP runs one API instance, but nothing assu
 - **Discovery**: reads only `~/.claude/sessions/<pid>.json` (`sessionId`, `cwd`, `status`, `entrypoint`)
   and checks the pid is alive. It **never** reads `*.key` or `~/.claude/ide/*.lock` files, because they
   contain local auth tokens. This format is undocumented, so discovery degrades gracefully when it changes.
-- **Credential storage**: the device secret is encrypted with Windows DPAPI (current user) and stored in
+- **Credential storage**: the device secret is encrypted with Windows DPAPI (current user), through PowerShell with the secret passed on stdin (no native module), and stored in
   `%APPDATA%\AgentDock`.
 
 ## 4. Identity, pairing and trust

@@ -17,7 +17,7 @@ Proven on Claude Code 2.1.325 and Windows 11 (details in `poc/README.md`):
 - [x] Deliver a new instruction to the same session (managed: SDK streaming input; observed: Stop hook between turns)
 - [ ] Still to verify in M3: PermissionRequest behaviour inside the **VS Code extension** while the hook is waiting
 
-## M1 — Foundation + app shell ✅ done (2026-11-17, awaiting owner sign-off)
+## M1 — Foundation + app shell ✅ done (2026-11-17)
 
 - pnpm workspace, `packages/config` (tsconfig/eslint/prettier), `packages/protocol` (envelope, enums, status machines)
 - `infrastructure/docker/docker-compose.yml`: Postgres 17, Redis 7
@@ -29,7 +29,7 @@ Proven on Claude Code 2.1.325 and Windows 11 (details in `poc/README.md`):
 
 **Accept:** all three apps start independently; the migration applies; `/health` is green; CI-style script passes; no secrets in the repo.
 
-## M2 — Authentication + device pairing
+## M2 — Authentication + device pairing ✅ done (2026-11-17, awaiting owner sign-off)
 
 - API: register, login, logout, `me`; argon2id; AuthSession table; rate limits on auth and pairing
 - API: pairing codes, `POST /devices/pair`, device list, revoke, rotate

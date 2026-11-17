@@ -38,6 +38,7 @@ async function main(): Promise<void> {
         redis: () => redis.ping(),
       },
     },
+    ctx: { env, prisma, redis, now: () => new Date() },
   });
 
   const shutdown = async (signal: string) => {

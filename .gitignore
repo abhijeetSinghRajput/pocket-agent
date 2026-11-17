@@ -16,3 +16,5 @@ playwright-report/
 test-results/
 *.tsbuildinfo
 next-env.d.ts
+# Playwright signed-in state (contains session cookies)
+**/e2e/.auth/

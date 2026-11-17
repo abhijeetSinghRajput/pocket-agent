@@ -53,6 +53,18 @@ describe('GET /health', () => {
   });
 });
 
+describe('safety switches', () => {
+  it('refuses to disable rate limits outside tests', async () => {
+    await expect(
+      buildApp({
+        env: { WEB_ORIGINS: ['https://app.example.com'], NODE_ENV: 'production' },
+        health: { version: 'x', probes: { database: up, redis: up } },
+        disableRateLimits: true,
+      }),
+    ).rejects.toThrow(/only allowed when NODE_ENV=test/);
+  });
+});
+
 describe('HTTP hardening', () => {
   it('allows CORS only for configured origins', async () => {
     const a = await make(up, up);

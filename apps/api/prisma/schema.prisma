@@ -125,6 +125,9 @@ model Device {
   status          DeviceStatus @default(Offline)
   /// sha256 of the high-entropy device secret; the secret itself is never stored.
   secretHash      String       @unique
+  /// Two-phase rotation: a newly issued secret becomes current the first time the agent
+  /// authenticates with it; until then the old secret keeps working (no lock-out on a lost response).
+  pendingSecretHash String?    @unique
   /// Remote approval is opt-in per device (architecture: Approved constraints #3).
   remoteApprovalEnabled Boolean @default(false)
   awayMode        Boolean      @default(false)

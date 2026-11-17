@@ -29,6 +29,15 @@ describe('loadEnv', () => {
     }
   });
 
+  it('production can only tighten rate limits and must use secure cookies', () => {
+    const prod = { ...valid, NODE_ENV: 'production', WEB_ORIGINS: 'https://app.example.com' };
+    expect(() => loadEnv({ ...prod, RATE_LIMIT_SCALE: '2' })).toThrow(/RATE_LIMIT_SCALE/);
+    expect(loadEnv({ ...prod, RATE_LIMIT_SCALE: '0.5' }).RATE_LIMIT_SCALE).toBe(0.5);
+    expect(() => loadEnv({ ...prod, COOKIE_SECURE: 'false' })).toThrow(/COOKIE_SECURE/);
+    expect(loadEnv(prod).COOKIE_SECURE).toBe(true);
+    expect(loadEnv(valid).COOKIE_SECURE).toBe(false); // plain-http local dev
+  });
+
   it('rejects an invalid port', () => {
     expect(() => loadEnv({ ...valid, PORT: '70000' })).toThrow(EnvError);
   });

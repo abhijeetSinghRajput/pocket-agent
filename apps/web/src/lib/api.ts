@@ -1,4 +1,63 @@
-import { HealthResponse } from '@agentdock/protocol';
+import { ApiError, HealthResponse } from '@agentdock/protocol';
+import type { z } from 'zod';
+
+export class ApiClientError extends Error {
+  constructor(
+    readonly status: number,
+    readonly code: string,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'ApiClientError';
+  }
+}
+
+const FRIENDLY: Record<string, string> = {
+  unreachable: 'Cannot reach AgentDock. Check your connection and try again.',
+  rate_limited: 'Too many attempts. Please wait a moment and try again.',
+  internal_error: 'Something went wrong on our side. Please try again.',
+};
+
+/**
+ * JSON request to the API with the session cookie. Responses are validated against `schema`;
+ * failures throw ApiClientError with a user-presentable message.
+ */
+export async function apiRequest<S extends z.ZodType>(
+  path: string,
+  schema: S | null,
+  init: { method?: 'GET' | 'POST'; body?: unknown; signal?: AbortSignal } = {},
+): Promise<z.infer<S>> {
+  let res: Response;
+  try {
+    res = await fetch(`${apiBaseUrl()}${path}`, {
+      method: init.method ?? 'GET',
+      credentials: 'include',
+      cache: 'no-store',
+      signal: init.signal,
+      headers: init.body === undefined ? undefined : { 'content-type': 'application/json' },
+      body: init.body === undefined ? undefined : JSON.stringify(init.body),
+    });
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'AbortError') throw err;
+    throw new ApiClientError(0, 'unreachable', FRIENDLY['unreachable']!);
+  }
+  if (res.status === 204) return undefined as z.infer<S>;
+  const body: unknown = await res.json().catch(() => null);
+  if (!res.ok) {
+    const e = ApiError.safeParse(body);
+    const code = e.success ? e.data.error : `http_${res.status}`;
+    throw new ApiClientError(
+      res.status,
+      code,
+      (e.success && e.data.message) || FRIENDLY[code] || 'Request failed',
+    );
+  }
+  if (!schema) return body as z.infer<S>;
+  const parsed = schema.safeParse(body);
+  if (!parsed.success)
+    throw new ApiClientError(res.status, 'bad_response', 'Unexpected response from AgentDock');
+  return parsed.data;
+}
 
 /** Base URL of the AgentDock API. Configured per environment (NEXT_PUBLIC_API_URL). */
 export function apiBaseUrl(): string {

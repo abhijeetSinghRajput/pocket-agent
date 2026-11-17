@@ -1,6 +1,7 @@
 'use client';
 
-import { Ellipsis, X } from 'lucide-react';
+import type { UserDto } from '@agentdock/protocol';
+import { Ellipsis, LogOut, X } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Dialog } from 'radix-ui';
@@ -9,7 +10,7 @@ import { ThemeToggle } from '@/components/theme';
 import { isActive, NAV_ITEMS } from '@/lib/nav';
 import { cn } from '@/lib/utils';
 
-function Logo() {
+export function Logo() {
   return (
     <Link
       href="/"
@@ -36,14 +37,34 @@ function Logo() {
   );
 }
 
-function Sidebar({ pathname }: { pathname: string }) {
+function UserFooter({ user, onSignOut }: { user: UserDto; onSignOut: () => void }) {
+  return (
+    <div className="flex items-center gap-2 border-t p-3">
+      <div className="min-w-0 flex-1 px-1">
+        <p className="truncate text-sm font-medium">{user.name}</p>
+        <p className="truncate text-xs text-muted-foreground">{user.email}</p>
+      </div>
+      <button
+        type="button"
+        onClick={onSignOut}
+        aria-label="Sign out"
+        title="Sign out"
+        className="grid size-9 shrink-0 place-items-center rounded-md text-muted-foreground outline-none hover:bg-accent hover:text-accent-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50"
+      >
+        <LogOut className="size-4" aria-hidden />
+      </button>
+    </div>
+  );
+}
+
+function Sidebar({ pathname, user, onSignOut }: { pathname: string; user: UserDto; onSignOut: () => void }) {
   return (
     <aside className="sticky top-0 hidden h-dvh w-60 shrink-0 flex-col border-r bg-sidebar lg:flex">
       <div className="flex h-14 items-center justify-between px-4">
         <Logo />
         <ThemeToggle />
       </div>
-      <nav aria-label="Main" className="flex flex-col gap-0.5 px-3 py-2">
+      <nav aria-label="Main" className="flex flex-1 flex-col gap-0.5 px-3 py-2">
         {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
           const active = isActive(pathname, href);
           return (
@@ -62,6 +83,7 @@ function Sidebar({ pathname }: { pathname: string }) {
           );
         })}
       </nav>
+      <UserFooter user={user} onSignOut={onSignOut} />
     </aside>
   );
 }
@@ -75,7 +97,15 @@ function MobileTopBar() {
   );
 }
 
-function BottomNav({ pathname }: { pathname: string }) {
+function BottomNav({
+  pathname,
+  user,
+  onSignOut,
+}: {
+  pathname: string;
+  user: UserDto;
+  onSignOut: () => void;
+}) {
   const [moreOpen, setMoreOpen] = useState(false);
   const primary = NAV_ITEMS.filter((i) => i.primaryOnMobile);
   const secondary = NAV_ITEMS.filter((i) => !i.primaryOnMobile);
@@ -146,6 +176,23 @@ function BottomNav({ pathname }: { pathname: string }) {
                 );
               })}
             </ul>
+            <div className="mt-3 flex items-center gap-3 border-t pt-3">
+              <div className="min-w-0 flex-1 px-3">
+                <p className="truncate text-sm font-medium">{user.name}</p>
+                <p className="truncate text-xs text-muted-foreground">{user.email}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setMoreOpen(false);
+                  onSignOut();
+                }}
+                className="flex h-11 items-center gap-2 rounded-lg px-3 text-sm font-medium text-muted-foreground outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50"
+              >
+                <LogOut className="size-4" aria-hidden />
+                Sign out
+              </button>
+            </div>
           </Dialog.Content>
         </Dialog.Portal>
       </Dialog.Root>
@@ -153,18 +200,26 @@ function BottomNav({ pathname }: { pathname: string }) {
   );
 }
 
-export function AppShell({ children }: { children: ReactNode }) {
+export function AppShell({
+  children,
+  user,
+  onSignOut,
+}: {
+  children: ReactNode;
+  user: UserDto;
+  onSignOut: () => void;
+}) {
   const pathname = usePathname();
   return (
     <div className="flex min-h-dvh">
-      <Sidebar pathname={pathname} />
+      <Sidebar pathname={pathname} user={user} onSignOut={onSignOut} />
       <div className="flex min-w-0 flex-1 flex-col">
         <MobileTopBar />
         <main className="mx-auto w-full max-w-5xl flex-1 px-4 pt-6 pb-[calc(5.5rem+env(safe-area-inset-bottom))] sm:px-6 lg:px-8 lg:pt-10 lg:pb-12">
           {children}
         </main>
       </div>
-      <BottomNav pathname={pathname} />
+      <BottomNav pathname={pathname} user={user} onSignOut={onSignOut} />
     </div>
   );
 }

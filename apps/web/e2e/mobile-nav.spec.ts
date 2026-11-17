@@ -21,6 +21,7 @@ test.describe('mobile navigation', () => {
 
   test('touch targets in the bottom nav are at least 44px tall', async ({ page }) => {
     await page.goto('/');
+    await expect(page.getByTestId('bottom-nav')).toBeVisible(); // shell renders after the session check
     const heights = await page
       .getByTestId('bottom-nav')
       .locator('a, button')
@@ -31,6 +32,7 @@ test.describe('mobile navigation', () => {
 
   test('page content is not hidden behind the bottom nav', async ({ page }) => {
     await page.goto('/settings');
+    await expect(page.getByRole('heading', { name: 'Notifications' })).toBeVisible();
     await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
     const navTop = await page.getByTestId('bottom-nav').evaluate((n) => n.getBoundingClientRect().top);
     const lastBottom = await page

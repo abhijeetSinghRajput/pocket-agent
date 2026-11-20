@@ -79,3 +79,17 @@ If the PC is offline, the command is recorded as `Failed` with `error: "device_o
 start before `expiresAt`. Time limits: an instruction has 15 minutes, a session start 2 minutes, interrupt and stop 1 minute.
 `DeviceDto` also gained `projects` and `observedInstructions`. Both are reported by the PC and shown in the dashboard,
 but only the PC enforces them.
+
+## Approvals (M5)
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/approvals?status=pending\|all` | `pending` (the default) returns requests still waiting for a decision. `all` returns the last 50 of any status. Each item includes the allow-listed tool input, project, PC, session mode and `expiresAt`. |
+| GET | `/approvals/:id` | The caller's own approvals only |
+| POST | `/approvals/:id/decision` | `{decision: "allow"\|"deny", message?}`. Needs an allow-listed Origin; limit 60 per minute. Only one decision ever counts (atomic compare-and-set). Errors: `409 already_decided`, `409 expired`, `409 not_pending` (answered on the PC), `409 device_offline` (the decision is **not** consumed, so you can retry). |
+| POST | `/devices/:id/away` | `{awayMode}`. Only affects sessions you started yourself, and only if the PC enabled remote approval. Audited. |
+
+Status: an approval stays `Pending` with `decision` set until the PC confirms it applied the decision. It then becomes
+`Approved` or `Denied`. If the decision arrived too late (already answered on the PC, timed out, or the session ended), it
+becomes `Cancelled` and is never recorded as `Approved`. `Expired` means nobody decided in time. `DeviceDto` gained `awayMode`, and
+`remoteApprovalEnabled` is now reported by the PC.

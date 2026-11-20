@@ -49,11 +49,11 @@ Proven on Claude Code 2.1.325 and Windows 11 (details in `poc/README.md`):
 - Managed sessions: `agentdock` service starts SDK sessions on command (`session.start {cwd, prompt}`)
 - API: persist sessions/events; unique `(deviceId, externalSessionId)`; `/ws/client` fan-out
 - Web: Overview (real counts), Agents list, Agent details (timeline, current status, capabilities badge), Activity page
-- **Still open:** verify the VS Code PermissionRequest behaviour while a hook waits. This needs hooks in the real ~/.claude/settings.json and an interactive session, so it was moved to the start of M5, where it decides the Away-mode design.
+- ✅ Verified the VS Code PermissionRequest behaviour live (see architecture: M5 notes). Away-mode gating confirmed as the design.
 
 **Accept:** a real VS Code session and a real managed session both appear with live status; tool events stream into the timeline; an agent reconnect creates no duplicate sessions or events.
 
-## M4 — Remote instructions ✅ done (2026-11-20, awaiting owner sign-off)
+## M4 — Remote instructions ✅ done (2026-11-20)
 
 - Command lifecycle + idempotency key; `command.execute` routing; offline → immediate `Failed(device_offline)`
 - Managed: inbox delivery, `interrupt`/stop, live assistant output
@@ -62,7 +62,7 @@ Proven on Claude Code 2.1.325 and Windows 11 (details in `poc/README.md`):
 
 **Accept:** an instruction sent from the phone runs in the correct managed session; states are visible end to end; a disconnected device shows a clear failure.
 
-## M5 — Remote permission approvals
+## M5 — Remote permission approvals ✅ done (2026-11-20, awaiting owner sign-off; verified live in VS Code)
 
 - Approval lifecycle; atomic decide; TTL < hook timeout; stale-decision handling; audit events
 - Managed: `canUseTool` → approval; observed: PermissionRequest hook → approval (Away mode)

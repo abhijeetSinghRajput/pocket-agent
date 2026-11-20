@@ -11,6 +11,8 @@ export const Policy = z.object({
   projects: z.array(z.object({ name: z.string(), path: z.string() })).default([]),
   /** Instructions to sessions the user started themselves (delivered between turns). Off by default. */
   observedInstructions: z.boolean().default(false),
+  /** Permission requests may be decided in AgentDock. Off by default. */
+  remoteApproval: z.boolean().default(false),
 });
 export type Policy = z.infer<typeof Policy>;
 

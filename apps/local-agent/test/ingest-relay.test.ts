@@ -128,6 +128,29 @@ describe('hook relay', () => {
     expect(pre.stdout).toBe('');
   });
 
+  it('waits longer for a held PermissionRequest (decision from the phone) and prints the answer', async () => {
+    const home = mkdtempSync(path.join(os.tmpdir(), 'agentdock-hold-'));
+    server = new IngestServer(home, {
+      hook: async (p) => {
+        if (p['hook_event_name'] !== 'PermissionRequest') return undefined;
+        await new Promise((r) => setTimeout(r, 4_000)); // longer than the 3 s used for other hooks
+        return {
+          hookSpecificOutput: { hookEventName: 'PermissionRequest', decision: { behavior: 'allow' } },
+        };
+      },
+      listSessions: () => [],
+      startSession: async () => ({ externalSessionId: 'x' }),
+      stopSession: async () => false,
+      reloadPolicy: async () => undefined,
+    });
+    await server.start();
+    const r = await relay(home, '{"hook_event_name":"PermissionRequest"}');
+    expect(r.ms).toBeGreaterThan(3_900);
+    expect(JSON.parse(r.stdout)).toEqual({
+      hookSpecificOutput: { hookEventName: 'PermissionRequest', decision: { behavior: 'allow' } },
+    });
+  }, 20_000);
+
   it('is a silent no-op when the agent is not running', async () => {
     const home = mkdtempSync(path.join(os.tmpdir(), 'agentdock-noagent-'));
     const r = await relay(home, '{"hook_event_name":"Stop"}');

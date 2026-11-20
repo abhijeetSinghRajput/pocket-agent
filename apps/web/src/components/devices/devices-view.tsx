@@ -12,12 +12,83 @@ import { apiRequest } from '@/lib/api';
 import { formatDate, timeAgo } from '@/lib/format';
 import { useLiveRefresh } from '@/lib/live';
 import { usePoll } from '@/lib/use-poll';
+import { cn } from '@/lib/utils';
 
 const PLATFORM = {
   windows: { icon: Monitor, label: 'Windows' },
   macos: { icon: Laptop, label: 'macOS' },
   linux: { icon: Server, label: 'Linux' },
 } as const;
+
+/**
+ * Away mode: permission requests of sessions the user started on this PC come to AgentDock.
+ * Only possible when the PC itself allows remote approval.
+ */
+function AwayMode({ device }: { device: DeviceDto }) {
+  const [on, setOn] = useState(device.awayMode);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  if (!device.remoteApprovalEnabled) {
+    return (
+      <p className="mt-2 text-xs text-muted-foreground" data-testid="remote-approval-off">
+        Remote approval is off on this PC. To answer its permission requests here, run{' '}
+        <code className="font-mono">agentdock approvals enable</code> on it.
+      </p>
+    );
+  }
+  return (
+    <div className="mt-2 flex flex-col gap-1">
+      <label className="flex w-fit cursor-pointer items-center gap-2 text-sm">
+        <button
+          type="button"
+          role="switch"
+          aria-checked={on}
+          aria-label="Away mode"
+          disabled={busy}
+          data-testid="away-switch"
+          onClick={async () => {
+            setBusy(true);
+            setError(null);
+            try {
+              const r = await apiRequest(`/devices/${device.id}/away`, null, {
+                method: 'POST',
+                body: { awayMode: !on },
+              });
+              setOn((r as { device: DeviceDto }).device.awayMode);
+            } catch (err) {
+              setError((err as Error).message);
+            } finally {
+              setBusy(false);
+            }
+          }}
+          className={cn(
+            'relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border-2 border-transparent transition-colors outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:opacity-50',
+            on ? 'bg-primary' : 'bg-input',
+          )}
+        >
+          <span
+            aria-hidden
+            className={cn(
+              'size-5 rounded-full bg-background shadow-xs transition-transform',
+              on ? 'translate-x-5' : 'translate-x-0',
+            )}
+          />
+        </button>
+        <span className="font-medium">Away mode</span>
+      </label>
+      <p className="text-xs text-muted-foreground">
+        {on
+          ? 'Permission requests of sessions you started on this PC come here first. Unanswered within 5 min: asked on the PC.'
+          : 'Off: Claude Code asks on the PC as usual. Managed sessions always ask here.'}
+      </p>
+      {error && (
+        <p role="alert" className="text-xs text-destructive">
+          {error}
+        </p>
+      )}
+    </div>
+  );
+}
 
 function DeviceRow({ device, onRevoke }: { device: DeviceDto; onRevoke: (d: DeviceDto) => void }) {
   const { icon: Icon, label } = PLATFORM[device.platform];
@@ -46,6 +117,8 @@ function DeviceRow({ device, onRevoke }: { device: DeviceDto; onRevoke: (d: Devi
                 : `Last seen ${timeAgo(device.lastHeartbeatAt)}`}
           </p>
           <p className="mt-0.5 text-xs text-muted-foreground">Paired {formatDate(device.createdAt)}</p>
+          {/* Remounts when the server value changes (e.g. switched from another tab). */}
+          {!revoked && <AwayMode key={String(device.awayMode)} device={device} />}
         </div>
       </div>
       {!revoked && (

@@ -7,7 +7,7 @@ const MAX_BODY = 1024 * 1024;
 
 export interface IngestHandlers {
   /** Returns hook output for Claude Code (only ever for Stop), or undefined to stay silent. */
-  hook(payload: Record<string, unknown>): object | undefined;
+  hook(payload: Record<string, unknown>): object | undefined | Promise<object | undefined>;
   reloadPolicy(): Promise<void>;
   listSessions(): unknown;
   startSession(body: {
@@ -95,8 +95,8 @@ export class IngestServer {
 
       if (req.method === 'POST' && url.pathname === '/hook') {
         const body = await readJson(req);
-        // Synchronous and fast: the relay is waiting, and so is Claude Code.
-        const output = this.handlers.hook(body);
+        // Usually immediate; a PermissionRequest held for a phone decision resolves later.
+        const output = await this.handlers.hook(body);
         return output ? send(200, output) : send(204);
       }
       if (req.method === 'POST' && url.pathname === '/policy/reload') {

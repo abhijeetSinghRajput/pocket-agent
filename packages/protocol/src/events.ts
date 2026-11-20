@@ -63,7 +63,15 @@ export const AgentToolCompleted = defineEvent('agent.tool.completed', ToolCall.e
 export const AgentToolFailed = defineEvent('agent.tool.failed', ToolCall.extend({ error: text }));
 export const AgentPermissionRequested = defineEvent(
   'agent.permission.requested',
-  ToolCall.extend({ requestId: id, expiresAt: z.iso.datetime({ offset: true }).optional() }),
+  ToolCall.extend({
+    requestId: id,
+    expiresAt: z.iso.datetime({ offset: true }).optional(),
+    /**
+     * True when the PC is holding this request for a decision from AgentDock (PC opt-in, and Away
+     * mode for sessions the user started). False/absent: informational only — it is answered on the PC.
+     */
+    awaitingRemote: z.boolean().optional(),
+  }),
 );
 export const AgentPermissionResolved = defineEvent(
   'agent.permission.resolved',
@@ -110,6 +118,8 @@ export const DeviceSettings = defineEvent(
     projects: z.array(z.object({ name: z.string().max(200), path: z.string().max(1024) })).max(50),
     /** Whether sessions the user starts themselves may receive instructions (between turns). */
     observedInstructions: z.boolean(),
+    /** Whether permission requests may be decided remotely (PC opt-in, off by default). */
+    remoteApproval: z.boolean().default(false),
   }),
 );
 export const ApprovalDecisionAck = defineEvent(
@@ -194,7 +204,11 @@ export const ApprovalDecision = defineEvent(
 export const DeviceRevoke = defineEvent('device.revoke', z.object({ reason: z.string().max(200) }));
 export const ConfigUpdate = defineEvent(
   'config.update',
-  z.object({ remoteApprovalEnabled: z.boolean(), awayMode: z.boolean() }),
+  /**
+   * Away mode: the user is away from this PC, so permission requests of sessions they started
+   * themselves wait for a decision from AgentDock (only if the PC allows remote approval).
+   */
+  z.object({ awayMode: z.boolean() }),
 );
 export const Ack = defineEvent('ack', z.object({ ackEventId: z.uuid() }));
 

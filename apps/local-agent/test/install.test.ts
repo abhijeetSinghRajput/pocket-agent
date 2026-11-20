@@ -53,6 +53,9 @@ describe('hooks installer', () => {
       hooks: [{ type: 'command', command: CMD, timeout: 10 }],
     });
     expect(s.hooks.SessionStart[0]).toEqual({ hooks: [{ type: 'command', command: CMD, timeout: 10 }] });
+    // A held permission request (phone decision, ≤ 5 min) must not be cut off by Claude Code.
+    expect(s.hooks.PermissionRequest[0].hooks[0].timeout).toBe(330);
+    expect((await hooksStatus(t.file)).permissionTimeoutS).toBe(330);
     expect(r.backupPath).not.toBeNull();
     expect(JSON.parse(readFileSync(r.backupPath!, 'utf8'))).toEqual(userSettings);
   });

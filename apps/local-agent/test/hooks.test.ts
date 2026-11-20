@@ -44,7 +44,7 @@ describe('Claude Code hook payloads → protocol events', () => {
     expect(events[0]!.payload).toMatchObject({
       mode: 'observed',
       projectName: 'demo-project',
-      capabilities: { remoteApproval: true, instructAnytime: false, interrupt: false },
+      capabilities: { remoteApproval: false, instructAnytime: false, interrupt: false }, // approvals are PC opt-in
     });
   });
 
@@ -127,7 +127,7 @@ describe('Claude Code hook payloads → protocol events', () => {
     expect(announcements).toHaveLength(2);
     expect(announcements[1]!.payload).toMatchObject({
       // Instructions are off until the PC owner enables them.
-      capabilities: { remoteApproval: true, instructBetweenTurns: false },
+      capabilities: { remoteApproval: false, instructBetweenTurns: false },
       metadata: { entrypoint: 'claude-vscode', hooks: 'connected' },
     });
   });

@@ -1,18 +1,34 @@
-import { CLAUDE_CODE_CAPABILITIES, type SessionCapabilities } from '@agentdock/protocol';
+import { APPROVAL_WAIT_MS, CLAUDE_CODE_CAPABILITIES, type SessionCapabilities } from '@agentdock/protocol';
 import { createHash } from 'node:crypto';
 import { truncate, type SessionRegistry } from '../../sessions/registry.js';
+import type { ApprovalBroker } from '../../approvals.js';
 import type { ObservedInstructions } from './instructions.js';
 import { summarizeToolInput, summarizeToolOutput, toolKey } from './summarize.js';
 
-/** JSON a hook may print to answer Claude Code. Only Stop is ever answered (M4). */
-export type HookOutput = { decision: 'block'; reason: string };
+/** JSON a hook may print to answer Claude Code: Stop (deliver an instruction) or PermissionRequest (remote decision). */
+export type HookOutput =
+  | { decision: 'block'; reason: string }
+  | {
+      hookSpecificOutput: {
+        hookEventName: 'PermissionRequest';
+        // Exactly what Claude asked for: never updatedInput / updatedPermissions.
+        decision: { behavior: 'allow' } | { behavior: 'deny'; message: string };
+      };
+    };
 
 /** Observed session whose hooks reach us (between-turn instructions + approvals are possible). */
 export const OBSERVED_WITH_HOOKS: SessionCapabilities = CLAUDE_CODE_CAPABILITIES.observed;
 
-/** Observed capabilities given the PC owner's policy (instructions are opt-in on the PC). */
-export function observedCapabilities(instructionsAllowed: boolean): SessionCapabilities {
-  return { ...OBSERVED_WITH_HOOKS, instructBetweenTurns: instructionsAllowed };
+/** Observed capabilities given the PC owner's policy (instructions and approvals are opt-in on the PC). */
+export function observedCapabilities(
+  instructionsAllowed: boolean,
+  remoteApprovalAllowed = false,
+): SessionCapabilities {
+  return {
+    ...OBSERVED_WITH_HOOKS,
+    instructBetweenTurns: instructionsAllowed,
+    remoteApproval: remoteApprovalAllowed,
+  };
 }
 /** Observed via discovery only (no hooks installed): coarse status, nothing else. */
 export const MONITOR_ONLY: SessionCapabilities = {
@@ -28,9 +44,12 @@ const s = (v: unknown) => (typeof v === 'string' ? v : undefined);
 
 /**
  * Translates Claude Code hook payloads (see test/fixtures) into session events.
- * The only hook it ever answers is Stop, and only to deliver an instruction the PC owner allowed
- * (see ObservedInstructions). Permission-related hooks are never answered, so Claude Code's own
- * permission prompt keeps working exactly as without AgentDock.
+ * It answers only two hooks, and only with the PC owner's consent:
+ * - Stop, to deliver an instruction (`agentdock instructions enable`);
+ * - PermissionRequest, with a decision made in AgentDock — only when remote approval is enabled on
+ *   the PC (`agentdock approvals enable`) AND the user is in Away mode. Otherwise Claude Code's
+ *   own permission prompt is untouched. If no decision arrives in time, it answers nothing and
+ *   Claude Code falls back to asking on the PC.
  */
 export class ClaudeHookHandler {
   /** Per session: PreToolUse key → tool_use_id, to correlate PermissionRequest. */
@@ -44,11 +63,20 @@ export class ClaudeHookHandler {
     private readonly opts: {
       instructions?: ObservedInstructions;
       instructionsAllowed?: () => boolean;
+      approvals?: ApprovalBroker;
+      remoteApprovalAllowed?: () => boolean;
+      /** Remote approval allowed AND the user is away: hold permission requests for AgentDock. */
+      holdForRemote?: () => boolean;
+      approvalWaitMs?: number;
+      now?: () => number;
     } = {},
   ) {}
 
   private capabilities(): SessionCapabilities {
-    return observedCapabilities(this.opts.instructionsAllowed?.() ?? false);
+    return observedCapabilities(
+      this.opts.instructionsAllowed?.() ?? false,
+      this.opts.remoteApprovalAllowed?.() ?? false,
+    );
   }
 
   /** Re-announces hook-connected sessions after the PC's policy changed. */
@@ -60,7 +88,7 @@ export class ClaudeHookHandler {
     }
   }
 
-  handle(p: Payload): HookOutput | undefined {
+  handle(p: Payload): HookOutput | Promise<HookOutput | undefined> | undefined {
     const sessionId = s(p['session_id']);
     const event = s(p['hook_event_name']);
     const cwd = s(p['cwd']);
@@ -69,6 +97,10 @@ export class ClaudeHookHandler {
     if (this.isManaged(sessionId)) return;
 
     if (event === 'SessionEnd') {
+      for (const id of this.pendingPermissions.get(sessionId)?.keys() ?? []) {
+        this.registry.event(sessionId, 'agent.permission.resolved', { requestId: id, outcome: 'cancelled' });
+        this.opts.approvals?.cancel(id);
+      }
       this.forget(sessionId);
       this.opts.instructions?.onSessionEnd(sessionId);
       this.registry.end(sessionId, s(p['reason']) ?? 'ended');
@@ -107,12 +139,21 @@ export class ClaudeHookHandler {
         const key = toolKey(toolName, p['tool_input']);
         const toolUseId = this.map(this.toolIds, sessionId).get(key) ?? `perm-${hash(sessionId + key)}`;
         this.map(this.pendingPermissions, sessionId).set(toolUseId, toolUseId);
+        const hold = !!this.opts.approvals && !!this.opts.holdForRemote?.();
+        const waitMs = this.opts.approvalWaitMs ?? APPROVAL_WAIT_MS.observed;
         this.registry.event(sessionId, 'agent.permission.requested', {
           toolUseId,
           toolName,
           input: summarizeToolInput(toolName, p['tool_input']),
           requestId: toolUseId,
+          ...(hold
+            ? {
+                awaitingRemote: true,
+                expiresAt: new Date((this.opts.now ?? Date.now)() + waitMs).toISOString(),
+              }
+            : {}),
         });
+        if (hold) return this.awaitRemote(sessionId, toolUseId, waitMs);
         break;
       }
 
@@ -207,7 +248,36 @@ export class ClaudeHookHandler {
     for (const id of ids) {
       pending.delete(id);
       this.registry.event(sessionId, 'agent.permission.resolved', { requestId: id, outcome: 'local' });
+      this.opts.approvals?.cancel(id); // stop waiting for the phone
     }
+  }
+
+  /** Holds a PermissionRequest hook until AgentDock decides, it times out, or the PC answers. */
+  private async awaitRemote(
+    sessionId: string,
+    requestId: string,
+    waitMs: number,
+  ): Promise<HookOutput | undefined> {
+    const decision = await this.opts.approvals!.wait(requestId, waitMs);
+    const pending = this.pendingPermissions.get(sessionId);
+    if (!pending?.has(requestId)) return undefined; // answered on the PC meanwhile
+    pending.delete(requestId);
+    if (!decision) {
+      // No decision in time: answer nothing, so Claude Code asks on the PC (or denies, headless).
+      this.registry.event(sessionId, 'agent.permission.resolved', { requestId, outcome: 'timeout' });
+      return undefined;
+    }
+    this.registry.event(sessionId, 'agent.permission.resolved', { requestId, outcome: 'remote' });
+    this.registry.setStatus(sessionId, 'Running');
+    return {
+      hookSpecificOutput: {
+        hookEventName: 'PermissionRequest',
+        decision:
+          decision.behavior === 'allow'
+            ? { behavior: 'allow' }
+            : { behavior: 'deny', message: decision.message },
+      },
+    };
   }
 
   private map<V>(m: Map<string, Map<string, V>>, sessionId: string): Map<string, V> {

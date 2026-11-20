@@ -41,6 +41,20 @@ or modified input, so AgentDock cannot weaken local Claude Code permissions.
 - `agent.permission.resolved.outcome`: `local` = answered on the PC, `auto_denied` = denied because no approval channel
   exists yet (managed sessions before M5; never auto-allowed), `remote` / `timeout` / `cancelled` arrive in M5.
 
+## Approvals (M5)
+
+- The PC holds a request only when the owner enabled it (`agentdock approvals enable`) and, for sessions the user
+  started, only in Away mode. It then sends `agent.permission.requested` with `awaitingRemote: true` and `expiresAt`, and the API opens
+  an approval.
+- `approval.decision {approvalId, requestId, decision, message?}` goes to the PC. The PC answers
+  `approval.decision.ack {approvalId, result: "applied"|"stale"}`. Only `applied` makes it Approved or Denied.
+- The decision is handed to Claude Code unchanged. Managed sessions get `canUseTool` → `allow` with the original input,
+  or `deny` with a message. Sessions the user started get the PermissionRequest hook output `{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"allow"}}}`.
+  AgentDock never sends `updatedInput` (managed sessions get the input back unchanged) or `updatedPermissions`.
+- No decision in time: managed sessions deny after 10 minutes. Sessions the user started answer nothing after 5 minutes, so Claude Code
+  asks on the PC. A request answered on the PC meanwhile releases the wait (`outcome: "local"`).
+- `config.update {awayMode}` goes to the PC after every connect and on change.
+
 ## Commands (M4)
 
 - `command.execute {commandId, commandType, …, expiresAt}`: session-scoped commands name the target in the envelope's

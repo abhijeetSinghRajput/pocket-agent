@@ -45,6 +45,20 @@ process.stdin.on('data', (c: Buffer) => {
 });
 process.stdin.on('end', () => {
   const body = Buffer.concat(chunks);
+  // A permission request may be held while the user decides on their phone (Away mode); everything
+  // else is answered in milliseconds. The agent always answers before this.
+  let waitMs = 3000;
+  try {
+    if (
+      (JSON.parse(body.toString('utf8')) as { hook_event_name?: unknown }).hook_event_name ===
+      'PermissionRequest'
+    ) {
+      waitMs = 310_000;
+    }
+  } catch {
+    /* not JSON: forward as is */
+  }
+  setTimeout(done, waitMs + 2000).unref();
   const req = request(
     {
       host: '127.0.0.1',
@@ -56,7 +70,7 @@ process.stdin.on('end', () => {
         'content-length': body.length,
         'x-agentdock-token': endpoint.token,
       },
-      timeout: 3000,
+      timeout: waitMs,
     },
     (res) => {
       if (res.statusCode !== 200) {
@@ -91,4 +105,4 @@ process.stdin.on('end', () => {
   req.end(body);
 });
 process.stdin.on('error', done);
-setTimeout(done, 5000).unref();
+setTimeout(done, 320_000).unref(); // absolute upper bound

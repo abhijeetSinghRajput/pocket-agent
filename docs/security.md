@@ -66,6 +66,24 @@ Audit log entries are written for: register, login, failed login, logout, pairin
 | Instruction text in the audit trail | The audit log records kind, target, size and outcome, not the instruction text. | `commands.int` |
 | CLI crash on error exit (Windows) | The CLI uses `node:http(s)` with no connection pool instead of `fetch`, so it always exits cleanly with code 1. | E2E `pairing` |
 
+## Controls added in M5 (remote approvals)
+
+| Threat | Control | Test |
+|---|---|---|
+| A stolen dashboard login approving actions on the PC | Remote approval is **off until enabled on the PC** (`agentdock approvals enable`). For sessions the user started, Away mode must also be on. Without both, permission requests never leave the PC. | `approvals`, E2E `approvals` |
+| Auto-approval | Nothing is ever approved without a person's decision. No decision means a deny (managed) or Claude Code asking on the PC (sessions the user started). | `approvals` |
+| Weakening local permissions | AgentDock never sends `updatedPermissions`, never sends modified input (managed sessions get the original input object back), never changes `permissionMode`, and Claude Code's deny and ask rules still apply. | `approvals`, `install` |
+| Replayed or duplicate decisions | Atomic compare-and-set on `Pending` + `decision IS NULL` + not expired. Double taps and replays return `409`. | `approvals.int` |
+| Expired requests executed later | The PC stops waiting at `expiresAt`, the API marks it `Expired`, and late decisions are refused. | `approvals.int`, `approvals` |
+| A decision recorded as applied when it wasn't | Status becomes Approved or Denied only on the PC's `applied` ack. A late decision becomes `Cancelled`. | `approvals.int` |
+| An offline PC consuming the decision | The API refuses with `device_offline` before recording anything. | `approvals.int` |
+| Cross-user and cross-device | Approvals are scoped to their owner. Acks are accepted only from the device that owns the approval. | `approvals.int` |
+| Push treated as authorization | Approval state lives only in Postgres and the PC, and the dashboard reads it over the API. | design |
+| Auditability | `approval.decided` (who, what, when) and `approval.applied` (PC result), plus `device.away_mode` changes. | `approvals.int` |
+
+Note: interactive Claude Code sessions, including VS Code, run hooks only in **trusted** folders. In an untrusted folder,
+AgentDock sees nothing from that session, and it falls back safely to plain Claude Code.
+
 ## Known issues
 
 - Unacknowledged agent events are held in memory only. If the agent process restarts while offline, those events are lost (the post-connect snapshot still corrects session states).

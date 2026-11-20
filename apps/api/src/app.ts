@@ -12,6 +12,7 @@ import { commandExpiryJob } from './jobs/command-expiry.js';
 import { retentionJob } from './jobs/retention.js';
 import { createBus } from './realtime/bus.js';
 import { clientGateway } from './realtime/client-gateway.js';
+import { approvalRoutes } from './routes/approvals.js';
 import { authRoutes } from './routes/auth.js';
 import { commandRoutes } from './routes/commands.js';
 import { agentRoutes, deviceRoutes } from './routes/devices.js';
@@ -83,6 +84,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     await app.register(clientGateway, services);
     await app.register(retentionJob, services);
     await app.register(commandRoutes, services);
+    await app.register(approvalRoutes, services);
     await app.register(commandExpiryJob, services);
   }
 

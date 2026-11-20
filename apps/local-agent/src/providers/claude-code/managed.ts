@@ -1,4 +1,5 @@
-import { CLAUDE_CODE_CAPABILITIES } from '@agentdock/protocol';
+import { APPROVAL_WAIT_MS, CLAUDE_CODE_CAPABILITIES } from '@agentdock/protocol';
+import type { ApprovalBroker } from '../../approvals.js';
 import type { CanUseTool, Options, Query, SDKMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import { randomUUID } from 'node:crypto';
 import { stat } from 'node:fs/promises';
@@ -9,10 +10,21 @@ import { summarizeToolInput, summarizeToolOutput } from './summarize.js';
 
 export type QueryFn = (args: { prompt: AsyncIterable<SDKUserMessage>; options: Options }) => Query;
 
-/** Message shown to Claude when a managed session asks for permission before M5. */
+/** Message shown to Claude when remote approval is turned off on the PC. */
 export const NO_APPROVAL_CHANNEL =
-  'AgentDock denied this action: remote approval is not available yet, and AgentDock never approves ' +
+  'AgentDock denied this action: remote approval is turned off on this PC, and AgentDock never approves ' +
   'actions on its own. Continue without it, or ask the user to run this step themselves.';
+
+/** Message shown to Claude when nobody decided in time. */
+export const NO_DECISION_IN_TIME =
+  'AgentDock denied this action: nobody approved it in time. Continue without it, or ask again later.';
+
+export interface ManagedApprovalOptions {
+  broker: ApprovalBroker;
+  /** PC owner allowed remote approval (`agentdock approvals enable`). */
+  enabled: () => boolean;
+  waitMs?: number;
+}
 
 interface Instruction {
   text: string;
@@ -52,7 +64,21 @@ export class ManagedSessions {
     private readonly log: (level: 'info' | 'warn' | 'error', msg: string) => void = () => undefined,
     private readonly ack: CommandAck = () => undefined,
     private readonly now: () => number = Date.now,
+    private readonly approvals?: ManagedApprovalOptions,
   ) {}
+
+  /** Managed capabilities: remote approval only if the PC owner enabled it. */
+  capabilities() {
+    return { ...CLAUDE_CODE_CAPABILITIES.managed, remoteApproval: this.approvals?.enabled() ?? false };
+  }
+
+  /** Re-announces managed sessions after the PC's policy changed. */
+  refreshCapabilities(): void {
+    for (const t of this.registry.live()) {
+      if (t.mode === 'managed')
+        this.registry.announce({ ...t, capabilities: this.capabilities() }, 'managed');
+    }
+  }
 
   isManaged = (id: string) => this.sessions.has(id);
 
@@ -93,23 +119,48 @@ export class ManagedSessions {
         mode: 'managed',
         projectPath,
         status: 'Starting',
-        capabilities: CLAUDE_CODE_CAPABILITIES.managed,
+        capabilities: this.capabilities(),
         metadata: { entrypoint: 'agentdock', ...(input.model ? { model: input.model } : {}) },
       },
       'managed',
     );
 
-    const canUseTool: CanUseTool = async (toolName, toolInput, { toolUseID }) => {
+    const canUseTool: CanUseTool = async (toolName, toolInput, { toolUseID, signal }) => {
       const inputSummary = summarizeToolInput(toolName, toolInput);
+      const remote = !!this.approvals?.enabled();
+      const waitMs = this.approvals?.waitMs ?? APPROVAL_WAIT_MS.managed;
       this.registry.event(id, 'agent.permission.requested', {
         toolUseId: toolUseID,
         toolName,
         input: inputSummary,
         requestId: toolUseID,
+        ...(remote ? { awaitingRemote: true, expiresAt: new Date(this.now() + waitMs).toISOString() } : {}),
       });
-      // Remote approval arrives in M5. Until then: deny, never allow.
-      this.registry.event(id, 'agent.permission.resolved', { requestId: toolUseID, outcome: 'auto_denied' });
-      return { behavior: 'deny', message: NO_APPROVAL_CHANNEL };
+      if (!remote) {
+        // No approval channel: deny, never allow.
+        this.registry.event(id, 'agent.permission.resolved', {
+          requestId: toolUseID,
+          outcome: 'auto_denied',
+        });
+        return { behavior: 'deny', message: NO_APPROVAL_CHANNEL };
+      }
+      this.registry.setStatus(id, 'WaitingForPermission');
+      const broker = this.approvals!.broker;
+      const onAbort = () => broker.cancel(toolUseID); // interrupted / stopped
+      signal.addEventListener('abort', onAbort, { once: true });
+      const decision = await broker.wait(toolUseID, waitMs);
+      signal.removeEventListener('abort', onAbort);
+      if (!decision) {
+        const outcome = signal.aborted ? 'cancelled' : 'timeout';
+        this.registry.event(id, 'agent.permission.resolved', { requestId: toolUseID, outcome });
+        return { behavior: 'deny', message: NO_DECISION_IN_TIME };
+      }
+      this.registry.event(id, 'agent.permission.resolved', { requestId: toolUseID, outcome: 'remote' });
+      this.registry.setStatus(id, 'Running');
+      // Exactly what Claude asked for — the input is passed back unchanged, never modified.
+      return decision.behavior === 'allow'
+        ? { behavior: 'allow', updatedInput: toolInput }
+        : { behavior: 'deny', message: decision.message };
     };
 
     m.query = this.query({

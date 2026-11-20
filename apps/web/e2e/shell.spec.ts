@@ -25,11 +25,13 @@ for (const { path, heading } of ROUTES) {
   });
 }
 
-test('placeholder sections never show mock data', async ({ page }) => {
-  for (const path of ['/approvals']) {
-    await page.goto(path);
-    await expect(page.getByTestId('not-yet-available')).toContainText(/Arrives in M\d/);
-  }
+test('sections show real (empty) data, never mock data', async ({ page }) => {
+  await page.goto('/approvals');
+  await expect(page.getByTestId('no-approvals')).toContainText('agentdock approvals enable');
+  await expect(page.getByTestId('approval-card')).toHaveCount(0);
+  // The one remaining placeholder says which milestone delivers it.
+  await page.goto('/settings');
+  await expect(page.getByText('Arrives in M6')).toBeVisible();
 });
 
 test('overview shows real backend health', async ({ page }) => {

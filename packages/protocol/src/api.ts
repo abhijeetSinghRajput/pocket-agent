@@ -73,8 +73,13 @@ export const DeviceDto = z.object({
   projects: z.array(z.object({ name: z.string(), path: z.string() })),
   /** PC-side switch: instructions to sessions the user started themselves. */
   observedInstructions: z.boolean(),
+  /** Away mode (set from the dashboard or the PC). */
+  awayMode: z.boolean(),
 });
 export type DeviceDto = z.infer<typeof DeviceDto>;
+
+export const SetAwayModeRequest = z.object({ awayMode: z.boolean() });
+export type SetAwayModeRequest = z.infer<typeof SetAwayModeRequest>;
 
 export const DeviceListResponse = z.object({ devices: z.array(DeviceDto) });
 export type DeviceListResponse = z.infer<typeof DeviceListResponse>;

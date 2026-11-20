@@ -237,6 +237,9 @@ model Approval {
   toolName        String
   requestPayload  Json
   status          ApprovalStatus @default(Pending)
+  /// "allow" | "deny", set once (compare-and-set). Status becomes Approved/Denied only after the PC
+  /// confirms it applied the decision; Cancelled if it arrived too late.
+  decision        String?
   decisionMessage String?
   decidedByUserId String?        @db.Uuid
   createdAt       DateTime       @default(now())

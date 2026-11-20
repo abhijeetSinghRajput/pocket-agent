@@ -71,6 +71,14 @@ describe('capability honesty', () => {
     ).toBe(false);
   });
 
+  it('recognises hook-connected sessions even when the PC enabled nothing (regression)', () => {
+    const rows = capabilityRows(session('observed', {}, { hooks: 'connected' }));
+    const find = (label: string) => rows.find((r) => r.label === label)!;
+    expect(find('Live status').detail).toContain('tool calls');
+    expect(find('Send instructions').detail).toContain('agentdock instructions enable');
+    expect(find('Approve permissions remotely').detail).toContain('agentdock approvals enable');
+  });
+
   it('explains why instructions are unavailable', () => {
     const off = capabilityRows(session('observed', { remoteApproval: true })).find(
       (r) => r.label === 'Send instructions',

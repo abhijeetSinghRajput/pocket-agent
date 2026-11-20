@@ -19,6 +19,9 @@ export const HOOK_EVENTS = [
 ] as const;
 
 const TOOL_EVENTS = new Set(['PreToolUse', 'PermissionRequest', 'PostToolUse', 'PostToolUseFailure']);
+/** Seconds Claude Code waits for the PermissionRequest hook (> the 5-minute remote wait + margin). */
+export const PERMISSION_HOOK_TIMEOUT_S = 330;
+
 /** Every AgentDock hook command contains this marker; it is how we find our own entries. */
 export const HOOK_MARKER = '--agentdock-hook';
 
@@ -110,8 +113,11 @@ export async function installHooks(settingsPath: string, command: string): Promi
   for (const event of HOOK_EVENTS) {
     const group: HookGroup = {
       ...(TOOL_EVENTS.has(event) ? { matcher: '*' } : {}),
-      // Short timeout: the relay answers in milliseconds and never blocks Claude Code.
-      hooks: [{ type: 'command', command, timeout: 10 }],
+      // The relay answers in milliseconds, except a PermissionRequest held for a decision from the
+      // phone (Away mode, ≤ 5 min) — its timeout is longer so Claude Code doesn't cut it off first.
+      hooks: [
+        { type: 'command', command, timeout: event === 'PermissionRequest' ? PERMISSION_HOOK_TIMEOUT_S : 10 },
+      ],
     };
     hooks[event] = [...(hooks[event] ?? []), group];
   }
@@ -136,14 +142,20 @@ function countOurs(settings: Settings): number {
     .filter(isOurs).length;
 }
 
-export async function hooksStatus(settingsPath: string): Promise<{ installed: boolean; events: string[] }> {
+export async function hooksStatus(
+  settingsPath: string,
+): Promise<{ installed: boolean; events: string[]; permissionTimeoutS: number | null }> {
   try {
     const { settings } = await readSettings(settingsPath);
     const events = Object.entries(settings.hooks ?? {})
       .filter(([, groups]) => Array.isArray(groups) && groups.some((g) => g.hooks?.some(isOurs)))
       .map(([e]) => e);
-    return { installed: events.length > 0, events };
+    const permissionHook = (settings.hooks?.['PermissionRequest'] ?? [])
+      .flatMap((g) => (Array.isArray(g.hooks) ? g.hooks : []))
+      .find(isOurs);
+    const t = permissionHook?.['timeout'];
+    return { installed: events.length > 0, events, permissionTimeoutS: typeof t === 'number' ? t : null };
   } catch {
-    return { installed: false, events: [] };
+    return { installed: false, events: [], permissionTimeoutS: null };
   }
 }

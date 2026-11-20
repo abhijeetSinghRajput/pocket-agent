@@ -16,6 +16,7 @@ import {
   defaultSettingsPath,
   hooksStatus,
   installHooks,
+  PERMISSION_HOOK_TIMEOUT_S,
   relayCommand,
   uninstallHooks,
 } from './providers/claude-code/install.js';
@@ -286,6 +287,42 @@ export function buildCli(): Command {
   instructions.command('status').action(async () => {
     const { observedInstructions } = await loadPolicy(agentHome());
     console.log(observedInstructions ? 'Enabled' : 'Disabled (default)');
+  });
+
+  const approvals = program
+    .command('approvals')
+    .description('Answer Claude Code permission requests from the dashboard (off by default)');
+  const setApprovals = async (on: boolean) => {
+    const home = agentHome();
+    await savePolicy(home, { ...(await loadPolicy(home)), remoteApproval: on });
+    if (on) {
+      console.log('Enabled.');
+      console.log(
+        '- Managed sessions: permission requests wait for your decision in the dashboard (denied after 10 min).',
+      );
+      console.log(
+        '- Sessions you start yourself: only while Away mode is on (switch it in the dashboard, under Devices).',
+      );
+      console.log(
+        '  Otherwise Claude Code asks on this PC as usual. Unanswered requests fall back to the PC after 5 min.',
+      );
+      const st = await hooksStatus(defaultSettingsPath());
+      if (st.installed && (st.permissionTimeoutS ?? 0) < PERMISSION_HOOK_TIMEOUT_S) {
+        console.log('');
+        console.log(
+          'Your installed hooks are from an older version. Update them with: agentdock hooks install',
+        );
+      }
+    } else {
+      console.log('Disabled. Permission requests are answered on this PC only (managed sessions: denied).');
+    }
+    await reloadAgent();
+  };
+  approvals.command('enable').action(() => setApprovals(true));
+  approvals.command('disable').action(() => setApprovals(false));
+  approvals.command('status').action(async () => {
+    const { remoteApproval } = await loadPolicy(agentHome());
+    console.log(remoteApproval ? 'Enabled' : 'Disabled (default)');
   });
 
   // ── Claude Code integration ────────────────────────────────────────────────

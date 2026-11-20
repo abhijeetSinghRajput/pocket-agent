@@ -5,6 +5,7 @@ import type { WebSocket } from 'ws';
 import { authenticateDevice } from '../auth/device-auth.js';
 import { redisKey, type AppContext } from '../context.js';
 import { Prisma, type Device } from '../generated/prisma/client.js';
+import { applyDecisionAck } from '../approvals/service.js';
 import { applyCommandAck, resendPending } from '../commands/service.js';
 import { CHANNELS, notifyUser, type Bus } from '../realtime/bus.js';
 import {
@@ -209,14 +210,20 @@ export async function agentGateway(app: FastifyInstance, ctx: GatewayServices): 
         if (msg.eventType === 'device.settings') {
           await ctx.prisma.device.updateMany({
             where: { id: device.id, revokedAt: null },
-            data: { projects: msg.payload.projects, observedInstructions: msg.payload.observedInstructions },
+            data: {
+              projects: msg.payload.projects,
+              observedInstructions: msg.payload.observedInstructions,
+              remoteApprovalEnabled: msg.payload.remoteApproval,
+            },
           });
           void deviceChanged(device.id);
           return ack(msg.eventId);
         }
 
-        // approval.decision.ack is processed from M5 on.
-        log.debug({ eventType: msg.eventType }, 'event not handled yet');
+        if (msg.eventType === 'approval.decision.ack') {
+          await applyDecisionAck(ctx, device, msg.payload);
+          return ack(msg.eventId);
+        }
       };
 
       // Process frames strictly in order.
@@ -246,6 +253,15 @@ export async function agentGateway(app: FastifyInstance, ctx: GatewayServices): 
       void touch().then(async (ok) => {
         if (!ok) return closeRevoked(socket);
         await deviceChanged(device.id);
+        // Tell the PC whether its user is away (decides where permission requests go).
+        const d = await ctx.prisma.device.findUnique({
+          where: { id: device.id },
+          select: { awayMode: true },
+        });
+        send(
+          socket,
+          createEvent('config.update', { awayMode: d?.awayMode ?? false }, { deviceId: device.id }),
+        );
         await resendPending(ctx, device.id).catch((err: unknown) => log.warn({ err }, 'resend failed'));
       });
     },

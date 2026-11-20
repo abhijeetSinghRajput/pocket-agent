@@ -62,7 +62,7 @@ function harness(policy: Partial<Policy> = {}) {
   const sdk = fakeSdk();
   const managed = new ManagedSessions(registry, sdk.fn, () => undefined, ack as never);
   const observed = new ObservedInstructions(registry, ack as never);
-  const full: Policy = { projects: [], observedInstructions: false, ...policy };
+  const full: Policy = { projects: [], observedInstructions: false, remoteApproval: false, ...policy };
   const router = new CommandRouter({ registry, managed, observed, policy: () => full, ack: ack as never });
   const statuses = (id: string) => acks.filter((a) => a.id === id).map((a) => a.status);
   const tick = () => new Promise((r) => setTimeout(r, 20));
@@ -72,13 +72,18 @@ function harness(policy: Partial<Policy> = {}) {
 describe('PC policy', () => {
   it('defaults to nothing allowed and survives a corrupt file', async () => {
     const home = mkdtempSync(path.join(os.tmpdir(), 'agentdock-policy-'));
-    expect(await loadPolicy(home)).toEqual({ projects: [], observedInstructions: false });
+    expect(await loadPolicy(home)).toEqual({
+      projects: [],
+      observedInstructions: false,
+      remoteApproval: false,
+    });
     const { writeFile } = await import('node:fs/promises');
     await writeFile(path.join(home, 'policy.json'), '{"observedInstructions": "yes please"}');
     expect((await loadPolicy(home)).observedInstructions).toBe(false);
     await savePolicy(home, {
       projects: [{ name: 'api', path: 'C:\\Work\\API' }],
       observedInstructions: true,
+      remoteApproval: false,
     });
     expect(await loadPolicy(home)).toMatchObject({ observedInstructions: true });
   });
@@ -87,6 +92,7 @@ describe('PC policy', () => {
     const policy: Policy = {
       projects: [{ name: 'api', path: 'C:\\Work\\API' }],
       observedInstructions: false,
+      remoteApproval: false,
     };
     expect(normalizeProjectPath('C:\\Work\\API\\', 'win32')).toBe(
       normalizeProjectPath('c:\\work\\api', 'win32'),

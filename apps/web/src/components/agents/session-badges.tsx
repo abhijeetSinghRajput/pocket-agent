@@ -34,6 +34,18 @@ export function SessionStatusBadge({ status }: { status: AgentStatus }) {
   );
 }
 
+/**
+ * Whether an observed session reports through AgentDock hooks. The PC records this in metadata;
+ * capabilities can't be used for it because instructions/approvals are separate PC opt-ins.
+ */
+export function hooksAreConnected(s: Pick<AgentSessionDto, 'metadata' | 'capabilities'>): boolean {
+  return (
+    s.metadata?.['hooks'] === 'connected' ||
+    s.capabilities.remoteApproval ||
+    s.capabilities.instructBetweenTurns
+  );
+}
+
 /** How the session is connected, in user terms. */
 export function sessionKind(s: Pick<AgentSessionDto, 'mode' | 'metadata' | 'capabilities'>): {
   label: string;
@@ -48,7 +60,7 @@ export function sessionKind(s: Pick<AgentSessionDto, 'mode' | 'metadata' | 'capa
       : s.metadata?.['entrypoint'] === 'cli'
         ? 'Terminal'
         : 'Claude Code';
-  if (!s.capabilities.remoteApproval && !s.capabilities.instructBetweenTurns) {
+  if (!hooksAreConnected(s)) {
     return {
       label: `${where} · status only`,
       hint: 'Started by you. AgentDock hooks are not installed, so only the coarse status is visible.',

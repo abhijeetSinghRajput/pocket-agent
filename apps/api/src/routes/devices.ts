@@ -36,6 +36,7 @@ export function toDeviceDto(d: Device): DeviceDto {
           .map((p) => ({ name: p.name as string, path: p.path as string }))
       : [],
     observedInstructions: d.observedInstructions,
+    awayMode: d.awayMode,
   };
 }
 

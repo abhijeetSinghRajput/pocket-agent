@@ -1,5 +1,6 @@
 import type { AgentSessionDto } from '@agentdock/protocol';
 import { Check, Clock, X } from 'lucide-react';
+import { hooksAreConnected } from '@/components/agents/session-badges';
 import { cn } from '@/lib/utils';
 
 type Row = { label: string; state: 'yes' | 'soon' | 'no'; detail: string };
@@ -12,7 +13,7 @@ type Row = { label: string; state: 'yes' | 'soon' | 'no'; detail: string };
 export function capabilityRows(s: AgentSessionDto): Row[] {
   const c = s.capabilities;
   const managed = s.mode === 'managed';
-  const hooksConnected = !managed && c.remoteApproval; // observed sessions report through hooks
+  const hooksConnected = !managed && hooksAreConnected(s);
   const hooksWhy =
     s.metadata?.['hooks'] === 'not-connected'
       ? 'This session started before AgentDock hooks were installed. Restart it on the PC to connect it.'
@@ -57,12 +58,14 @@ export function capabilityRows(s: AgentSessionDto): Row[] {
     },
     {
       label: 'Approve permissions remotely',
-      state: c.remoteApproval ? 'soon' : 'no',
+      state: c.remoteApproval ? 'yes' : 'no',
       detail: c.remoteApproval
         ? managed
-          ? 'Arrives in M5. Until then, actions that need approval are denied (never auto-approved).'
-          : 'Arrives in M5. Until then, Claude Code asks on your PC as usual.'
-        : hooksWhy,
+          ? 'Requests wait for your decision here. Not decided within 10 minutes: denied.'
+          : 'Only while Away mode is on for this PC (Devices). Otherwise, or if not decided within 5 minutes, Claude Code asks on the PC.'
+        : managed || hooksConnected
+          ? 'Turned off on this PC; actions that need approval are answered there (managed: denied). To allow it, run `agentdock approvals enable` on the PC.'
+          : hooksWhy,
     },
   ];
 }

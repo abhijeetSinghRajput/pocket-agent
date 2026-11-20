@@ -1,5 +1,6 @@
 import { createEvent, type Platform } from '@agentdock/protocol';
 import path from 'node:path';
+import { ApprovalBroker } from './approvals.js';
 import { CommandRouter, type FullAck } from './command-router.js';
 import { IngestServer } from './ingest-server.js';
 import { AgentLink, type LinkEvents } from './link.js';
@@ -42,7 +43,10 @@ export class AgentService {
   private readonly discovery: ClaudeDiscovery;
   private readonly router: CommandRouter;
   private hooksInstalled = false;
-  private policy: Policy = { projects: [], observedInstructions: false };
+  private policy: Policy = { projects: [], observedInstructions: false, remoteApproval: false };
+  /** Set from the dashboard (config.update). Only matters for sessions the user started. */
+  private awayMode = false;
+  readonly approvals = new ApprovalBroker();
   private expiryTimer: NodeJS.Timeout | null = null;
 
   constructor(private readonly opts: ServiceOptions) {
@@ -50,11 +54,17 @@ export class AgentService {
     // Command status reports travel through the same reliable outbox as session events.
     const ack: FullAck = (commandId, status, extra = {}) =>
       this.enqueue(createEvent('command.ack', { commandId, status, ...extra }));
-    this.managed = new ManagedSessions(this.registry, opts.query, opts.log, ack);
+    this.managed = new ManagedSessions(this.registry, opts.query, opts.log, ack, Date.now, {
+      broker: this.approvals,
+      enabled: () => this.policy.remoteApproval,
+    });
     this.observed = new ObservedInstructions(this.registry, ack);
     this.hooks = new ClaudeHookHandler(this.registry, this.managed.isManaged, {
       instructions: this.observed,
       instructionsAllowed: () => this.policy.observedInstructions,
+      approvals: this.approvals,
+      remoteApprovalAllowed: () => this.policy.remoteApproval,
+      holdForRemote: () => this.policy.remoteApproval && this.awayMode,
     });
     const claudeDir = opts.claudeDir ?? claudeConfigDir();
     this.discovery = new ClaudeDiscovery(path.join(claudeDir, 'sessions'), this.registry, {
@@ -98,6 +108,29 @@ export class AgentService {
     this.link.on('message', (msg) => {
       if (msg.eventType === 'ack') this.outbox.ack(msg.payload.ackEventId);
       if (msg.eventType === 'command.execute') void this.router.handle(msg);
+      if (msg.eventType === 'config.update' && msg.payload.awayMode !== this.awayMode) {
+        this.awayMode = msg.payload.awayMode;
+        opts.log(
+          'info',
+          `Away mode ${this.awayMode ? 'ON' : 'off'}${this.awayMode && !this.policy.remoteApproval ? ' (has no effect: remote approval is off on this PC)' : ''}`,
+        );
+      }
+      if (msg.eventType === 'approval.decision') {
+        const p = msg.payload;
+        const applied = this.approvals.decide(
+          p.requestId,
+          p.decision === 'allow'
+            ? { behavior: 'allow' }
+            : { behavior: 'deny', message: p.message ?? 'Denied in AgentDock' },
+        );
+        // "stale": nothing was waiting any more (answered on the PC / timed out) — never applied.
+        this.enqueue(
+          createEvent('approval.decision.ack', {
+            approvalId: p.approvalId,
+            result: applied ? 'applied' : 'stale',
+          }),
+        );
+      }
     });
   }
 
@@ -110,6 +143,7 @@ export class AgentService {
     return createEvent('device.settings', {
       projects: this.policy.projects.slice(0, 50),
       observedInstructions: this.policy.observedInstructions,
+      remoteApproval: this.policy.remoteApproval,
     });
   }
 
@@ -124,6 +158,7 @@ export class AgentService {
   async reloadPolicy(): Promise<void> {
     this.policy = await loadPolicy(this.opts.home);
     this.hooks.refreshCapabilities();
+    this.managed.refreshCapabilities();
     this.link.send(this.settingsEvent());
   }
 
@@ -151,6 +186,7 @@ export class AgentService {
   async stop(): Promise<void> {
     this.discovery.stop();
     if (this.expiryTimer) clearInterval(this.expiryTimer);
+    this.approvals.cancelAll();
     await this.managed.stopAll();
     const deadline = Date.now() + 2000;
     while (this.outbox.size && this.link.isOpen && Date.now() < deadline)

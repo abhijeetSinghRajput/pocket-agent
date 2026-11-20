@@ -8,6 +8,7 @@ import { duration } from '@/components/agents/agents-view';
 import { CapabilityList } from '@/components/agents/capabilities';
 import { SessionKindBadge, SessionStatusBadge, sessionKind } from '@/components/agents/session-badges';
 import { RemoteControl } from '@/components/agents/remote-control';
+import { SessionApprovals } from '@/components/approvals/session-approvals';
 import { Timeline } from '@/components/agents/timeline';
 import { Button } from '@/components/ui/button';
 import { Card, CardTitle } from '@/components/ui/card';
@@ -98,6 +99,7 @@ export function AgentDetail({ id }: { id: string }) {
       </header>
 
       <div className="grid gap-4 lg:grid-cols-[1fr_300px]">
+        <SessionApprovals sessionId={s.id} />
         <div className="lg:col-start-1">
           <RemoteControl
             session={s}

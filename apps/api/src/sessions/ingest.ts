@@ -1,10 +1,12 @@
 import {
+  APPROVAL_WAIT_MS,
   createEvent,
   SESSION_SCOPED_EVENTS,
   type AgentStatus,
   type AgentToBackend,
   type BackendToWeb,
 } from '@agentdock/protocol';
+import { closeApprovalFromPc, openApproval } from '../approvals/service.js';
 import type { AppContext } from '../context.js';
 import type { AgentSession, Prisma } from '../generated/prisma/client.js';
 
@@ -51,7 +53,7 @@ const statusChanged = (session: AgentSession, status: AgentStatus): BackendToWeb
  */
 export async function ingestSessionEvent(
   ctx: AppContext,
-  device: { id: string },
+  device: { id: string; userId: string },
   msg: SessionEvent,
 ): Promise<BackendToWeb[]> {
   if (msg.eventType === 'agent.sessions.snapshot') return applySnapshot(ctx, device, msg);
@@ -125,6 +127,42 @@ export async function ingestSessionEvent(
       ),
     ];
     if (before !== session.status) out.push(statusChanged(session, session.status));
+
+    // Remote approval: the PC is holding this request for a decision from AgentDock.
+    if (msg.eventType === 'agent.permission.requested' && msg.payload.awaitingRemote) {
+      const opened = await openApproval(tx, {
+        userId: device.userId,
+        deviceId: device.id,
+        sessionId: session.id,
+        requestId: msg.payload.requestId,
+        toolName: msg.payload.toolName,
+        inputSummary: msg.payload.input,
+        expiresAt: msg.payload.expiresAt
+          ? new Date(msg.payload.expiresAt)
+          : new Date(now.getTime() + APPROVAL_WAIT_MS.observed),
+      });
+      if (opened) {
+        out.push(
+          createEvent(
+            'approval.created',
+            { approvalId: opened.id },
+            { deviceId: device.id, sessionId: session.id },
+          ),
+        );
+      }
+    }
+    if (msg.eventType === 'agent.permission.resolved') {
+      const closed = await closeApprovalFromPc(tx, session.id, msg.payload.requestId, msg.payload.outcome);
+      if (closed) {
+        out.push(
+          createEvent(
+            'approval.updated',
+            { approvalId: closed.id, status: closed.status },
+            { deviceId: device.id, sessionId: session.id },
+          ),
+        );
+      }
+    }
     return out;
   });
 }

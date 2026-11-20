@@ -162,6 +162,24 @@ Agent SDK query() ◄── `agentdock run` ──► ManagedSessions ───�
   instruction as the reason, verified with real Claude Code to continue in the same session. An idle session can't be woken;
   the UI says so.
 
+### M5 implementation notes (as built)
+
+- **Two switches, both needed.** `agentdock approvals enable` on the PC (off by default, enforced there) allows remote
+  decisions at all. **Away mode**, set from the dashboard, applies only to sessions the user started. Without it Claude
+  Code asks on the PC as usual. Managed sessions use remote approval whenever the PC allows it, because no person is at their prompt.
+- **Lifecycle.** The decision is stored once (compare-and-set), sent to the PC, and becomes `Approved`/`Denied` only on the PC's
+  `applied` ack. A late decision becomes `Cancelled`. Every decision and application is in `AuditLog`.
+- **Hook timing.** The installer gives the PermissionRequest hook a 330 s timeout. The PC waits at most 300 s, then answers nothing,
+  and Claude Code falls back to its own prompt.
+- **Claude Code facts that shape this** (from the docs, 2026-11-20):
+  - Interactive sessions, including VS Code, run hooks only in folders the user has **trusted**; `-p`/SDK sessions always do.
+  - VS Code starts in **Auto** permission mode (v2.1.283+), where a classifier approves most actions, so permission requests,
+    and with them remote approvals, are rarer there than in Manual mode.
+  - **Verified live in VS Code (2026-11-20, extension 2.1.326, Manual mode, trusted folder):** with Away mode on, the
+    request was held (+0.13 s after the tool call). VS Code raised its own permission notification about 6 s later,
+    so the request stayed answerable on the PC as well. Allow in the dashboard reached the PC in 16 ms, and the command ran
+    about 0.23 s after the click. With Away mode off, the request was not held and VS Code asked as usual.
+
 ## 4. Identity, pairing and trust
 
 1. A logged-in user clicks **Add device**. The API creates a pairing code: 8 characters from the

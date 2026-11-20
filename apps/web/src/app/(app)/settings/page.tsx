@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { AccountSection } from '@/components/account-section';
 import { PageHeader } from '@/components/page';
@@ -38,9 +39,14 @@ export default function SettingsPage() {
         <AccountSection />
         <Section
           title="Remote approval"
-          description="Off by default. Turn it on per device to answer Claude Code permission requests from here."
+          description="Off by default. Enable it on each PC (agentdock approvals enable), then use Away mode under Devices for sessions you start yourself."
         >
-          <Badge variant="accent">Arrives in M5</Badge>
+          <Link
+            href="/devices"
+            className="text-sm font-medium text-primary underline-offset-4 hover:underline"
+          >
+            Devices
+          </Link>
         </Section>
         <Section title="Notifications" description="Push categories, quiet hours and history.">
           <Badge variant="accent">Arrives in M6</Badge>

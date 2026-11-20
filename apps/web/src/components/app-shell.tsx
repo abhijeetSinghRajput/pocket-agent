@@ -8,6 +8,7 @@ import { Dialog } from 'radix-ui';
 import { useState, type ReactNode } from 'react';
 import { ThemeToggle } from '@/components/theme';
 import { useLiveState } from '@/lib/live';
+import { useApprovals } from '@/lib/use-approvals';
 import { isActive, NAV_ITEMS } from '@/lib/nav';
 import { cn } from '@/lib/utils';
 
@@ -32,6 +33,40 @@ function LiveDot() {
         className={cn('size-2 rounded-full', state === 'live' ? 'bg-success' : 'animate-pulse bg-warning')}
       />
       <span className="sr-only">{label}</span>
+    </span>
+  );
+}
+
+/** Number of permission requests waiting for a decision (live). */
+function usePendingCount(): number {
+  const { state } = useApprovals('pending');
+  return state.data?.length ?? 0;
+}
+
+function PendingBadge() {
+  const n = usePendingCount();
+  if (!n) return null;
+  return (
+    <span
+      className="ml-auto grid h-5 min-w-5 place-items-center rounded-full bg-warning px-1.5 text-[11px] font-semibold text-black tabular-nums"
+      aria-label={`${n} waiting`}
+      data-testid="pending-approvals"
+    >
+      {n}
+    </span>
+  );
+}
+
+function PendingDot() {
+  const n = usePendingCount();
+  if (!n) return null;
+  return (
+    <span
+      className="absolute -top-1 -right-2 grid h-4 min-w-4 place-items-center rounded-full bg-warning px-1 text-[10px] font-semibold text-black tabular-nums"
+      aria-label={`${n} waiting`}
+      data-testid="pending-approvals-mobile"
+    >
+      {n}
     </span>
   );
 }
@@ -108,6 +143,7 @@ function Sidebar({ pathname, user, onSignOut }: { pathname: string; user: UserDt
             >
               <Icon className="size-4" aria-hidden />
               {label}
+              {href === '/approvals' && <PendingBadge />}
             </Link>
           );
         })}
@@ -164,7 +200,10 @@ function BottomNav({
             aria-current={active ? 'page' : undefined}
             className={itemClass(active)}
           >
-            <Icon className="size-5" aria-hidden />
+            <span className="relative">
+              <Icon className="size-5" aria-hidden />
+              {href === '/approvals' && <PendingDot />}
+            </span>
             {label}
           </Link>
         );

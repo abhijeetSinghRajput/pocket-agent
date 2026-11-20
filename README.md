@@ -70,6 +70,16 @@ pnpm agentdock instructions enable               # optional: allow instructions 
                                                  # (delivered when Claude finishes its current turn)
 ```
 
+To answer Claude Code's permission requests from your phone:
+
+```bash
+pnpm agentdock approvals enable    # off by default; `approvals disable` turns it off again
+pnpm agentdock hooks install       # re-run after upgrading, so the permission hook gets its longer timeout
+```
+
+Managed sessions then ask in the dashboard (**Approvals**). Sessions you start yourself ask there only while **Away mode** is on
+(Devices). Unanswered requests fall back to the PC. Hooks run only in folders you've trusted in Claude Code.
+
 Then, in the dashboard: **Agents → New session** starts Claude in an allowed folder. An agent's page lets you
 send instructions, interrupt the current task, or end a managed session. These changes apply to a running agent immediately.
 

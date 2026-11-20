@@ -78,6 +78,9 @@ export function agentApiUrl(): string {
   return url.replace(/\/+$/, '');
 }
 
+/** npm package of the PC app (`npm install -g …`). Override per deployment if published elsewhere. */
+export const AGENT_NPM_PACKAGE = process.env.NEXT_PUBLIC_AGENT_NPM_PACKAGE || 'pocketagent';
+
 export type HealthResult =
   { kind: 'ok' | 'degraded'; health: HealthResponse } | { kind: 'unreachable'; error: string };
 

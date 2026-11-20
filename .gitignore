@@ -23,3 +23,6 @@ next-env.d.ts
 *firebase-adminsdk*.json
 *service-account*.json
 .pocket-agent-secrets/
+
+# Generated npm package of the Local Agent
+apps/local-agent/npm/

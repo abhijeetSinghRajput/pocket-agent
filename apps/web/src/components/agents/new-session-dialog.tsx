@@ -105,7 +105,7 @@ export function NewSessionDialog({
               : 'None of your PCs are online. Start the agent on your PC, and allow a project folder:'}
           </p>
           <code className="block rounded-md bg-muted px-3 py-2 font-mono text-[13px] break-all">
-            pnpm pocket-agent projects add C:\path\to\project
+            pocket-agent projects add C:\path\to\project
           </code>
           <p className="text-xs text-muted-foreground">
             Only folders on that list can be used. This is enforced on the PC, so nobody can start Claude

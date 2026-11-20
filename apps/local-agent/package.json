@@ -12,11 +12,12 @@
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint . --max-warnings=0",
-    "test": "vitest run"
+    "test": "vitest run",
+    "pack:npm": "node scripts/pack-npm.mjs"
   },
   "dependencies": {
-    "@pocket-agent/protocol": "workspace:*",
     "@anthropic-ai/claude-agent-sdk": "0.3.319",
+    "@pocket-agent/protocol": "workspace:*",
     "commander": "15.0.0",
     "ws": "8.22.1",
     "zod": "4.6.7"
@@ -25,9 +26,13 @@
     "@pocket-agent/config": "workspace:*",
     "@types/node": "26.6.6",
     "@types/ws": "8.18.2",
+    "esbuild": "0.28.2",
     "eslint": "10.14.0",
     "tsx": "4.23.15",
     "typescript": "6.0.3",
     "vitest": "5.1.0"
+  },
+  "engines": {
+    "node": ">=24.7"
   }
 }

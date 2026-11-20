@@ -36,6 +36,13 @@ pnpm dev:api               # http://localhost:4000/health (binds 127.0.0.1; set 
 pnpm dev:web               # http://localhost:3000
 ```
 
+### Install on a PC (users)
+
+```bash
+npm install -g pocketagent
+pocket-agent setup <CODE> --api <API-URL>     # code and URL: dashboard → Devices → Add device
+```
+
 ### Pair this PC (local development)
 
 ```bash

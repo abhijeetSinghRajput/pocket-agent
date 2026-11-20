@@ -11,7 +11,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { CopyButton } from '@/components/ui/copy-button';
 import { Modal } from '@/components/ui/dialog';
-import { agentApiUrl, apiRequest } from '@/lib/api';
+import { agentApiUrl, AGENT_NPM_PACKAGE, apiRequest } from '@/lib/api';
 import { mmss } from '@/lib/format';
 
 type Step =
@@ -141,15 +141,17 @@ export function AddDeviceDialog({
           <ol className="flex flex-col gap-4 text-sm">
             <li className="flex flex-col gap-2">
               <span>
-                <span className="font-medium">1.</span> On your PC, pair the Local Agent:
+                <span className="font-medium">1.</span> On your PC, install the Pocket Agent app (needs
+                Node.js 24+):
               </span>
-              <CommandLine command={`pnpm pocket-agent pair ${step.code} --api ${api}`} />
+              <CommandLine command={`npm install -g ${AGENT_NPM_PACKAGE}`} />
             </li>
             <li className="flex flex-col gap-2">
               <span>
-                <span className="font-medium">2.</span> Then start it:
+                <span className="font-medium">2.</span> Connect this PC. It also starts automatically when you
+                sign in to Windows:
               </span>
-              <CommandLine command="pnpm pocket-agent start" />
+              <CommandLine command={`pocket-agent setup ${step.code} --api ${api}`} />
             </li>
           </ol>
 
@@ -161,7 +163,9 @@ export function AddDeviceDialog({
             Waiting for your PC…
           </p>
           <p className="text-xs text-muted-foreground">
-            Run these from the Pocket Agent repository for now. A Windows installer arrives with M7.
+            Already installed? Just run step 2. To connect only for now: add{' '}
+            <code className="font-mono">--no-autostart</code>. Remote approval stays off until you run{' '}
+            <code className="font-mono">pocket-agent approvals enable</code> on the PC.
           </p>
         </div>
       )}
@@ -183,7 +187,7 @@ export function AddDeviceDialog({
             <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-success" aria-hidden />
             <p className="text-sm">
               <span className="font-medium">{step.device.name}</span> is paired. It shows as Online once{' '}
-              <code className="font-mono text-[13px]">pnpm pocket-agent start</code> is running.
+              <code className="font-mono text-[13px]">pocket-agent setup</code> has started it.
             </p>
           </div>
           <Button onClick={() => onOpenChange(false)} className="self-end">

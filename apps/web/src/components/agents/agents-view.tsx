@@ -136,12 +136,12 @@ export function AgentsView() {
             <p>
               With the Local Agent running, Claude Code sessions on your PC appear here automatically. For
               full detail from sessions you start in VS Code or a terminal, install the hooks once:{' '}
-              <code className="font-mono text-[13px] text-foreground">pnpm pocket-agent hooks install</code>
+              <code className="font-mono text-[13px] text-foreground">pocket-agent hooks install</code>
             </p>
             <p>
               Or start a managed session:{' '}
               <code className="font-mono text-[13px] text-foreground">
-                pnpm pocket-agent run &quot;your task&quot; --cwd path
+                pocket-agent run &quot;your task&quot; --cwd path
               </code>
             </p>
           </div>

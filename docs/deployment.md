@@ -62,16 +62,38 @@ Vercel's Hobby plan is enough for the web app. Check current prices on render.co
 3. **Settings → Notifications → Enable push on this device → Send test notification.**
    On iPhone, first use Share → **Add to Home Screen**, then open Pocket Agent from the Home Screen.
 
-## 4. Point your PC at it
+## 4. Connect a PC
+
+On any PC with Node.js 24+ (no repository or pnpm needed):
 
 ```bash
-pnpm --filter @pocket-agent/local-agent build
-pnpm pocket-agent unpair                      # if it was paired with your local API
-pnpm pocket-agent pair <CODE> --api https://pocket-agent-api.onrender.com
-pnpm pocket-agent start
+npm install -g pocketagent
+pocket-agent setup <CODE> --api https://pocket-agent-api.onrender.com
 ```
 
-The **Add device** dialog in the deployed dashboard shows this command with the right URL.
+The **Add device** dialog shows these commands with the right code and URL. `setup` does four things:
+- pairs the PC;
+- connects Claude Code (installs the hooks);
+- starts the agent in the background;
+- on Windows, registers it to start at sign-in, using the per-user `Run` registry key, which needs no admin rights.
+
+Day to day: `pocket-agent status`, `stop`, `start --background` and `autostart disable`. The log is in
+`%APPDATA%\PocketAgent\agent.log`.
+
+## 5. Publish the PC app to npm
+
+```bash
+pnpm --filter @pocket-agent/local-agent pack:npm      # bundles into apps/local-agent/npm/
+cd apps/local-agent/npm
+npm pack                                              # optional: inspect the tarball
+npm login                                             # once
+npm publish --access public
+```
+
+The package is built by `scripts/pack-npm.mjs`: the protocol, `ws`, `commander` and `zod` are bundled, and only the
+Claude Agent SDK is a dependency. Use `--name <npm-name>` (or `POCKET_AGENT_NPM_NAME`) to publish under another name,
+and set `NEXT_PUBLIC_AGENT_NPM_PACKAGE` in Vercel to match. Bump `version` in `apps/local-agent/package.json` for
+each release.
 
 ## Environment reference
 

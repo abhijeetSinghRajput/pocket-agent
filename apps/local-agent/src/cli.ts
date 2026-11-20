@@ -8,6 +8,22 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ApiRequestError, confirmSecret, pairDevice, rotateSecret } from './api-client.js';
+import {
+  autostartCommand,
+  autostartCommandRegistered,
+  autostartSupported,
+  disableAutostart,
+  enableAutostart,
+} from './autostart.js';
+import {
+  clearPidFileSync,
+  isEphemeralInstall,
+  logFile,
+  runningPid,
+  spawnBackground,
+  stopRunning,
+  writePidFile,
+} from './background.js';
 import { currentPlatform, deleteConfig, loadConfig, saveConfig, validateApiUrl } from './config.js';
 import { callLocalAgent } from './local-client.js';
 import { agentHome } from './paths.js';
@@ -24,7 +40,13 @@ import type { QueryFn } from './providers/claude-code/managed.js';
 import { createSecretStore } from './secret-store.js';
 import { AgentService } from './service.js';
 
-const { version } = createRequire(import.meta.url)('../package.json') as { version: string };
+const { name: PACKAGE_NAME, version } = createRequire(import.meta.url)('../package.json') as {
+  name: string;
+  version: string;
+};
+/** This file. Hooks and auto-start point at the installed copy, so it must be a stable path. */
+const CLI_PATH = fileURLToPath(import.meta.url);
+const RELAY_PATH = path.join(path.dirname(CLI_PATH), 'hook-relay.js');
 
 // The agent is long-running: losing its console (terminal closed, parent process gone) must not
 // kill it. Writes to a closed stdout/stderr raise EPIPE asynchronously; ignore them.
@@ -51,6 +73,82 @@ async function requirePaired(home: string) {
   return { config, secret };
 }
 
+async function pairThisPc(code: string, apiUrl: string | undefined, name: string): Promise<void> {
+  if (!apiUrl) fail('Missing --api <url> (or set POCKET_AGENT_API_URL)');
+  try {
+    validateApiUrl(apiUrl);
+  } catch (e) {
+    fail((e as Error).message);
+  }
+  const home = agentHome();
+  try {
+    const res = await pairDevice(apiUrl, {
+      code,
+      name: name.slice(0, 100),
+      platform: currentPlatform(),
+      agentVersion: version,
+    });
+    await saveConfig(home, {
+      apiUrl,
+      deviceId: res.deviceId,
+      deviceName: name,
+      pairedAt: new Date().toISOString(),
+    });
+    await createSecretStore(home).save(res.deviceSecret);
+  } catch (e) {
+    fail(e instanceof ApiRequestError ? e.message : `Pairing failed: ${(e as Error).message}`);
+  }
+}
+
+async function installClaudeHooks(settings?: string): Promise<void> {
+  if (!existsSync(RELAY_PATH)) fail(`Hook relay not found at ${RELAY_PATH}. Build the agent first.`);
+  try {
+    const r = await installHooks(
+      settings ?? defaultSettingsPath(),
+      relayCommand(process.execPath, RELAY_PATH, agentHome()),
+    );
+    console.log(`Installed Pocket Agent hooks in ${r.settingsPath}`);
+    if (r.backupPath) console.log(`Backup of the previous file: ${r.backupPath}`);
+    console.log('The hooks only report activity; they never answer permission prompts.');
+    console.log('Sessions that are already running pick this up after a restart.');
+  } catch (e) {
+    fail((e as Error).message);
+  }
+}
+
+/** Refuses when running from npx's temporary cache: hooks/auto-start would point at a path that vanishes. */
+function requireStableInstall(what: string): void {
+  if (isEphemeralInstall(CLI_PATH)) {
+    fail(
+      `${what} needs Pocket Agent installed, not run through npx. Install it: npm install -g ${PACKAGE_NAME}`,
+    );
+  }
+}
+
+async function startInBackground(): Promise<void> {
+  const home = agentHome();
+  const pid = await runningPid(home);
+  if (pid) return void console.log(`Pocket Agent is already running (PID ${pid}).`);
+  await requirePaired(home);
+  const child = spawnBackground(home, CLI_PATH);
+  // Record it now, so `status`/`stop` see it before the child has finished starting.
+  await writePidFile(home, child);
+  console.log(`Pocket Agent is running in the background (PID ${child}). Log: ${logFile(home)}`);
+}
+
+async function enableStartAtSignIn(): Promise<boolean> {
+  if (!autostartSupported()) {
+    console.log(
+      'Starting at sign-in is only supported on Windows for now. Run: pocket-agent start --background',
+    );
+    return false;
+  }
+  requireStableInstall('Starting at sign-in');
+  await enableAutostart(autostartCommand(process.execPath, CLI_PATH));
+  console.log('Pocket Agent will start automatically when you sign in to Windows.');
+  return true;
+}
+
 export function buildCli(): Command {
   const program = new Command('pocket-agent')
     .description('Pocket Agent Local Agent: connect this PC to your Pocket Agent dashboard.')
@@ -63,39 +161,22 @@ export function buildCli(): Command {
     .option('--api <url>', 'Pocket Agent API URL', process.env['POCKET_AGENT_API_URL'])
     .option('--name <name>', 'name shown in the dashboard', os.hostname())
     .action(async (code: string, opts: { api?: string; name: string }) => {
-      if (!opts.api) fail('Missing --api <url> (or set POCKET_AGENT_API_URL)');
-      try {
-        validateApiUrl(opts.api);
-      } catch (e) {
-        fail((e as Error).message);
-      }
-      const home = agentHome();
-      try {
-        const res = await pairDevice(opts.api, {
-          code,
-          name: opts.name.slice(0, 100),
-          platform: currentPlatform(),
-          agentVersion: version,
-        });
-        await saveConfig(home, {
-          apiUrl: opts.api,
-          deviceId: res.deviceId,
-          deviceName: opts.name,
-          pairedAt: new Date().toISOString(),
-        });
-        await createSecretStore(home).save(res.deviceSecret);
-        console.log(`Paired as "${opts.name}". Start the agent with: pocket-agent start`);
-      } catch (e) {
-        fail(e instanceof ApiRequestError ? e.message : `Pairing failed: ${(e as Error).message}`);
-      }
+      await pairThisPc(code, opts.api, opts.name);
+      console.log(`Paired as "${opts.name}". Start the agent with: pocket-agent start`);
     });
 
   program
     .command('start')
-    .description('Connect to Pocket Agent and report Claude Code sessions (foreground)')
-    .action(async () => {
+    .description('Connect to Pocket Agent and report Claude Code sessions')
+    .option('--background', 'run without a terminal window (output goes to agent.log)')
+    .action(async (opts: { background?: boolean }) => {
+      if (opts.background) return startInBackground();
       const home = agentHome();
       const { config, secret } = await requirePaired(home);
+      const other = await runningPid(home);
+      if (other) fail(`Pocket Agent is already running (PID ${other}). Stop it with: pocket-agent stop`);
+      await writePidFile(home);
+      process.on('exit', () => clearPidFileSync(home));
       // Load the SDK only when the agent actually runs.
       const { query } = await import('@anthropic-ai/claude-agent-sdk');
       const service = new AgentService({
@@ -187,7 +268,74 @@ export function buildCli(): Command {
       if (status.revoked) console.log('Paired: no (this device was revoked; pair again)');
       else if (!status.paired) console.log('Paired: no (run: pocket-agent pair <code> --api <url>)');
       else console.log(`Paired: yes, as "${status.deviceName}" with ${status.apiUrl}`);
+      const pid = await runningPid(home);
+      console.log(
+        pid ? `Running: yes (PID ${pid})` : 'Running: no (start with: pocket-agent start --background)',
+      );
+      if (autostartSupported()) {
+        console.log(`Start at sign-in: ${(await autostartCommandRegistered()) ? 'on' : 'off'}`);
+      }
     });
+
+  program
+    .command('setup')
+    .description('One step: pair this PC, connect Claude Code, start now and at every sign-in')
+    .argument('<code>', 'pairing code from the dashboard (Devices → Add device)')
+    .option('--api <url>', 'Pocket Agent API URL', process.env['POCKET_AGENT_API_URL'])
+    .option('--name <name>', 'name shown in the dashboard', os.hostname())
+    .option('--no-hooks', "don't connect Claude Code sessions you start yourself")
+    .option('--no-autostart', "don't start at sign-in")
+    .action(
+      async (code: string, opts: { api?: string; name: string; hooks: boolean; autostart: boolean }) => {
+        requireStableInstall('Setup');
+        const home = agentHome();
+        // Re-pairing while an old agent runs would leave it on stale credentials.
+        if (await stopRunning(home).catch(() => false)) console.log('Stopped the running agent.');
+        await pairThisPc(code, opts.api, opts.name);
+        console.log(`Paired as "${opts.name}".`);
+        if (opts.hooks) await installClaudeHooks();
+        if (opts.autostart) await enableStartAtSignIn();
+        await startInBackground();
+        console.log('Done. Open the dashboard: this PC should show as Online.');
+      },
+    );
+
+  program
+    .command('stop')
+    .description('Stop the Pocket Agent running on this PC')
+    .action(async () => {
+      try {
+        const stopped = await stopRunning(agentHome());
+        console.log(stopped ? 'Pocket Agent stopped.' : 'Pocket Agent is not running.');
+      } catch (e) {
+        fail((e as Error).message);
+      }
+    });
+
+  const autostart = program
+    .command('autostart')
+    .description('Start Pocket Agent automatically when you sign in to Windows');
+  autostart.command('enable').action(async () => {
+    try {
+      await enableStartAtSignIn();
+    } catch (e) {
+      fail((e as Error).message);
+    }
+  });
+  autostart.command('disable').action(async () => {
+    try {
+      console.log(
+        (await disableAutostart()) ? 'Start at sign-in turned off.' : 'Start at sign-in was already off.',
+      );
+    } catch (e) {
+      fail((e as Error).message);
+    }
+  });
+  autostart.command('status').action(async () => {
+    if (!autostartSupported()) return void console.log('Start at sign-in: not supported on this OS yet');
+    const cmd = await autostartCommandRegistered();
+    console.log(cmd ? `Start at sign-in: on\n  ${cmd}` : 'Start at sign-in: off');
+  });
 
   program
     .command('rotate')
@@ -336,20 +484,8 @@ export function buildCli(): Command {
     .description('Add Pocket Agent observe-only hooks to Claude Code settings (backs the file up first)')
     .option('--settings <file>', settingsHelp)
     .action(async (opts: { settings?: string }) => {
-      const relay = path.join(path.dirname(fileURLToPath(import.meta.url)), 'hook-relay.js');
-      if (!existsSync(relay)) fail(`Hook relay not found at ${relay}. Build the agent first.`);
-      try {
-        const r = await installHooks(
-          opts.settings ?? defaultSettingsPath(),
-          relayCommand(process.execPath, relay, agentHome()),
-        );
-        console.log(`Installed Pocket Agent hooks in ${r.settingsPath}`);
-        if (r.backupPath) console.log(`Backup of the previous file: ${r.backupPath}`);
-        console.log('The hooks only report activity; they never answer permission prompts.');
-        console.log('Sessions that are already running pick this up after a restart.');
-      } catch (e) {
-        fail((e as Error).message);
-      }
+      requireStableInstall('Installing hooks');
+      await installClaudeHooks(opts.settings);
     });
 
   hooks

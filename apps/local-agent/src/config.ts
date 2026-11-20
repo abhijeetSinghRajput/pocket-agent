@@ -1,4 +1,4 @@
-import type { Platform } from '@agentdock/protocol';
+import type { Platform } from '@pocket-agent/protocol';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';

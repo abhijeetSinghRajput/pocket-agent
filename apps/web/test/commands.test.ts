@@ -1,4 +1,4 @@
-import type { CommandDto } from '@agentdock/protocol';
+import type { CommandDto } from '@pocket-agent/protocol';
 import { describe, expect, it } from 'vitest';
 import { canInstruct } from '@/components/agents/remote-control';
 import { capabilityRows } from '@/components/agents/capabilities';
@@ -75,8 +75,8 @@ describe('capability honesty', () => {
     const rows = capabilityRows(session('observed', {}, { hooks: 'connected' }));
     const find = (label: string) => rows.find((r) => r.label === label)!;
     expect(find('Live status').detail).toContain('tool calls');
-    expect(find('Send instructions').detail).toContain('agentdock instructions enable');
-    expect(find('Approve permissions remotely').detail).toContain('agentdock approvals enable');
+    expect(find('Send instructions').detail).toContain('pocket-agent instructions enable');
+    expect(find('Approve permissions remotely').detail).toContain('pocket-agent approvals enable');
   });
 
   it('explains why instructions are unavailable', () => {
@@ -84,7 +84,7 @@ describe('capability honesty', () => {
       (r) => r.label === 'Send instructions',
     )!;
     expect(off).toMatchObject({ state: 'no' });
-    expect(off.detail).toContain('agentdock instructions enable');
+    expect(off.detail).toContain('pocket-agent instructions enable');
     const stale = capabilityRows(session('observed', {}, { hooks: 'not-connected' })).find(
       (r) => r.label === 'Send instructions',
     )!;

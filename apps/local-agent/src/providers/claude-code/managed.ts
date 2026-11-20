@@ -1,4 +1,4 @@
-import { APPROVAL_WAIT_MS, CLAUDE_CODE_CAPABILITIES } from '@agentdock/protocol';
+import { APPROVAL_WAIT_MS, CLAUDE_CODE_CAPABILITIES } from '@pocket-agent/protocol';
 import type { ApprovalBroker } from '../../approvals.js';
 import type { CanUseTool, Options, Query, SDKMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import { randomUUID } from 'node:crypto';
@@ -12,23 +12,23 @@ export type QueryFn = (args: { prompt: AsyncIterable<SDKUserMessage>; options: O
 
 /** Message shown to Claude when remote approval is turned off on the PC. */
 export const NO_APPROVAL_CHANNEL =
-  'AgentDock denied this action: remote approval is turned off on this PC, and AgentDock never approves ' +
+  'Pocket Agent denied this action: remote approval is turned off on this PC, and Pocket Agent never approves ' +
   'actions on its own. Continue without it, or ask the user to run this step themselves.';
 
 /** Message shown to Claude when nobody decided in time. */
 export const NO_DECISION_IN_TIME =
-  'AgentDock denied this action: nobody approved it in time. Continue without it, or ask again later.';
+  'Pocket Agent denied this action: nobody approved it in time. Continue without it, or ask again later.';
 
 export interface ManagedApprovalOptions {
   broker: ApprovalBroker;
-  /** PC owner allowed remote approval (`agentdock approvals enable`). */
+  /** PC owner allowed remote approval (`pocket-agent approvals enable`). */
   enabled: () => boolean;
   waitMs?: number;
 }
 
 interface Instruction {
   text: string;
-  /** The command it came from (absent for local `agentdock run`). */
+  /** The command it came from (absent for local `pocket-agent run`). */
   commandId?: string;
   expiresAt?: number;
 }
@@ -47,7 +47,7 @@ interface Managed {
 }
 
 /**
- * Sessions AgentDock starts itself with the Claude Agent SDK: full control (instructions at any
+ * Sessions Pocket Agent starts itself with the Claude Agent SDK: full control (instructions at any
  * time, interrupt, stop), and their events come from the SDK stream rather than hooks.
  * Claude Code's own settings (user/project/local) still apply — permission rules included.
  *
@@ -120,7 +120,7 @@ export class ManagedSessions {
         projectPath,
         status: 'Starting',
         capabilities: this.capabilities(),
-        metadata: { entrypoint: 'agentdock', ...(input.model ? { model: input.model } : {}) },
+        metadata: { entrypoint: 'pocket-agent', ...(input.model ? { model: input.model } : {}) },
       },
       'managed',
     );
@@ -173,7 +173,7 @@ export class ManagedSessions {
         abortController: m.abort,
         ...(input.model ? { model: input.model } : {}),
         // Lets the hook relay skip this session (its events come from this stream).
-        env: { ...process.env, AGENTDOCK_MANAGED_SESSION: '1' },
+        env: { ...process.env, POCKET_AGENT_MANAGED_SESSION: '1' },
       },
     });
 

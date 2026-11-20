@@ -1,4 +1,4 @@
-// AgentDock service worker: shows web push notifications and opens the app when one is tapped.
+// Pocket Agent service worker: shows web push notifications and opens the app when one is tapped.
 // Push is only a hint. The page always loads the real state (approvals, sessions) from the API.
 // No third-party code runs here.
 
@@ -14,14 +14,13 @@ self.addEventListener('push', (event) => {
   }
   // FCM wraps data-only messages as { data: {...}, from, fcmMessageId }.
   const d = payload && typeof payload.data === 'object' ? payload.data : payload;
-  const title = typeof d.title === 'string' && d.title ? d.title : 'AgentDock';
+  const title = typeof d.title === 'string' && d.title ? d.title : 'Pocket Agent';
   const link = typeof d.link === 'string' && d.link.startsWith('/') ? d.link : '/notifications';
   event.waitUntil(
     self.registration.showNotification(title, {
       body: typeof d.body === 'string' ? d.body : '',
       tag: typeof d.tag === 'string' ? d.tag : undefined,
-      icon: '/pwa-icon/192',
-      badge: '/pwa-icon/96',
+      icon: '/icons/icon-192.png',
       requireInteraction: d.priority === 'critical',
       data: { link },
     }),

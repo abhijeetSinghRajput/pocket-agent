@@ -1,4 +1,4 @@
-import { HealthResponse } from '@agentdock/protocol';
+import { HealthResponse } from '@pocket-agent/protocol';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, describe, expect, it } from 'vitest';
 import { buildApp } from '../src/app.js';

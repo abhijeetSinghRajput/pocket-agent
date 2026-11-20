@@ -2,7 +2,7 @@ import { copyFile, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-/** Hook events AgentDock listens to. All are observe-only in M3. */
+/** Hook events Pocket Agent listens to. All are observe-only in M3. */
 export const HOOK_EVENTS = [
   'SessionStart',
   'UserPromptSubmit',
@@ -22,8 +22,8 @@ const TOOL_EVENTS = new Set(['PreToolUse', 'PermissionRequest', 'PostToolUse', '
 /** Seconds Claude Code waits for the PermissionRequest hook (> the 5-minute remote wait + margin). */
 export const PERMISSION_HOOK_TIMEOUT_S = 330;
 
-/** Every AgentDock hook command contains this marker; it is how we find our own entries. */
-export const HOOK_MARKER = '--agentdock-hook';
+/** Every Pocket Agent hook command contains this marker; it is how we find our own entries. */
+export const HOOK_MARKER = '--pocket-agent-hook';
 
 export function claudeConfigDir(env: NodeJS.ProcessEnv = process.env): string {
   return env['CLAUDE_CONFIG_DIR'] || path.join(os.homedir(), '.claude');
@@ -67,12 +67,12 @@ async function readSettings(file: string): Promise<{ settings: Settings; existed
 
 async function writeAtomic(file: string, settings: Settings): Promise<void> {
   await mkdir(path.dirname(file), { recursive: true });
-  const tmp = `${file}.agentdock-tmp`;
+  const tmp = `${file}.pocket-agent-tmp`;
   await writeFile(tmp, JSON.stringify(settings, null, 2) + '\n', 'utf8');
   await rename(tmp, file);
 }
 
-/** Removes AgentDock entries, keeping every other hook untouched. */
+/** Removes Pocket Agent entries, keeping every other hook untouched. */
 function withoutOurs(settings: Settings): Settings {
   const hooks = settings.hooks;
   if (!hooks || typeof hooks !== 'object') return settings;
@@ -98,14 +98,14 @@ export interface InstallResult {
 }
 
 /**
- * Adds AgentDock's observe-only hooks to Claude Code settings. Idempotent (re-running replaces our
+ * Adds Pocket Agent's observe-only hooks to Claude Code settings. Idempotent (re-running replaces our
  * entries), backs the file up first, and never touches permission settings or other hooks.
  */
 export async function installHooks(settingsPath: string, command: string): Promise<InstallResult> {
   const { settings, existed } = await readSettings(settingsPath);
   let backupPath: string | null = null;
   if (existed) {
-    backupPath = `${settingsPath}.agentdock-backup-${new Date().toISOString().replace(/[:.]/g, '-')}`;
+    backupPath = `${settingsPath}.pocket-agent-backup-${new Date().toISOString().replace(/[:.]/g, '-')}`;
     await copyFile(settingsPath, backupPath);
   }
   const next = withoutOurs(settings);

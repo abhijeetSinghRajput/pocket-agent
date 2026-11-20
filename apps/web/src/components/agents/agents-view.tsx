@@ -1,6 +1,6 @@
 'use client';
 
-import { SessionListResponse, type AgentSessionDto } from '@agentdock/protocol';
+import { SessionListResponse, type AgentSessionDto } from '@pocket-agent/protocol';
 import { Bot, ChevronRight, Laptop, Plus } from 'lucide-react';
 import Link from 'next/link';
 import { useCallback, useState } from 'react';
@@ -136,12 +136,12 @@ export function AgentsView() {
             <p>
               With the Local Agent running, Claude Code sessions on your PC appear here automatically. For
               full detail from sessions you start in VS Code or a terminal, install the hooks once:{' '}
-              <code className="font-mono text-[13px] text-foreground">pnpm agentdock hooks install</code>
+              <code className="font-mono text-[13px] text-foreground">pnpm pocket-agent hooks install</code>
             </p>
             <p>
               Or start a managed session:{' '}
               <code className="font-mono text-[13px] text-foreground">
-                pnpm agentdock run &quot;your task&quot; --cwd path
+                pnpm pocket-agent run &quot;your task&quot; --cwd path
               </code>
             </p>
           </div>

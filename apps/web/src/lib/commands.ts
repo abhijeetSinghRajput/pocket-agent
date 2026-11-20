@@ -1,4 +1,4 @@
-import type { CommandDto, CommandStatus } from '@agentdock/protocol';
+import type { CommandDto, CommandStatus } from '@pocket-agent/protocol';
 
 export const STATUS_LABEL: Record<CommandStatus, string> = {
   Pending: 'Sending…',
@@ -25,9 +25,10 @@ const ERRORS: Record<string, string> = {
   device_offline: 'Your PC is offline. Nothing was sent.',
   session_not_found: 'The session is no longer running on your PC.',
   instructions_disabled_on_pc: 'Instructions to this session are turned off on your PC.',
-  hooks_not_connected: 'This session started before AgentDock hooks were installed; restart it on your PC.',
+  hooks_not_connected:
+    'This session started before Pocket Agent hooks were installed; restart it on your PC.',
   project_not_allowed: 'That folder is not on your PC’s project list.',
-  not_a_managed_session: 'Only sessions started by AgentDock can be controlled this way.',
+  not_a_managed_session: 'Only sessions started by Pocket Agent can be controlled this way.',
   interrupted: 'Interrupted before it finished.',
   session_ended: 'The session ended before this ran.',
   session_stopped: 'The session was stopped before this ran.',

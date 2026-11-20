@@ -1,15 +1,15 @@
 # Local development infrastructure only. Not used in staging/production.
 # Ports bind to 127.0.0.1 so the dev database is never exposed on the LAN.
-name: agentdock-dev
+name: pocket-agent-dev
 
 services:
   postgres:
     image: postgres:17-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-agentdock}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-agentdock_dev_only}
-      POSTGRES_DB: ${POSTGRES_DB:-agentdock}
+      POSTGRES_USER: ${POSTGRES_USER:-pocket_agent}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pocket_agent_dev_only}
+      POSTGRES_DB: ${POSTGRES_DB:-pocket_agent}
     ports:
       - '127.0.0.1:${POSTGRES_PORT:-5432}:5432'
     volumes:

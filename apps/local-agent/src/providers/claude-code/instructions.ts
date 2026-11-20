@@ -14,7 +14,7 @@ interface Item {
 
 /** What Claude reads as the reason it should continue (Stop hook "block"). */
 export function stopHookReason(text: string): string {
-  return `New instruction from the user, sent remotely through AgentDock:\n\n${text}`;
+  return `New instruction from the user, sent remotely through Pocket Agent:\n\n${text}`;
 }
 
 /**

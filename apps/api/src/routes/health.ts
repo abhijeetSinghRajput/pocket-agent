@@ -1,4 +1,4 @@
-import type { DependencyHealth, HealthResponse } from '@agentdock/protocol';
+import type { DependencyHealth, HealthResponse } from '@pocket-agent/protocol';
 import type { FastifyInstance } from 'fastify';
 
 /** A dependency probe resolves when the dependency is reachable and rejects otherwise. */
@@ -46,7 +46,7 @@ export async function healthRoutes(app: FastifyInstance, deps: HealthDeps): Prom
     const ok = database.status === 'up' && redis.status === 'up';
     const body: HealthResponse = {
       status: ok ? 'ok' : 'degraded',
-      service: 'agentdock-api',
+      service: 'pocket-agent-api',
       version: deps.version,
       uptimeSeconds: Math.round(process.uptime()),
       checks: { database, redis },

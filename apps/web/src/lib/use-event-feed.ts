@@ -1,6 +1,6 @@
 'use client';
 
-import { EventPage, type AgentEventDto } from '@agentdock/protocol';
+import { EventPage, type AgentEventDto } from '@pocket-agent/protocol';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { apiRequest } from '@/lib/api';
 

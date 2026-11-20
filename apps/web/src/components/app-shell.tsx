@@ -1,7 +1,8 @@
 'use client';
 
-import type { UserDto } from '@agentdock/protocol';
+import type { UserDto } from '@pocket-agent/protocol';
 import { Bell, Ellipsis, LogOut, X } from 'lucide-react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Dialog } from 'radix-ui';
@@ -106,23 +107,8 @@ export function Logo() {
       href="/"
       className="flex items-center gap-2.5 rounded-md outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
     >
-      <span
-        aria-hidden
-        className="grid size-7 place-items-center rounded-lg bg-primary text-primary-foreground"
-      >
-        <svg
-          viewBox="0 0 24 24"
-          className="size-4"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2.25"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <path d="m6 8 4 4-4 4M13 16h5" />
-        </svg>
-      </span>
-      <span className="text-[15px] font-semibold tracking-tight">AgentDock</span>
+      <Image src="/icons/logo-64.png" alt="" width={28} height={28} priority className="size-7" />
+      <span className="text-[15px] font-semibold tracking-tight whitespace-nowrap">Pocket Agent</span>
     </Link>
   );
 }
@@ -134,6 +120,7 @@ function UserFooter({ user, onSignOut }: { user: UserDto; onSignOut: () => void 
         <p className="truncate text-sm font-medium">{user.name}</p>
         <p className="truncate text-xs text-muted-foreground">{user.email}</p>
       </div>
+      <ThemeToggle />
       <button
         type="button"
         onClick={onSignOut}
@@ -155,7 +142,6 @@ function Sidebar({ pathname, user, onSignOut }: { pathname: string; user: UserDt
         <div className="flex items-center">
           <LiveDot />
           <NotificationBell />
-          <ThemeToggle />
         </div>
       </div>
       <nav aria-label="Main" className="flex flex-1 flex-col gap-0.5 px-3 py-2">

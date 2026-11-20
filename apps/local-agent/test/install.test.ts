@@ -12,12 +12,12 @@ import {
 
 const CMD = relayCommand(
   'C:\\Program Files\\nodejs\\node.exe',
-  'C:\\agentdock\\dist\\hook-relay.js',
-  'C:\\Users\\dev\\AppData\\Roaming\\AgentDock',
+  'C:\\pocket-agent\\dist\\hook-relay.js',
+  'C:\\Users\\dev\\AppData\\Roaming\\Pocket Agent',
 );
 
 function tempSettings(content?: unknown) {
-  const dir = mkdtempSync(path.join(os.tmpdir(), 'agentdock-settings-'));
+  const dir = mkdtempSync(path.join(os.tmpdir(), 'pocket-agent-settings-'));
   const file = path.join(dir, 'settings.json');
   if (content !== undefined)
     writeFileSync(file, typeof content === 'string' ? content : JSON.stringify(content, null, 2));
@@ -35,7 +35,7 @@ const userSettings = {
 describe('hooks installer', () => {
   it('quotes paths with forward slashes and marks the command as ours', () => {
     expect(CMD).toBe(
-      '"C:/Program Files/nodejs/node.exe" "C:/agentdock/dist/hook-relay.js" --agentdock-hook --home "C:/Users/dev/AppData/Roaming/AgentDock"',
+      '"C:/Program Files/nodejs/node.exe" "C:/pocket-agent/dist/hook-relay.js" --pocket-agent-hook --home "C:/Users/dev/AppData/Roaming/Pocket Agent"',
     );
   });
 

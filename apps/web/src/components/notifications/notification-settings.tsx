@@ -5,7 +5,7 @@ import {
   NotificationSettingsDto,
   type NotificationCategory,
   type NotificationSettingsDto as Settings,
-} from '@agentdock/protocol';
+} from '@pocket-agent/protocol';
 import Link from 'next/link';
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
 import { Button } from '@/components/ui/button';
@@ -77,10 +77,11 @@ function Switch({
 }
 
 const SUPPORT_TEXT: Record<Exclude<PushSupport['kind'], 'supported'>, string> = {
-  not_configured: 'Push isn’t set up for this AgentDock deployment. Notifications still appear in the app.',
-  insecure: 'Push needs HTTPS (or localhost). Open AgentDock over HTTPS to enable it on this device.',
+  not_configured:
+    'Push isn’t set up for this Pocket Agent deployment. Notifications still appear in the app.',
+  insecure: 'Push needs HTTPS (or localhost). Open Pocket Agent over HTTPS to enable it on this device.',
   ios_install_required:
-    'On iPhone and iPad (iOS 16.4+), push only works for the installed app: tap Share → Add to Home Screen, open AgentDock from the Home Screen, then enable push there.',
+    'On iPhone and iPad (iOS 16.4+), push only works for the installed app: tap Share → Add to Home Screen, open Pocket Agent from the Home Screen, then enable push there.',
   unsupported: 'This browser doesn’t support web push. Notifications still appear in the app.',
 };
 
@@ -108,7 +109,7 @@ function PushThisDevice({ serverAvailable, onChanged }: { serverAvailable: boole
     support.kind !== 'supported'
       ? SUPPORT_TEXT[support.kind]
       : !serverAvailable
-        ? 'The AgentDock server can’t send push yet (FCM_SERVICE_ACCOUNT_FILE isn’t set). Notifications still appear in the app.'
+        ? 'The Pocket Agent server can’t send push yet (FCM_SERVICE_ACCOUNT_FILE isn’t set). Notifications still appear in the app.'
         : null;
 
   const run = async (fn: () => Promise<void>, ok: string, next: boolean) => {
@@ -245,7 +246,7 @@ export function NotificationSettings() {
         <h3 className="text-sm font-medium">This device</h3>
         <p className="mt-1 mb-3 text-sm text-muted-foreground">
           Push is a hint: delivery isn’t guaranteed and can be delayed by the browser or OS. Approvals and
-          history always reflect the real state when you open AgentDock.{' '}
+          history always reflect the real state when you open Pocket Agent.{' '}
           {settings.push.subscriptions > 0 && `${settings.push.subscriptions} browser(s) registered.`}
         </p>
         <PushThisDevice

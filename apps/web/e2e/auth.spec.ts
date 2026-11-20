@@ -56,7 +56,7 @@ test('shows field validation and a generic error for wrong credentials', async (
   await expect(page.getByTestId('form-error')).toHaveText('Incorrect email or password');
 });
 
-test('the post-login redirect cannot leave AgentDock', async ({ page, request }) => {
+test('the post-login redirect cannot leave Pocket Agent', async ({ page, request }) => {
   const { email } = await registerViaApi(request);
   await page.goto('/login?next=//evil.example/phish');
   await page.getByLabel('Email').fill(email);

@@ -48,7 +48,7 @@ describe('secret store', () => {
   it.runIf(process.platform === 'win32')(
     'encrypts with Windows DPAPI (no plaintext on disk)',
     async () => {
-      const home = mkdtempSync(path.join(os.tmpdir(), 'agentdock-dpapi-'));
+      const home = mkdtempSync(path.join(os.tmpdir(), 'pocket-agent-dpapi-'));
       const store = createSecretStore(home, 'win32');
       await store.save(secret);
       const onDisk = readFileSync(path.join(home, 'credentials.dpapi'), 'utf8');
@@ -62,7 +62,7 @@ describe('secret store', () => {
   );
 
   it.runIf(process.platform !== 'win32')('writes an owner-only file elsewhere', async () => {
-    const home = mkdtempSync(path.join(os.tmpdir(), 'agentdock-secret-'));
+    const home = mkdtempSync(path.join(os.tmpdir(), 'pocket-agent-secret-'));
     const store = createSecretStore(home, 'linux');
     await store.save(secret);
     expect(statSync(path.join(home, 'credentials')).mode & 0o777).toBe(0o600);

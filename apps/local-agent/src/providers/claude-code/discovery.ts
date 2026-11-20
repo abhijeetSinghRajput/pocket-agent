@@ -1,4 +1,4 @@
-import type { AgentStatus } from '@agentdock/protocol';
+import type { AgentStatus } from '@pocket-agent/protocol';
 import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { SessionRegistry } from '../../sessions/registry.js';

@@ -13,19 +13,19 @@ export async function callLocalAgent(
   try {
     endpoint = JSON.parse(await readFile(path.join(home, 'ingest.json'), 'utf8')) as typeof endpoint;
   } catch {
-    throw new Error('The AgentDock agent is not running. Start it with: agentdock start');
+    throw new Error('The Pocket Agent agent is not running. Start it with: pocket-agent start');
   }
   try {
     return await requestJson(new URL(`http://127.0.0.1:${endpoint.port}${pathname}`), {
       method,
       headers: {
-        'x-agentdock-token': endpoint.token,
+        'x-pocket-agent-token': endpoint.token,
         ...(body ? { 'content-type': 'application/json' } : {}),
       },
       ...(body ? { body: JSON.stringify(body) } : {}),
       timeoutMs: 30_000,
     });
   } catch {
-    throw new Error('The AgentDock agent is not responding. Is `agentdock start` still running?');
+    throw new Error('The Pocket Agent agent is not responding. Is `pocket-agent start` still running?');
   }
 }

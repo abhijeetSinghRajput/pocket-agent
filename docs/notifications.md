@@ -1,6 +1,6 @@
 # Notifications and push (M6)
 
-AgentDock records every notification in Postgres. That history is the source of truth. Web push is a
+Pocket Agent records every notification in Postgres. That history is the source of truth. Web push is a
 **hint** that something happened. It is never what makes an approval valid, and its delivery is not guaranteed.
 
 ## What is notified
@@ -22,15 +22,15 @@ AgentDock records every notification in Postgres. That history is the source of 
 
 Push messages pass through Google's servers, and on iOS through Apple's. Their content is deliberately minimal: a title
 such as "Permission needed · Bash" and the project and PC names. **Commands, file paths, tool input and output are never
-put in a push.** You see those only after opening AgentDock, which loads them from the API over your session.
+put in a push.** You see those only after opening Pocket Agent, which loads them from the API over your session.
 
 ## How push works
 
-1. In **Settings → Notifications**, choose *Enable push on this device*. The browser asks for permission, AgentDock
+1. In **Settings → Notifications**, choose *Enable push on this device*. The browser asks for permission, Pocket Agent
    registers its own service worker (`/sw.js`), and Firebase Cloud Messaging returns a token for this browser. The token
    is stored on your account (`POST /push/subscriptions`).
 2. The API sends **data-only** messages with the FCM HTTP v1 API, authenticated by a service account
-   (`FCM_SERVICE_ACCOUNT_FILE`). AgentDock's own service worker displays them, so no third-party script runs in the
+   (`FCM_SERVICE_ACCOUNT_FILE`). Pocket Agent's own service worker displays them, so no third-party script runs in the
    service worker.
 3. A token that FCM reports as unregistered is deleted immediately. Sign-out doesn't remove a token, because the browser
    is still yours. Turning push off on the device does remove it.

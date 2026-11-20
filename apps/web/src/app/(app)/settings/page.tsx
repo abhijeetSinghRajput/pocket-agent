@@ -33,13 +33,13 @@ export default function SettingsPage() {
     <>
       <PageHeader title="Settings" />
       <div className="divide-y rounded-xl border bg-card px-5 py-5">
-        <Section title="Theme" description="Choose how AgentDock looks on this device.">
+        <Section title="Theme" description="Choose how Pocket Agent looks on this device.">
           <ThemeSelector />
         </Section>
         <AccountSection />
         <Section
           title="Remote approval"
-          description="Off by default. Enable it on each PC (agentdock approvals enable), then use Away mode under Devices for sessions you start yourself."
+          description="Off by default. Enable it on each PC (pocket-agent approvals enable), then use Away mode under Devices for sessions you start yourself."
         >
           <Link
             href="/devices"

@@ -1,4 +1,4 @@
-import type { BackendToWeb } from '@agentdock/protocol';
+import type { BackendToWeb } from '@pocket-agent/protocol';
 import type { FastifyInstance } from 'fastify';
 import { notify, type NotifyServices } from './service.js';
 
@@ -84,7 +84,7 @@ export async function notifyOfflineDevices(ctx: NotifyServices): Promise<number>
       userId: d.userId,
       category: 'device_disconnected',
       title: `PC offline · ${d.name}`,
-      body: 'AgentDock lost contact with this PC. Its sessions can’t be reached until it’s back.',
+      body: 'Pocket Agent lost contact with this PC. Its sessions can’t be reached until it’s back.',
       link: '/devices',
       // One notification per offline episode.
       dedupeKey: `offline:${d.id}:${d.lastHeartbeatAt!.toISOString()}`,

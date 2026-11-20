@@ -1,5 +1,5 @@
 // Integration: real Postgres + Redis (pnpm infra:up && pnpm db:migrate).
-import { HealthResponse } from '@agentdock/protocol';
+import { HealthResponse } from '@pocket-agent/protocol';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildApp } from '../src/app.js';
 import { loadEnv } from '../src/env.js';

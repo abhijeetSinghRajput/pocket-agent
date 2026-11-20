@@ -5,7 +5,7 @@ import {
   type ProviderId,
   type SessionCapabilities,
   type SessionMode,
-} from '@agentdock/protocol';
+} from '@pocket-agent/protocol';
 import path from 'node:path';
 
 export interface SessionInfo {

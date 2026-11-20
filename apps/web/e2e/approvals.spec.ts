@@ -23,8 +23,8 @@ async function setup(page: Page, opts: { approvals: boolean }) {
 }
 
 /** Starts the real relay for a hook without waiting (a held PermissionRequest blocks until decided). */
-function relayAsync(env: { AGENTDOCK_HOME: string }, payload: object) {
-  const child = spawn(process.execPath, [RELAY, '--agentdock-hook', '--home', env.AGENTDOCK_HOME]);
+function relayAsync(env: { POCKET_AGENT_HOME: string }, payload: object) {
+  const child = spawn(process.execPath, [RELAY, '--pocket-agent-hook', '--home', env.POCKET_AGENT_HOME]);
   let stdout = '';
   child.stdout.on('data', (d) => (stdout += d));
   const done = new Promise<string>((r) => child.on('exit', () => r(stdout)));
@@ -118,7 +118,7 @@ test('without the PC opt-in nothing is ever held, and the dashboard says how to 
   test.setTimeout(60_000);
   const { env, agent } = await setup(page, { approvals: false });
   await page.goto('/devices');
-  await expect(page.getByTestId('remote-approval-off')).toContainText('agentdock approvals enable');
+  await expect(page.getByTestId('remote-approval-off')).toContainText('pocket-agent approvals enable');
   await expect(page.getByTestId('away-switch')).toHaveCount(0);
 
   const h = hookPayloads(randomUUID(), String.raw`C:\work\other`);

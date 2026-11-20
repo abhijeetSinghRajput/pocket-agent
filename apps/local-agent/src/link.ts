@@ -6,7 +6,7 @@ import {
   MAX_FRAME_BYTES,
   WS_CLOSE,
   type Platform,
-} from '@agentdock/protocol';
+} from '@pocket-agent/protocol';
 import { EventEmitter } from 'node:events';
 import os from 'node:os';
 import WebSocket from 'ws';
@@ -40,7 +40,7 @@ export interface LinkEvents {
 }
 
 /**
- * Outbound, authenticated WebSocket to the AgentDock API. Reconnects forever with backoff,
+ * Outbound, authenticated WebSocket to the Pocket Agent API. Reconnects forever with backoff,
  * except when the server says the credentials are no longer valid (revoked / unauthorized)
  * or another process for the same device took over (replaced).
  */

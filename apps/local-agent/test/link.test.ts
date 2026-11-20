@@ -107,7 +107,7 @@ describe('AgentLink', () => {
     link = makeLink(fake.url);
     link.start();
     await until(() => fake!.frames.filter((f) => f['eventType'] === 'device.heartbeat').length >= 2);
-    expect(fake.authHeaders[0]).toBe(`AgentDock-Device ${DEVICE}:${SECRET}`);
+    expect(fake.authHeaders[0]).toBe(`PocketAgent-Device ${DEVICE}:${SECRET}`);
     expect(fake.frames[0]!['eventType']).toBe('device.connected');
     expect(fake.frames[0]!['deviceId']).toBe(DEVICE);
   });

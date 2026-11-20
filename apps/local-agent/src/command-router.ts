@@ -1,4 +1,4 @@
-import type { BackendToAgent } from '@agentdock/protocol';
+import type { BackendToAgent } from '@pocket-agent/protocol';
 import { isAllowedProject, type Policy } from './policy.js';
 import type { CommandAck } from './providers/claude-code/instructions.js';
 import type { ObservedInstructions } from './providers/claude-code/instructions.js';

@@ -1,4 +1,4 @@
-import type { NotificationPriority } from '@agentdock/protocol';
+import type { NotificationPriority } from '@pocket-agent/protocol';
 import { GoogleAuth } from 'google-auth-library';
 import { readFileSync } from 'node:fs';
 
@@ -23,7 +23,7 @@ export interface PushSender {
 export const NO_PUSH: PushSender = { available: false, send: async () => 'error' };
 
 /**
- * Firebase Cloud Messaging HTTP v1. Messages are data-only: AgentDock's own service worker shows
+ * Firebase Cloud Messaging HTTP v1. Messages are data-only: Pocket Agent's own service worker shows
  * them, so no third-party script runs in the service worker. Content is deliberately minimal —
  * push travels through Google's (and on iOS, Apple's) servers — and push is only a hint: the app
  * always loads the real state from the API when opened.

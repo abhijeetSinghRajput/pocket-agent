@@ -4,7 +4,7 @@ import {
   type AgentEventDto,
   type AgentSessionDto,
   type OverviewResponse,
-} from '@agentdock/protocol';
+} from '@pocket-agent/protocol';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { requireUser } from '../auth/session.js';

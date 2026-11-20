@@ -1,6 +1,6 @@
 // Contract test: real hook payloads recorded from Claude Code 2.1.325 (test/fixtures) must keep
 // producing the expected events. If Claude Code changes its payloads, this is where it shows.
-import { AgentToBackend } from '@agentdock/protocol';
+import { AgentToBackend } from '@pocket-agent/protocol';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { ClaudeHookHandler, MONITOR_ONLY } from '../src/providers/claude-code/hooks.js';

@@ -6,7 +6,7 @@ import {
   type CommandDto,
   type CommandKind,
   type CommandStatus,
-} from '@agentdock/protocol';
+} from '@pocket-agent/protocol';
 import { redisKey, type AppContext } from '../context.js';
 import { Prisma, type Command } from '../generated/prisma/client.js';
 import { audit } from '../lib/audit.js';

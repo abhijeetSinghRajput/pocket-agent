@@ -1,6 +1,6 @@
 'use client';
 
-import { ApprovalResponse, type ApprovalDto } from '@agentdock/protocol';
+import { ApprovalResponse, type ApprovalDto } from '@pocket-agent/protocol';
 import { Check, ShieldAlert, X } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';

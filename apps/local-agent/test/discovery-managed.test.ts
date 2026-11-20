@@ -1,4 +1,4 @@
-import { AgentToBackend } from '@agentdock/protocol';
+import { AgentToBackend } from '@pocket-agent/protocol';
 import type { Query, SDKMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
@@ -15,7 +15,7 @@ function recorder() {
 
 describe('discovery (~/.claude/sessions)', () => {
   function dir(files: Record<string, unknown>) {
-    const d = mkdtempSync(path.join(os.tmpdir(), 'agentdock-sessions-'));
+    const d = mkdtempSync(path.join(os.tmpdir(), 'pocket-agent-sessions-'));
     for (const [name, content] of Object.entries(files)) {
       writeFileSync(path.join(d, name), typeof content === 'string' ? content : JSON.stringify(content));
     }
@@ -153,14 +153,14 @@ describe('managed sessions (Agent SDK)', () => {
       yield asMsg({ type: 'result', subtype: 'success' });
     });
     const managed = new ManagedSessions(registry, fn);
-    const dirPath = mkdtempSync(path.join(os.tmpdir(), 'agentdock-proj-'));
+    const dirPath = mkdtempSync(path.join(os.tmpdir(), 'pocket-agent-proj-'));
     const id = await managed.start({ projectPath: dirPath, prompt: 'Fix the build' });
     expect(managed.isManaged(id)).toBe(true);
 
     await new Promise((r) => setTimeout(r, 50));
     expect(seen.prompts).toEqual(['Fix the build']);
     expect(seen.options).toMatchObject({ cwd: dirPath, sessionId: id, permissionMode: 'default' });
-    expect(seen.options!.env!['AGENTDOCK_MANAGED_SESSION']).toBe('1');
+    expect(seen.options!.env!['POCKET_AGENT_MANAGED_SESSION']).toBe('1');
     expect(decision).toEqual({ behavior: 'deny', message: NO_APPROVAL_CHANNEL });
 
     const types = events.map((e) => e.eventType);

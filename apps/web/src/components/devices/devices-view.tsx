@@ -1,6 +1,6 @@
 'use client';
 
-import { DeviceListResponse, type DeviceDto } from '@agentdock/protocol';
+import { DeviceListResponse, type DeviceDto } from '@pocket-agent/protocol';
 import { Laptop, Monitor, Plus, Server } from 'lucide-react';
 import { useCallback, useState } from 'react';
 import { AddDeviceDialog } from '@/components/devices/add-device-dialog';
@@ -21,7 +21,7 @@ const PLATFORM = {
 } as const;
 
 /**
- * Away mode: permission requests of sessions the user started on this PC come to AgentDock.
+ * Away mode: permission requests of sessions the user started on this PC come to Pocket Agent.
  * Only possible when the PC itself allows remote approval.
  */
 function AwayMode({ device }: { device: DeviceDto }) {
@@ -32,7 +32,7 @@ function AwayMode({ device }: { device: DeviceDto }) {
     return (
       <p className="mt-2 text-xs text-muted-foreground" data-testid="remote-approval-off">
         Remote approval is off on this PC. To answer its permission requests here, run{' '}
-        <code className="font-mono">agentdock approvals enable</code> on it.
+        <code className="font-mono">pocket-agent approvals enable</code> on it.
       </p>
     );
   }
@@ -213,7 +213,7 @@ export function DevicesView() {
     <>
       <PageHeader
         title="Devices"
-        description="Computers running the AgentDock Local Agent."
+        description="Computers running the Pocket Agent Local Agent."
         actions={
           <Button onClick={() => setAdding(true)}>
             <Plus aria-hidden /> Add device
@@ -257,7 +257,7 @@ export function DevicesView() {
           </span>
           <h2 className="mt-4 text-base font-semibold">No devices paired</h2>
           <p className="mt-2 max-w-md text-sm text-pretty text-muted-foreground">
-            Pair a PC with a one-time code. The Local Agent only connects outward to AgentDock; nothing on
+            Pair a PC with a one-time code. The Local Agent only connects outward to Pocket Agent; nothing on
             your computer is exposed to the internet. You can revoke a device at any time.
           </p>
           <Button className="mt-5" onClick={() => setAdding(true)}>

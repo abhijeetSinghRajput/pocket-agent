@@ -55,7 +55,7 @@ export default defineConfig({
   ],
   webServer: [
     {
-      command: 'pnpm --filter @agentdock/api start:dev',
+      command: 'pnpm --filter @pocket-agent/api start:dev',
       url: `${API}/health/live`,
       reuseExistingServer: !process.env.CI,
       timeout: 60_000,

@@ -6,19 +6,19 @@ import { describe, expect, it } from 'vitest';
 import { agentHome } from '../src/paths.js';
 
 describe('agentHome', () => {
-  it('uses %APPDATA%\\AgentDock on Windows', () => {
+  it('uses %APPDATA%\\PocketAgent on Windows', () => {
     expect(agentHome({ APPDATA: 'C:\\Users\\u\\AppData\\Roaming' }, 'win32', 'C:\\Users\\u')).toBe(
-      'C:\\Users\\u\\AppData\\Roaming\\AgentDock',
+      'C:\\Users\\u\\AppData\\Roaming\\PocketAgent',
     );
   });
 
   it('uses XDG_CONFIG_HOME on Linux', () => {
-    expect(agentHome({ XDG_CONFIG_HOME: '/x/cfg' }, 'linux', '/home/u')).toBe('/x/cfg/agentdock');
-    expect(agentHome({}, 'linux', '/home/u')).toBe('/home/u/.config/agentdock');
+    expect(agentHome({ XDG_CONFIG_HOME: '/x/cfg' }, 'linux', '/home/u')).toBe('/x/cfg/pocket-agent');
+    expect(agentHome({}, 'linux', '/home/u')).toBe('/home/u/.config/pocket-agent');
   });
 
-  it('honours AGENTDOCK_HOME', () => {
-    expect(agentHome({ AGENTDOCK_HOME: os.tmpdir() }, 'win32')).toBe(path.resolve(os.tmpdir()));
+  it('honours POCKET_AGENT_HOME', () => {
+    expect(agentHome({ POCKET_AGENT_HOME: os.tmpdir() }, 'win32')).toBe(path.resolve(os.tmpdir()));
   });
 });
 
@@ -28,7 +28,7 @@ describe('cli', () => {
   const run = (...args: string[]) =>
     execFileSync(process.execPath, [tsx, cli, ...args], {
       encoding: 'utf8',
-      env: { ...process.env, AGENTDOCK_HOME: mkdtempSync(path.join(os.tmpdir(), 'agentdock-test-')) },
+      env: { ...process.env, POCKET_AGENT_HOME: mkdtempSync(path.join(os.tmpdir(), 'pocket-agent-test-')) },
     });
 
   it('prints its version', () => {

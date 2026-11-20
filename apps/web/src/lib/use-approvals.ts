@@ -1,6 +1,6 @@
 'use client';
 
-import { ApprovalListResponse } from '@agentdock/protocol';
+import { ApprovalListResponse } from '@pocket-agent/protocol';
 import { useCallback } from 'react';
 import { apiRequest } from '@/lib/api';
 import { useLiveRefresh } from '@/lib/live';

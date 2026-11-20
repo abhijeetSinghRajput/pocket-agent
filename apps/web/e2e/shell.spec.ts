@@ -27,7 +27,7 @@ for (const { path, heading } of ROUTES) {
 
 test('sections show real (empty) data, never mock data', async ({ page }) => {
   await page.goto('/approvals');
-  await expect(page.getByTestId('no-approvals')).toContainText('agentdock approvals enable');
+  await expect(page.getByTestId('no-approvals')).toContainText('pocket-agent approvals enable');
   await expect(page.getByTestId('approval-card')).toHaveCount(0);
   await page.goto('/notifications');
   await expect(page.getByTestId('notification')).toHaveCount(0);

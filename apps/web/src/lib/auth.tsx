@@ -1,6 +1,6 @@
 'use client';
 
-import { MeResponse, type LoginRequest, type RegisterRequest, type UserDto } from '@agentdock/protocol';
+import { MeResponse, type LoginRequest, type RegisterRequest, type UserDto } from '@pocket-agent/protocol';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { apiRequest, ApiClientError } from '@/lib/api';
 

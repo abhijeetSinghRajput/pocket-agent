@@ -1,9 +1,9 @@
 {
-  "name": "@agentdock/web",
+  "name": "@pocket-agent/web",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "AgentDock web dashboard (desktop + mobile).",
+  "description": "Pocket Agent web dashboard (desktop + mobile).",
   "scripts": {
     "dev": "next dev --webpack --port 3000",
     "build": "next build --webpack",
@@ -14,7 +14,7 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
-    "@agentdock/protocol": "workspace:*",
+    "@pocket-agent/protocol": "workspace:*",
     "class-variance-authority": "0.7.1",
     "clsx": "2.1.1",
     "firebase": "13.2.0",
@@ -28,7 +28,7 @@
     "zod": "4.6.7"
   },
   "devDependencies": {
-    "@agentdock/config": "workspace:*",
+    "@pocket-agent/config": "workspace:*",
     "@playwright/test": "1.64.1",
     "@tailwindcss/postcss": "4.3.4",
     "@types/node": "26.6.6",

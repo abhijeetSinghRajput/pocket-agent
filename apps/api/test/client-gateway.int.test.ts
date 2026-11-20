@@ -80,4 +80,50 @@ describe('/ws/client', () => {
     await t.app.inject({ method: 'POST', url: '/auth/logout', headers: browser(u.cookie) });
     expect((await tab.closed).code).toBe(4401);
   });
+
+  describe('one-time tickets (dashboard on another site than the API)', () => {
+    const ticket = async (cookie: string, headers = browser(cookie)) =>
+      t.app.inject({ method: 'POST', url: '/ws/tickets', headers });
+
+    it('a ticket opens one socket, once, without a cookie, and follows sign-out', async () => {
+      const u = await newUser();
+      const r = await ticket(u.cookie);
+      expect(r.statusCode).toBe(200);
+      const { ticket: tk } = r.json() as { ticket: string };
+
+      const tab = wsClient(`${clientUrl}?ticket=${tk}`, { origin: ORIGIN });
+      await tab.opened;
+      // Single use.
+      await expect(wsClient(`${clientUrl}?ticket=${tk}`, { origin: ORIGIN }).opened).rejects.toThrow(
+        'HTTP 401',
+      );
+
+      await t.app.inject({ method: 'POST', url: '/auth/logout', headers: browser(u.cookie) });
+      expect((await tab.closed).code).toBe(4401);
+    });
+
+    it('needs a signed-in, same-origin request; bad or reused tickets and foreign origins are refused', async () => {
+      const u = await newUser();
+      expect(
+        (await t.app.inject({ method: 'POST', url: '/ws/tickets', headers: { origin: ORIGIN } })).statusCode,
+      ).toBe(401);
+      expect((await ticket(u.cookie, { cookie: u.cookie, origin: 'https://evil.example' })).statusCode).toBe(
+        403,
+      );
+      await expect(wsClient(`${clientUrl}?ticket=nope`, { origin: ORIGIN }).opened).rejects.toThrow(
+        'HTTP 401',
+      );
+
+      const { ticket: tk } = (await ticket(u.cookie)).json() as { ticket: string };
+      await expect(
+        wsClient(`${clientUrl}?ticket=${tk}`, { origin: 'https://evil.example' }).opened,
+      ).rejects.toThrow('HTTP 403');
+      // A ticket minted before sign-out is dead after it.
+      const { ticket: tk2 } = (await ticket(u.cookie)).json() as { ticket: string };
+      await t.app.inject({ method: 'POST', url: '/auth/logout', headers: browser(u.cookie) });
+      await expect(wsClient(`${clientUrl}?ticket=${tk2}`, { origin: ORIGIN }).opened).rejects.toThrow(
+        'HTTP 401',
+      );
+    });
+  });
 });

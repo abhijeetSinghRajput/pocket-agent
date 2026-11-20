@@ -1,4 +1,4 @@
-import { BackendToAgent, createEvent, type ApprovalDto, type ApprovalStatus } from '@agentdock/protocol';
+import { BackendToAgent, createEvent, type ApprovalDto, type ApprovalStatus } from '@pocket-agent/protocol';
 import { redisKey } from '../context.js';
 import type { Approval, AgentSession, Device, Prisma } from '../generated/prisma/client.js';
 import { audit } from '../lib/audit.js';
@@ -48,7 +48,7 @@ async function notifyApproval(ctx: Services, a: Approval, kind: 'approval.create
 }
 
 /**
- * The PC holds a permission request for a decision from AgentDock. Called inside the event-ingest
+ * The PC holds a permission request for a decision from Pocket Agent. Called inside the event-ingest
  * transaction. Idempotent per (session, requestId).
  */
 export async function openApproval(
@@ -139,7 +139,7 @@ export async function decideApproval(
   if (!online)
     throw new DecisionError('device_offline', 'Your PC is offline, so the decision cannot reach it.');
 
-  const message = input.decision === 'deny' ? input.message?.trim() || 'Denied in AgentDock' : null;
+  const message = input.decision === 'deny' ? input.message?.trim() || 'Denied in Pocket Agent' : null;
   const r = await ctx.prisma.approval.updateMany({
     where: { id: a.id, status: 'Pending', decision: null, expiresAt: { gt: now } },
     data: {

@@ -1,4 +1,4 @@
-import { parseDeviceAuthHeader } from '@agentdock/protocol';
+import { parseDeviceAuthHeader } from '@pocket-agent/protocol';
 import { timingSafeEqual } from 'node:crypto';
 import type { AppContext } from '../context.js';
 import type { Device } from '../generated/prisma/client.js';
@@ -15,7 +15,7 @@ function hexEqual(a: string, b: string): boolean {
 }
 
 /**
- * Verifies an `AgentDock-Device <id>:<secret>` header. A match on the pending secret completes
+ * Verifies an `PocketAgent-Device <id>:<secret>` header. A match on the pending secret completes
  * a rotation: the pending secret becomes current and the old one stops working.
  * Revoked devices never authenticate.
  */

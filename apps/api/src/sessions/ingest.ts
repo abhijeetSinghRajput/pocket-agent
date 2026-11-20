@@ -5,7 +5,7 @@ import {
   type AgentStatus,
   type AgentToBackend,
   type BackendToWeb,
-} from '@agentdock/protocol';
+} from '@pocket-agent/protocol';
 import { closeApprovalFromPc, openApproval } from '../approvals/service.js';
 import type { AppContext } from '../context.js';
 import type { AgentSession, Prisma } from '../generated/prisma/client.js';
@@ -136,7 +136,7 @@ export async function ingestSessionEvent(
     ];
     if (before !== session.status) out.push(statusChanged(session, session.status, before));
 
-    // Remote approval: the PC is holding this request for a decision from AgentDock.
+    // Remote approval: the PC is holding this request for a decision from Pocket Agent.
     if (msg.eventType === 'agent.permission.requested' && msg.payload.awaitingRemote) {
       const opened = await openApproval(tx, {
         userId: device.userId,

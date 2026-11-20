@@ -6,10 +6,10 @@ Source of truth for request and response shapes: the Zod schemas in `packages/pr
 ## Conventions
 
 - JSON in and out. Errors are `{ "error": "<code>", "message"?: "<human readable>" }`. They never include stack traces or SQL.
-- **Browser auth:** an httpOnly `agentdock_session` cookie (`SameSite=Lax`, `Secure` in production).
+- **Browser auth:** an httpOnly `pocket_agent_session` cookie (`SameSite=Lax`, `Secure` in production).
   CORS allows only the origins in `WEB_ORIGINS`, with credentials.
 - **CSRF:** every state-changing browser route also requires an `Origin` header from the `WEB_ORIGINS` allow-list. Otherwise it returns `403 untrusted_origin`.
-- **Device auth:** the header `Authorization: AgentDock-Device <deviceId>:<secret>`. It is never accepted from browsers.
+- **Device auth:** the header `Authorization: PocketAgent-Device <deviceId>:<secret>`. It is never accepted from browsers.
 - **Rate limits:** per IP, stored in Redis and scaled by `RATE_LIMIT_SCALE`. Over the limit returns `429 rate_limited`.
 - Unknown routes, and resources that belong to other users, both return `404 not_found`.
 
@@ -93,6 +93,12 @@ Status: an approval stays `Pending` with `decision` set until the PC confirms it
 `Approved` or `Denied`. If the decision arrived too late (already answered on the PC, timed out, or the session ended), it
 becomes `Cancelled` and is never recorded as `Approved`. `Expired` means nobody decided in time. `DeviceDto` gained `awayMode`, and
 `remoteApprovalEnabled` is now reported by the PC.
+
+## Live updates ticket (M7)
+
+| Method | Path | Notes |
+|---|---|---|
+| POST | `/ws/tickets` | Returns `{ticket, expiresInSeconds: 60}` for a signed-in user with an allow-listed Origin. Connect with `wss://<api>/ws/client?ticket=…`. It works once and expires after 60 s. The cookie handshake still works when the web app and API share a site. |
 
 ## Notifications (M6)
 

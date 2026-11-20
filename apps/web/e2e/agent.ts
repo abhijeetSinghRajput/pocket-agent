@@ -15,12 +15,12 @@ const FIXTURES = path.resolve(
  * Isolated agent state + an isolated Claude Code config dir, so tests never read the developer's
  * real Claude sessions or settings.
  */
-export function agentEnv(): NodeJS.ProcessEnv & { AGENTDOCK_HOME: string; CLAUDE_CONFIG_DIR: string } {
-  const claudeDir = mkdtempSync(path.join(os.tmpdir(), 'agentdock-e2e-claude-'));
+export function agentEnv(): NodeJS.ProcessEnv & { POCKET_AGENT_HOME: string; CLAUDE_CONFIG_DIR: string } {
+  const claudeDir = mkdtempSync(path.join(os.tmpdir(), 'pocket-agent-e2e-claude-'));
   mkdirSync(path.join(claudeDir, 'sessions'));
   return {
     ...process.env,
-    AGENTDOCK_HOME: mkdtempSync(path.join(os.tmpdir(), 'agentdock-e2e-')),
+    POCKET_AGENT_HOME: mkdtempSync(path.join(os.tmpdir(), 'pocket-agent-e2e-')),
     CLAUDE_CONFIG_DIR: claudeDir,
   };
 }
@@ -41,8 +41,8 @@ export function cli(env: NodeJS.ProcessEnv, ...args: string[]): string {
 }
 
 /** Runs the real hook relay exactly as Claude Code would: JSON on stdin. */
-export function relay(env: { AGENTDOCK_HOME: string }, payload: object): void {
-  execFileSync(process.execPath, [RELAY, '--agentdock-hook', '--home', env.AGENTDOCK_HOME], {
+export function relay(env: { POCKET_AGENT_HOME: string }, payload: object): void {
+  execFileSync(process.execPath, [RELAY, '--pocket-agent-hook', '--home', env.POCKET_AGENT_HOME], {
     input: JSON.stringify(payload),
   });
 }

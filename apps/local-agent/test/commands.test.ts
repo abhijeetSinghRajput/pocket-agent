@@ -1,4 +1,4 @@
-import { createEvent, type BackendToAgent } from '@agentdock/protocol';
+import { createEvent, type BackendToAgent } from '@pocket-agent/protocol';
 import type { Query, SDKMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import { mkdtempSync } from 'node:fs';
 import os from 'node:os';
@@ -71,7 +71,7 @@ function harness(policy: Partial<Policy> = {}) {
 
 describe('PC policy', () => {
   it('defaults to nothing allowed and survives a corrupt file', async () => {
-    const home = mkdtempSync(path.join(os.tmpdir(), 'agentdock-policy-'));
+    const home = mkdtempSync(path.join(os.tmpdir(), 'pocket-agent-policy-'));
     expect(await loadPolicy(home)).toEqual({
       projects: [],
       observedInstructions: false,
@@ -106,7 +106,7 @@ describe('PC policy', () => {
 
 describe('command router', () => {
   it('starts managed sessions only in allow-listed folders', async () => {
-    const dir = mkdtempSync(path.join(os.tmpdir(), 'agentdock-allowed-'));
+    const dir = mkdtempSync(path.join(os.tmpdir(), 'pocket-agent-allowed-'));
     const h = harness({ projects: [{ name: 'p', path: dir }] });
     const bad = cmd({ commandType: 'session.start', projectPath: os.tmpdir(), text: 'hi' });
     await h.router.handle(bad);

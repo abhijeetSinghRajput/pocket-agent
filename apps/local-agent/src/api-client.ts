@@ -4,7 +4,7 @@ import {
   PairDeviceResponse,
   RotateSecretResponse,
   type PairDeviceRequest,
-} from '@agentdock/protocol';
+} from '@pocket-agent/protocol';
 import { validateApiUrl } from './config.js';
 import { requestJson } from './http.js';
 
@@ -29,7 +29,7 @@ async function call(
   try {
     res = await requestJson(url, init);
   } catch {
-    throw new ApiRequestError(0, 'unreachable', `Cannot reach AgentDock at ${url.origin}`);
+    throw new ApiRequestError(0, 'unreachable', `Cannot reach Pocket Agent at ${url.origin}`);
   }
   if (res.status < 200 || res.status >= 300) {
     const err = ApiError.safeParse(res.body);

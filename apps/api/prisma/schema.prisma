@@ -1,4 +1,4 @@
-// AgentDock data model. Postgres is the source of truth; Redis holds only transient state.
+// Pocket Agent data model. Postgres is the source of truth; Redis holds only transient state.
 // Enum values mirror packages/protocol/src/enums.ts (checked by test/schema-sync.test.ts).
 
 generator client {

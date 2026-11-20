@@ -1,5 +1,5 @@
 {
-  "extends": "@agentdock/config/tsconfig.base.json",
+  "extends": "@pocket-agent/config/tsconfig.base.json",
   "compilerOptions": {
     "lib": ["DOM", "DOM.Iterable", "ES2024"],
     "module": "ESNext",

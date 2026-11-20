@@ -1,4 +1,4 @@
-import type { BackendToWeb } from '@agentdock/protocol';
+import type { BackendToWeb } from '@pocket-agent/protocol';
 import type { FastifyBaseLogger } from 'fastify';
 import { redisKey, type AppContext } from '../context.js';
 

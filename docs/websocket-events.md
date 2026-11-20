@@ -24,7 +24,7 @@ gateway that carries them is built in M2 (`/ws/agent`) and M3 (`/ws/client`).
 | API → Web | `device.status.changed`, `agent.status.changed`, `agent.event.created`, `command.status.changed`, `approval.created`, `approval.updated`, `notification.created` |
 
 `approval.decision` can carry only `allow` or `deny`. The protocol has no way to express "always allow"
-or modified input, so AgentDock cannot weaken local Claude Code permissions.
+or modified input, so Pocket Agent cannot weaken local Claude Code permissions.
 
 ## Sessions (M3)
 
@@ -43,14 +43,14 @@ or modified input, so AgentDock cannot weaken local Claude Code permissions.
 
 ## Approvals (M5)
 
-- The PC holds a request only when the owner enabled it (`agentdock approvals enable`) and, for sessions the user
+- The PC holds a request only when the owner enabled it (`pocket-agent approvals enable`) and, for sessions the user
   started, only in Away mode. It then sends `agent.permission.requested` with `awaitingRemote: true` and `expiresAt`, and the API opens
   an approval.
 - `approval.decision {approvalId, requestId, decision, message?}` goes to the PC. The PC answers
   `approval.decision.ack {approvalId, result: "applied"|"stale"}`. Only `applied` makes it Approved or Denied.
 - The decision is handed to Claude Code unchanged. Managed sessions get `canUseTool` → `allow` with the original input,
   or `deny` with a message. Sessions the user started get the PermissionRequest hook output `{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"allow"}}}`.
-  AgentDock never sends `updatedInput` (managed sessions get the input back unchanged) or `updatedPermissions`.
+  Pocket Agent never sends `updatedInput` (managed sessions get the input back unchanged) or `updatedPermissions`.
 - No decision in time: managed sessions deny after 10 minutes. Sessions the user started answer nothing after 5 minutes, so Claude Code
   asks on the PC. A request answered on the PC meanwhile releases the wait (`outcome: "local"`).
 - `config.update {awayMode}` goes to the PC after every connect and on change.
@@ -67,8 +67,8 @@ or modified input, so AgentDock cannot weaken local Claude Code permissions.
 - `device.settings {projects, observedInstructions}` is sent after every connect and whenever the PC policy changes. The
   backend stores it for display only.
 - **Observed sessions** get instructions through the Stop hook. When Claude finishes a turn, the relay answers
-  `{"decision":"block","reason":"New instruction from the user, sent remotely through AgentDock: …"}` and Claude continues
-  in the same session. The next Stop marks the instruction `Completed`. This is the only hook AgentDock ever answers.
+  `{"decision":"block","reason":"New instruction from the user, sent remotely through Pocket Agent: …"}` and Claude continues
+  in the same session. The next Stop marks the instruction `Completed`. This is the only hook Pocket Agent ever answers.
 - **Managed sessions** run one instruction per turn. An instruction sent mid-turn waits for the turn to end, or for `interrupt`.
 
 ## `/ws/client` (browser, M3)
@@ -82,7 +82,7 @@ session signs out.
 
 | Aspect | Behaviour |
 |---|---|
-| Auth | The `AgentDock-Device` header is checked **before** the upgrade (`401` otherwise). Browsers can't set this header on WebSockets. |
+| Auth | The `PocketAgent-Device` header is checked **before** the upgrade (`401` otherwise). Browsers can't set this header on WebSockets. |
 | First frame | The agent sends `device.connected` (version, platform, hostname). The API acks it and the device turns **Online**. |
 | Heartbeat | The agent sends `device.heartbeat` every 15 s and the API acks each one. Any `deviceId` in the envelope must match the authenticated device; a mismatch counts as an invalid frame. |
 | Liveness | The API pings every 15 s and terminates connections that don't answer. The agent reconnects if it hears nothing for 3 heartbeat intervals. A sweeper marks devices **Offline** 45 s after their last heartbeat, which also covers a crashed API instance. |

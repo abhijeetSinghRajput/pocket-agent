@@ -4,7 +4,7 @@ import {
   SessionControlRequest,
   StartSessionRequest,
   type CommandKind,
-} from '@agentdock/protocol';
+} from '@pocket-agent/protocol';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { createCommand, toCommandDto, type Services } from '../commands/service.js';
@@ -47,7 +47,7 @@ export async function commandRoutes(app: FastifyInstance, ctx: Services): Promis
         reply,
         'not_supported',
         s.mode === 'observed'
-          ? 'Instructions to sessions you start yourself are turned off on this PC. Run `agentdock instructions enable` on the PC to allow them.'
+          ? 'Instructions to sessions you start yourself are turned off on this PC. Run `pocket-agent instructions enable` on the PC to allow them.'
           : 'This session cannot receive instructions.',
       );
     }
@@ -55,7 +55,7 @@ export async function commandRoutes(app: FastifyInstance, ctx: Services): Promis
       return bad(
         reply,
         'not_supported',
-        'Only sessions started by AgentDock can be interrupted or stopped remotely.',
+        'Only sessions started by Pocket Agent can be interrupted or stopped remotely.',
       );
     }
     const key = (kind === 'instruction' ? SendInstructionRequest : SessionControlRequest).safeParse(req.body);
@@ -96,7 +96,7 @@ export async function commandRoutes(app: FastifyInstance, ctx: Services): Promis
       return bad(
         reply,
         'project_not_allowed',
-        'That folder is not on this PC’s project list. Add it on the PC with `agentdock projects add <folder>`.',
+        'That folder is not on this PC’s project list. Add it on the PC with `pocket-agent projects add <folder>`.',
         400,
       );
     }

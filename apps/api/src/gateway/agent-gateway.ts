@@ -1,4 +1,10 @@
-import { AgentToBackend, BackendToAgent, createEvent, OFFLINE_AFTER_MS, WS_CLOSE } from '@agentdock/protocol';
+import {
+  AgentToBackend,
+  BackendToAgent,
+  createEvent,
+  OFFLINE_AFTER_MS,
+  WS_CLOSE,
+} from '@pocket-agent/protocol';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { randomUUID } from 'node:crypto';
 import type { WebSocket } from 'ws';

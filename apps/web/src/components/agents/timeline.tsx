@@ -1,6 +1,6 @@
 'use client';
 
-import type { AgentEventDto } from '@agentdock/protocol';
+import type { AgentEventDto } from '@pocket-agent/protocol';
 import {
   AlertTriangle,
   Bot,
@@ -44,7 +44,7 @@ export function toolTarget(input: unknown): string {
 
 const OUTCOME: Record<string, string> = {
   local: 'Answered on the PC',
-  remote: 'Answered in AgentDock',
+  remote: 'Answered in Pocket Agent',
   auto_denied: 'Denied automatically — no approval channel yet',
   timeout: 'Timed out',
   cancelled: 'Cancelled',

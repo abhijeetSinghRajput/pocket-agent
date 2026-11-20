@@ -6,9 +6,9 @@ interface Pending {
 }
 
 /**
- * Permission requests the PC is holding for a decision from AgentDock. Each request resolves
+ * Permission requests the PC is holding for a decision from Pocket Agent. Each request resolves
  * exactly once: with the remote decision, or with `null` (timed out / cancelled / answered on the
- * PC) — and `null` always means "not approved by AgentDock".
+ * PC) — and `null` always means "not approved by Pocket Agent".
  */
 export class ApprovalBroker {
   private readonly pending = new Map<string, Pending>();
@@ -27,7 +27,7 @@ export class ApprovalBroker {
   }
 
   /**
-   * A decision arrived from AgentDock. Returns false when nothing was waiting any more (too late) —
+   * A decision arrived from Pocket Agent. Returns false when nothing was waiting any more (too late) —
    * the caller reports that as "stale" so the backend never records it as applied.
    */
   decide(requestId: string, decision: RemoteDecision): boolean {

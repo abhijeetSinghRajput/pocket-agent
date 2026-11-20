@@ -1,4 +1,9 @@
-import { BackendToAgent, createEvent, DecideApprovalRequest, SetAwayModeRequest } from '@agentdock/protocol';
+import {
+  BackendToAgent,
+  createEvent,
+  DecideApprovalRequest,
+  SetAwayModeRequest,
+} from '@pocket-agent/protocol';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { approvalInclude, decideApproval, DecisionError, toApprovalDto } from '../approvals/service.js';

@@ -24,7 +24,7 @@ test('a new notification shows up live in the bell, the history, and can be mark
   await expect(page).toHaveURL(/\/notifications$/);
   const row = page.getByTestId('notification');
   await expect(row).toHaveCount(1);
-  await expect(row).toContainText('AgentDock test notification');
+  await expect(row).toContainText('Pocket Agent test notification');
   await expect(row).toHaveAttribute('data-unread', 'true');
 
   await page.getByTestId('mark-all-read').click();

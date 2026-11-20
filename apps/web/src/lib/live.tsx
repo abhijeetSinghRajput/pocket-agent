@@ -1,6 +1,6 @@
 'use client';
 
-import { BackendToWeb } from '@agentdock/protocol';
+import { BackendToWeb } from '@pocket-agent/protocol';
 import {
   createContext,
   useCallback,
@@ -11,7 +11,23 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { apiBaseUrl } from '@/lib/api';
+import { z } from 'zod';
+import { apiBaseUrl, ApiClientError, apiRequest } from '@/lib/api';
+
+const WsTicket = z.object({ ticket: z.string().min(1) });
+
+/**
+ * Live-updates endpoint. NEXT_PUBLIC_WS_URL is set when the API is reached through a proxy path
+ * (e.g. NEXT_PUBLIC_API_URL=/api on Vercel), since WebSockets go straight to the API host.
+ */
+export function liveUrl(): string {
+  const explicit = process.env.NEXT_PUBLIC_WS_URL;
+  if (explicit) return explicit.replace(/\/+$/, '');
+  const base = apiBaseUrl();
+  if (!/^https?:\/\//.test(base))
+    throw new Error('Set NEXT_PUBLIC_WS_URL when NEXT_PUBLIC_API_URL is a relative path');
+  return base.replace(/^http/, 'ws') + '/ws/client';
+}
 
 /** `null` = resync: we (re)connected and may have missed events, so refresh everything. */
 type Listener = (event: BackendToWeb | null) => void;
@@ -38,10 +54,25 @@ export function LiveProvider({ children }: { children: ReactNode }) {
     let attempt = 0;
     let retry: ReturnType<typeof setTimeout> | undefined;
     let disposed = false;
-    const url = apiBaseUrl().replace(/^http/, 'ws') + '/ws/client';
+    const url = liveUrl();
+    const scheduleRetry = () => {
+      setState('reconnecting');
+      const delay = Math.min(30_000, 1000 * 2 ** attempt++) * (0.5 + Math.random() / 2);
+      retry = setTimeout(() => void connect(), delay);
+    };
 
-    const connect = () => {
-      ws = new WebSocket(url);
+    const connect = async () => {
+      // A one-time ticket works even when the API is on another site than the dashboard
+      // (its cookie isn't sent there); see /ws/tickets in the API.
+      let ticket: string;
+      try {
+        ticket = (await apiRequest('/ws/tickets', WsTicket, { method: 'POST' })).ticket;
+      } catch (err) {
+        if (disposed || (err instanceof ApiClientError && err.status === 401)) return; // signed out
+        return scheduleRetry();
+      }
+      if (disposed) return;
+      ws = new WebSocket(`${url}?ticket=${encodeURIComponent(ticket)}`);
       ws.onopen = () => {
         attempt = 0;
         setState('live');
@@ -58,12 +89,10 @@ export function LiveProvider({ children }: { children: ReactNode }) {
       };
       ws.onclose = (e) => {
         if (disposed || e.code === 4401) return; // signed out: the auth layer redirects
-        setState('reconnecting');
-        const delay = Math.min(30_000, 1000 * 2 ** attempt++) * (0.5 + Math.random() / 2);
-        retry = setTimeout(connect, delay);
+        scheduleRetry();
       };
     };
-    connect();
+    void connect();
     return () => {
       disposed = true;
       clearTimeout(retry);
@@ -88,7 +117,9 @@ export function useLiveState(): LiveState {
 
 /** Calls `onChange` (debounced) when a live event matching `filter` arrives. */
 export function useLiveRefresh(onChange: () => void, filter: (e: BackendToWeb) => boolean = () => true) {
-  const ctx = useContext(LiveContext);
+  // Depend on the stable `subscribe`, not the context object: the object changes with the
+  // connection state, and re-subscribing then would drop a refresh that is still pending.
+  const subscribe = useContext(LiveContext)?.subscribe;
   const cb = useRef(onChange);
   const match = useRef(filter);
   useEffect(() => {
@@ -96,9 +127,9 @@ export function useLiveRefresh(onChange: () => void, filter: (e: BackendToWeb) =
     match.current = filter;
   });
   useEffect(() => {
-    if (!ctx) return;
+    if (!subscribe) return;
     let timer: ReturnType<typeof setTimeout> | undefined;
-    const unsubscribe = ctx.subscribe((e) => {
+    const unsubscribe = subscribe((e) => {
       if (e && !match.current(e)) return;
       clearTimeout(timer);
       timer = setTimeout(() => cb.current(), 250);
@@ -107,5 +138,5 @@ export function useLiveRefresh(onChange: () => void, filter: (e: BackendToWeb) =
       clearTimeout(timer);
       unsubscribe();
     };
-  }, [ctx]);
+  }, [subscribe]);
 }

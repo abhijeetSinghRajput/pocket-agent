@@ -1,5 +1,5 @@
 // Shared helpers for integration tests (real Postgres + Redis, real HTTP/WebSocket).
-import { createEvent, deviceAuthHeader } from '@agentdock/protocol';
+import { createEvent, deviceAuthHeader } from '@pocket-agent/protocol';
 import { randomUUID } from 'node:crypto';
 import WebSocket from 'ws';
 import type { FastifyInstance } from 'fastify';
@@ -34,7 +34,7 @@ export async function startTestApp(
   const env = loadEnv({
     ...process.env,
     WEB_ORIGINS: ORIGIN,
-    REDIS_KEY_PREFIX: `agentdock-test:${randomUUID()}:`,
+    REDIS_KEY_PREFIX: `pocket-agent-test:${randomUUID()}:`,
     COOKIE_SECURE: 'false',
   });
   const prisma = createPrisma(env.DATABASE_URL);
@@ -82,7 +82,7 @@ export async function createUserWithSession(ctx: AppContext, password = 'correct
   await ctx.prisma.authSession.create({
     data: { userId: user.id, tokenHash: sha256(token), expiresAt: new Date(Date.now() + 86_400_000) },
   });
-  return { user, password, cookie: `agentdock_session=${token}` };
+  return { user, password, cookie: `pocket_agent_session=${token}` };
 }
 
 /** Headers a browser on the web origin would send. */

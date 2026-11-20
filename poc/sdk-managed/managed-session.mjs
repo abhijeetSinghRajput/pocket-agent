@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'agentdock-sdk-'));
+const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'pocket-agent-sdk-'));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // Instruction inbox: in the real Local Agent this is fed by backend commands.
@@ -31,7 +31,7 @@ async function canUseTool(toolName, input, { toolUseID }) {
   const deny = JSON.stringify(input).includes('forbidden');
   console.log(`[approval.decided]  ${deny ? 'deny' : 'allow'}`);
   return deny
-    ? { behavior: 'deny', message: 'Denied remotely via AgentDock' }
+    ? { behavior: 'deny', message: 'Denied remotely via Pocket Agent' }
     : { behavior: 'allow', updatedInput: input };
 }
 

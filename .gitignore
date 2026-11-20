@@ -22,4 +22,4 @@ next-env.d.ts
 # Service-account / private keys (never commit; keep outside the repo)
 *firebase-adminsdk*.json
 *service-account*.json
-.agentdock-secrets/
+.pocket-agent-secrets/

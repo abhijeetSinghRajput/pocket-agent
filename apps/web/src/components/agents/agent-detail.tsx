@@ -1,6 +1,6 @@
 'use client';
 
-import { SessionResponse } from '@agentdock/protocol';
+import { SessionResponse } from '@pocket-agent/protocol';
 import { ArrowLeft, FolderOpen, Laptop } from 'lucide-react';
 import Link from 'next/link';
 import { useCallback } from 'react';

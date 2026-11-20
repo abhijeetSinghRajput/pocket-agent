@@ -1,4 +1,4 @@
-import { AgentToBackend } from '@agentdock/protocol';
+import { AgentToBackend } from '@pocket-agent/protocol';
 import type { Query, SDKMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import { readFileSync } from 'node:fs';
 import os from 'node:os';

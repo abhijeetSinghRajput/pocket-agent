@@ -1,4 +1,4 @@
-import { ApprovalListResponse, ApprovalResponse, createEvent } from '@agentdock/protocol';
+import { ApprovalListResponse, ApprovalResponse, createEvent } from '@pocket-agent/protocol';
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {

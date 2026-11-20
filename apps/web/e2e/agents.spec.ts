@@ -1,6 +1,6 @@
 // Full stack for M3: real hook relay → real Local Agent → real API → live browser updates.
 // Claude Code itself is replaced by its recorded hook payloads (local-agent/test/fixtures).
-import { SessionListResponse } from '@agentdock/protocol';
+import { SessionListResponse } from '@pocket-agent/protocol';
 import { expect, test, type Page } from '@playwright/test';
 import { randomUUID } from 'node:crypto';
 import { agentEnv, cli, hookPayloads, relay, startAgent } from './agent';
@@ -68,7 +68,7 @@ test('a Claude Code session streams into the dashboard live, survives a reconnec
   await expect(caps.locator('[data-capability="Stop / interrupt"]')).toHaveAttribute('data-state', 'no');
   const timeline = page.getByTestId('timeline');
   await expect(timeline).toContainText('Permission requested: Bash');
-  await expect(timeline).toContainText('echo agentdock-poc');
+  await expect(timeline).toContainText('echo pocket-agent-poc');
 
   relay(env, hooks['PostToolUse']!);
   relay(env, hooks['Stop']!);
@@ -153,7 +153,7 @@ test('sessions found without hooks are shown as status-only, never as controllab
   for (const c of ['Approve permissions remotely', 'Send instructions', 'Stop / interrupt']) {
     await expect(caps.locator(`[data-capability="${c}"]`)).toHaveAttribute('data-state', 'no');
   }
-  await expect(caps).toContainText('agentdock hooks install');
+  await expect(caps).toContainText('pocket-agent hooks install');
 
   agent.kill();
   await agent.exited;

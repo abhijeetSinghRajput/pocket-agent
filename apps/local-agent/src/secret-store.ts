@@ -14,7 +14,7 @@ export interface SecretStore {
   clear(): Promise<void>;
 }
 
-const ENTROPY = 'AgentDock-device-secret-v1';
+const ENTROPY = 'Pocket Agent-device-secret-v1';
 
 function powershell(script: string, stdin: string): Promise<string> {
   return new Promise((resolve, reject) => {

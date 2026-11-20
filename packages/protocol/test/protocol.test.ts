@@ -216,7 +216,7 @@ describe('health response', () => {
   it('validates a degraded response', () => {
     const r = HealthResponse.parse({
       status: 'degraded',
-      service: 'agentdock-api',
+      service: 'pocket-agent-api',
       version: '0.1.0',
       uptimeSeconds: 3,
       checks: { database: { status: 'up', latencyMs: 2 }, redis: { status: 'down', error: 'ECONNREFUSED' } },

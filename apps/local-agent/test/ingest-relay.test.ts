@@ -16,7 +16,7 @@ afterEach(async () => {
 });
 
 async function start() {
-  const home = mkdtempSync(path.join(os.tmpdir(), 'agentdock-ingest-'));
+  const home = mkdtempSync(path.join(os.tmpdir(), 'pocket-agent-ingest-'));
   const hooks: unknown[] = [];
   server = new IngestServer(home, {
     hook: (p) => {
@@ -50,7 +50,7 @@ function raw(port: number, headers: Record<string, string>, body = '{}', pathNam
 function relay(home: string | null, stdin: string, env: NodeJS.ProcessEnv = {}) {
   return new Promise<{ code: number | null; stdout: string; ms: number }>((resolve) => {
     const t0 = Date.now();
-    const args = [TSX, RELAY, '--agentdock-hook', ...(home ? ['--home', home] : [])];
+    const args = [TSX, RELAY, '--pocket-agent-hook', ...(home ? ['--home', home] : [])];
     const child = spawn(process.execPath, args, { env: { ...process.env, ...env } });
     let stdout = '';
     child.stdout.on('data', (d) => (stdout += d));
@@ -69,9 +69,9 @@ describe('local ingest server', () => {
   it('requires the token and rejects browser-originated or rebinding requests', async () => {
     const { endpoint, hooks } = await start();
     const host = `127.0.0.1:${endpoint.port}`;
-    const ok = { host, 'x-agentdock-token': endpoint.token, 'content-type': 'application/json' };
+    const ok = { host, 'x-pocket-agent-token': endpoint.token, 'content-type': 'application/json' };
     expect(await raw(endpoint.port, { host })).toBe(403);
-    expect(await raw(endpoint.port, { ...ok, 'x-agentdock-token': 'nope' })).toBe(403);
+    expect(await raw(endpoint.port, { ...ok, 'x-pocket-agent-token': 'nope' })).toBe(403);
     expect(await raw(endpoint.port, { ...ok, origin: 'https://evil.example' })).toBe(403);
     expect(await raw(endpoint.port, { ...ok, 'sec-fetch-site': 'cross-site' })).toBe(403);
     expect(await raw(endpoint.port, { ...ok, host: `evil.example:${endpoint.port}` })).toBe(403);
@@ -83,7 +83,7 @@ describe('local ingest server', () => {
 
   it('rejects oversized and malformed bodies', async () => {
     const { endpoint } = await start();
-    const ok = { host: `127.0.0.1:${endpoint.port}`, 'x-agentdock-token': endpoint.token };
+    const ok = { host: `127.0.0.1:${endpoint.port}`, 'x-pocket-agent-token': endpoint.token };
     expect(await raw(endpoint.port, ok, 'not json')).toBe(400);
     expect(await raw(endpoint.port, ok, '[1,2]')).toBe(400);
   });
@@ -103,13 +103,13 @@ describe('hook relay', () => {
     const { home, hooks } = await start();
     const r = await relay(home, '{"hook_event_name":"PreToolUse","session_id":"s1"}');
     expect(r.code).toBe(0);
-    expect(r.stdout).toBe(''); // never answers a hook → Claude Code behaves as without AgentDock
+    expect(r.stdout).toBe(''); // never answers a hook → Claude Code behaves as without Pocket Agent
     await new Promise((res) => setTimeout(res, 20));
     expect(hooks).toEqual([{ hook_event_name: 'PreToolUse', session_id: 's1' }]);
   });
 
   it('prints the hook output the agent returns (Stop → deliver an instruction), and only that', async () => {
-    const home = mkdtempSync(path.join(os.tmpdir(), 'agentdock-answer-'));
+    const home = mkdtempSync(path.join(os.tmpdir(), 'pocket-agent-answer-'));
     server = new IngestServer(home, {
       hook: (p) =>
         p['hook_event_name'] === 'Stop'
@@ -129,7 +129,7 @@ describe('hook relay', () => {
   });
 
   it('waits longer for a held PermissionRequest (decision from the phone) and prints the answer', async () => {
-    const home = mkdtempSync(path.join(os.tmpdir(), 'agentdock-hold-'));
+    const home = mkdtempSync(path.join(os.tmpdir(), 'pocket-agent-hold-'));
     server = new IngestServer(home, {
       hook: async (p) => {
         if (p['hook_event_name'] !== 'PermissionRequest') return undefined;
@@ -152,14 +152,14 @@ describe('hook relay', () => {
   }, 20_000);
 
   it('is a silent no-op when the agent is not running', async () => {
-    const home = mkdtempSync(path.join(os.tmpdir(), 'agentdock-noagent-'));
+    const home = mkdtempSync(path.join(os.tmpdir(), 'pocket-agent-noagent-'));
     const r = await relay(home, '{"hook_event_name":"Stop"}');
     expect(r).toMatchObject({ code: 0, stdout: '' });
   });
 
   it('skips managed sessions (they report through the SDK)', async () => {
     const { home, hooks } = await start();
-    const r = await relay(home, '{"hook_event_name":"Stop"}', { AGENTDOCK_MANAGED_SESSION: '1' });
+    const r = await relay(home, '{"hook_event_name":"Stop"}', { POCKET_AGENT_MANAGED_SESSION: '1' });
     expect(r.code).toBe(0);
     await new Promise((res) => setTimeout(res, 50));
     expect(hooks).toEqual([]);

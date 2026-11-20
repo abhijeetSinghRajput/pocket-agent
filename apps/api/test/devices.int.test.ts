@@ -1,4 +1,4 @@
-import { DeviceListResponse, deviceAuthHeader, PairingCodeResponse } from '@agentdock/protocol';
+import { DeviceListResponse, deviceAuthHeader, PairingCodeResponse } from '@pocket-agent/protocol';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { sha256 } from '../src/lib/crypto.js';
 import {

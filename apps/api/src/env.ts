@@ -22,7 +22,7 @@ export const EnvSchema = z.object({
     )
     .pipe(z.array(z.url()).min(1)),
   /** Prefix for every Redis key, so environments/tests can share one Redis safely. */
-  REDIS_KEY_PREFIX: z.string().default('agentdock:'),
+  REDIS_KEY_PREFIX: z.string().default('pocket-agent:'),
   /** Agent events older than this are deleted (audit logs are kept). */
   EVENT_RETENTION_DAYS: z.coerce.number().int().min(1).max(3650).default(30),
   /**
@@ -45,7 +45,7 @@ export const EnvSchema = z.object({
     .enum(['true', 'false'])
     .default('true')
     .transform((v) => v === 'true'),
-  /** Parent domain for the session cookie in production (e.g. ".agentdock.app"); unset = host-only. */
+  /** Parent domain for the session cookie in production (e.g. ".pocket-agent.app"); unset = host-only. */
   COOKIE_DOMAIN: z.string().optional(),
 });
 

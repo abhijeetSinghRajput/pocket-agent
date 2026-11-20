@@ -2,7 +2,7 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import type { AppContext } from '../context.js';
 import { randomToken, sha256 } from '../lib/crypto.js';
 
-export const SESSION_COOKIE = 'agentdock_session';
+export const SESSION_COOKIE = 'pocket_agent_session';
 
 /** Creates a login session and sets the httpOnly cookie. Only the token's hash is stored. */
 export async function startSession(

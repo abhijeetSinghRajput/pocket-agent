@@ -7,8 +7,8 @@
 // print NOTHING and exit 0. Claude Code then falls back to its normal local
 // behaviour (the interactive permission prompt). We never fail open to "allow".
 
-const PORT = process.env.AGENTDOCK_BROKER_PORT ?? '47821';
-const TIMEOUT_MS = Number(process.env.AGENTDOCK_RELAY_TIMEOUT_MS ?? 110_000);
+const PORT = process.env.POCKET_AGENT_BROKER_PORT ?? '47821';
+const TIMEOUT_MS = Number(process.env.POCKET_AGENT_RELAY_TIMEOUT_MS ?? 110_000);
 
 async function readStdin() {
   const chunks = [];

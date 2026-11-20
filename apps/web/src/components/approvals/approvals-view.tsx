@@ -47,15 +47,17 @@ export function ApprovalsView() {
           <div className="mt-2 max-w-md space-y-2 text-sm text-pretty text-muted-foreground">
             <p>
               Remote approval is off until you enable it on the PC:{' '}
-              <code className="font-mono text-[13px] text-foreground">pnpm agentdock approvals enable</code>.
-              For sessions you start yourself, requests come here only while{' '}
+              <code className="font-mono text-[13px] text-foreground">
+                pnpm pocket-agent approvals enable
+              </code>
+              . For sessions you start yourself, requests come here only while{' '}
               <Link href="/devices" className="font-medium text-foreground underline underline-offset-4">
                 Away mode
               </Link>{' '}
               is on.
             </p>
             <p>
-              AgentDock never changes your Claude Code permission settings, and every decision is audited.
+              Pocket Agent never changes your Claude Code permission settings, and every decision is audited.
             </p>
           </div>
         </section>

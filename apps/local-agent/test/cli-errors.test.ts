@@ -13,7 +13,7 @@ const TSX = path.join(import.meta.dirname, '..', 'node_modules', 'tsx', 'dist', 
 function run(args: string[]) {
   return new Promise<{ code: number | null; stderr: string }>((resolve) => {
     const child = spawn(process.execPath, [TSX, CLI, ...args], {
-      env: { ...process.env, AGENTDOCK_HOME: mkdtempSync(path.join(os.tmpdir(), 'agentdock-clierr-')) },
+      env: { ...process.env, POCKET_AGENT_HOME: mkdtempSync(path.join(os.tmpdir(), 'pocket-agent-clierr-')) },
     });
     let stderr = '';
     child.stderr.on('data', (d) => (stderr += d));
@@ -41,7 +41,7 @@ describe('CLI error exits', () => {
 
   it('reports an unreachable API cleanly', async () => {
     const r = await run(['pair', 'AAAA-AAAA', '--api', 'http://127.0.0.1:9']);
-    expect(r.stderr).toContain('Cannot reach AgentDock');
+    expect(r.stderr).toContain('Cannot reach Pocket Agent');
     expect(r.code).toBe(1);
   }, 30_000);
 });

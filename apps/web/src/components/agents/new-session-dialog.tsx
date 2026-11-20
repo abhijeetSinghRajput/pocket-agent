@@ -1,6 +1,6 @@
 'use client';
 
-import { CommandResponse, DeviceListResponse, type DeviceDto } from '@agentdock/protocol';
+import { CommandResponse, DeviceListResponse, type DeviceDto } from '@pocket-agent/protocol';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
@@ -105,7 +105,7 @@ export function NewSessionDialog({
               : 'None of your PCs are online. Start the agent on your PC, and allow a project folder:'}
           </p>
           <code className="block rounded-md bg-muted px-3 py-2 font-mono text-[13px] break-all">
-            pnpm agentdock projects add C:\path\to\project
+            pnpm pocket-agent projects add C:\path\to\project
           </code>
           <p className="text-xs text-muted-foreground">
             Only folders on that list can be used. This is enforced on the PC, so nobody can start Claude

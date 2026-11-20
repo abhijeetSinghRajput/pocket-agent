@@ -1,4 +1,4 @@
-import { createEvent, deviceAuthHeader, WS_CLOSE } from '@agentdock/protocol';
+import { createEvent, deviceAuthHeader, WS_CLOSE } from '@pocket-agent/protocol';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
 import {

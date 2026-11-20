@@ -42,7 +42,7 @@ Audit log entries are written for: register, login, failed login, logout, pairin
 
 | Threat | Control | Test |
 |---|---|---|
-| AgentDock changes how Claude Code behaves | The hook relay **never answers a hook**: it prints nothing and always exits 0, even when the agent is down, so Claude Code's own permission prompt works exactly as before. The installer adds only AgentDock hook entries (tagged `--agentdock-hook`), backs `settings.json` up first, never touches `permissions`, and refuses to edit a file it can't parse. | `ingest-relay`, `install` |
+| Pocket Agent changes how Claude Code behaves | The hook relay **never answers a hook**: it prints nothing and always exits 0, even when the agent is down, so Claude Code's own permission prompt works exactly as before. The installer adds only Pocket Agent hook entries (tagged `--pocket-agent-hook`), backs `settings.json` up first, never touches `permissions`, and refuses to edit a file it can't parse. | `ingest-relay`, `install` |
 | Managed sessions approving actions on their own | `canUseTool` **denies** every request that needs approval until remote approval ships (M5), and records it as `auto_denied`. Claude Code's user, project and local settings, including deny rules, still apply. | `discovery-managed` |
 | Leaking code, file contents or secrets to the cloud | Tool inputs are allow-listed per tool: commands, paths and patterns only. `Write`/`Edit` bodies are reduced to a size, `Read` output is never sent, and MCP and unknown tools send argument *names* only. Only `Bash`/`PowerShell` output is forwarded (truncated), because it's the "terminal output" feature. `transcript_path` and `scratchpad_dir` are never forwarded. | `hooks` (recorded payloads) |
 | Reading Claude Code's local auth tokens | Discovery reads only `<config>/sessions/<pid>.json`, never the `*.key` files beside them or `ide/*.lock`. | `discovery-managed` |
@@ -57,9 +57,9 @@ Audit log entries are written for: register, login, failed login, logout, pairin
 
 | Threat | Control | Test |
 |---|---|---|
-| Stolen dashboard login used to run Claude anywhere on the PC | Managed sessions start only in folders on the **PC's** allow-list (`agentdock projects add`), matched by exact path, not prefix. The API checks it and the PC checks again. An empty list means no remote starts. | `commands.int`, `commands` |
-| Steering sessions the user started themselves | Off by default. The PC owner turns it on with `agentdock instructions enable`, and capabilities reflect the setting. The PC refuses even if the backend sends one anyway. | `commands`, `hooks`, E2E `control` |
-| Remote instructions bypassing local permissions | Instructions are just prompts. Claude Code still asks on the PC for every permission, and managed sessions still deny every action that needs approval until M5. The only hook AgentDock answers is **Stop**, never a permission hook. | `hooks`, `ingest-relay` |
+| Stolen dashboard login used to run Claude anywhere on the PC | Managed sessions start only in folders on the **PC's** allow-list (`pocket-agent projects add`), matched by exact path, not prefix. The API checks it and the PC checks again. An empty list means no remote starts. | `commands.int`, `commands` |
+| Steering sessions the user started themselves | Off by default. The PC owner turns it on with `pocket-agent instructions enable`, and capabilities reflect the setting. The PC refuses even if the backend sends one anyway. | `commands`, `hooks`, E2E `control` |
+| Remote instructions bypassing local permissions | Instructions are just prompts. Claude Code still asks on the PC for every permission, and managed sessions still deny every action that needs approval until M5. The only hook Pocket Agent answers is **Stop**, never a permission hook. | `hooks`, `ingest-relay` |
 | Duplicate execution (retries, reconnects, replays) | Client idempotency key (unique per user), and the PC executes each `commandId` at most once. Reports may only move a command forward. | `commands.int`, `commands` |
 | Late execution | Every command has an `expiresAt`. The PC drops expired commands, the API marks them `Expired`, and a late report can't revive them. An offline PC means `Failed (device_offline)` immediately; nothing is queued. | `commands.int`, `hooks` |
 | One user or device acting on another's commands | Commands are scoped to the owner's sessions and devices. Reports from any other device are ignored. | `commands.int` |
@@ -70,9 +70,9 @@ Audit log entries are written for: register, login, failed login, logout, pairin
 
 | Threat | Control | Test |
 |---|---|---|
-| A stolen dashboard login approving actions on the PC | Remote approval is **off until enabled on the PC** (`agentdock approvals enable`). For sessions the user started, Away mode must also be on. Without both, permission requests never leave the PC. | `approvals`, E2E `approvals` |
+| A stolen dashboard login approving actions on the PC | Remote approval is **off until enabled on the PC** (`pocket-agent approvals enable`). For sessions the user started, Away mode must also be on. Without both, permission requests never leave the PC. | `approvals`, E2E `approvals` |
 | Auto-approval | Nothing is ever approved without a person's decision. No decision means a deny (managed) or Claude Code asking on the PC (sessions the user started). | `approvals` |
-| Weakening local permissions | AgentDock never sends `updatedPermissions`, never sends modified input (managed sessions get the original input object back), never changes `permissionMode`, and Claude Code's deny and ask rules still apply. | `approvals`, `install` |
+| Weakening local permissions | Pocket Agent never sends `updatedPermissions`, never sends modified input (managed sessions get the original input object back), never changes `permissionMode`, and Claude Code's deny and ask rules still apply. | `approvals`, `install` |
 | Replayed or duplicate decisions | Atomic compare-and-set on `Pending` + `decision IS NULL` + not expired. Double taps and replays return `409`. | `approvals.int` |
 | Expired requests executed later | The PC stops waiting at `expiresAt`, the API marks it `Expired`, and late decisions are refused. | `approvals.int`, `approvals` |
 | A decision recorded as applied when it wasn't | Status becomes Approved or Denied only on the PC's `applied` ack. A late decision becomes `Cancelled`. | `approvals.int` |
@@ -82,7 +82,7 @@ Audit log entries are written for: register, login, failed login, logout, pairin
 | Auditability | `approval.decided` (who, what, when) and `approval.applied` (PC result), plus `device.away_mode` changes. | `approvals.int` |
 
 Note: interactive Claude Code sessions, including VS Code, run hooks only in **trusted** folders. In an untrusted folder,
-AgentDock sees nothing from that session, and it falls back safely to plain Claude Code.
+Pocket Agent sees nothing from that session, and it falls back safely to plain Claude Code.
 
 ## Controls added in M6 (notifications and push)
 
@@ -95,7 +95,16 @@ AgentDock sees nothing from that session, and it falls back safely to plain Clau
 | CSRF on settings or registration | The Origin allow-list applies to every mutating route, and registration and test sends are rate limited. | `notifications.int` |
 | Stale tokens | Tokens FCM reports as unregistered are deleted on first use. | `notifications.int` |
 | Service-account key exposure | The key is read from `FCM_SERVICE_ACCOUNT_FILE` outside the repository. Only names appear in `.env.example`. | config |
-| Third-party code in the service worker | AgentDock's own `sw.js` handles data-only messages. The Firebase SDK runs only in the page, to obtain a token. Notification clicks open same-origin paths only. | `sw.js` |
+| Third-party code in the service worker | Pocket Agent's own `sw.js` handles data-only messages. The Firebase SDK runs only in the page, to obtain a token. Notification clicks open same-origin paths only. | `sw.js` |
+
+## Controls added in M7 (deployment)
+
+| Threat | Control | Test |
+|---|---|---|
+| Third-party cookie blocking or leakage between the `vercel.app` and `onrender.com` sites | The dashboard reaches the API through its own `/api` proxy, so the session cookie is first-party and host-only. | manual proxy check |
+| Live socket without a cookie | `POST /ws/tickets` requires a session and an allow-listed Origin. The ticket is random, stored only as a hash, single-use (GETDEL), lasts 60 s and is bound to the login session. A ticket minted before sign-out stops working after it. The socket's Origin is still checked. | `client-gateway.int` |
+| Secrets in the repository | `render.yaml` holds no secrets: `WEB_ORIGINS` is entered in the dashboard, and the FCM key is a Render Secret File. Key files are git-ignored. | config |
+| Database or Redis exposed to the internet | Both use an empty `ipAllowList`, so they are reachable only from services in the same Render account. | config |
 
 ## Known issues
 
@@ -103,6 +112,7 @@ AgentDock sees nothing from that session, and it falls back safely to plain Clau
 - `Bash` output is forwarded (truncated to 4 KB). A command that prints a secret will show it in the timeline.
 - If Redis is down, rate-limited routes (login, register, pairing) return 500 instead of running unthrottled. This is a deliberate fail-closed choice.
 - Signing out doesn't unregister the browser's push token. Pushes for that account keep arriving on that browser until push is turned off there or another account registers the same browser.
+- The API trusts `X-Forwarded-For` (`trustProxy: true`). Through Vercel the client IP is correct, but a client calling Render directly can spoof it to spread its per-IP rate limits. The per-account lockout still applies. Revisit in M8 by pinning trusted proxy hops.
 - There is no "sign out other sessions" or session list UI yet.
 - On macOS and Linux the device secret is stored in a 0600 file rather than the OS keychain.
 - `minimatch` (GHSA-g3hv-75wg-m249, moderate, denial of service): reaches us only through ESLint dev tooling and does not ship. Fix by upgrading once ESLint and typescript-eslint publish releases with patched dependencies.

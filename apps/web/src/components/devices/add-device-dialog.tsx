@@ -5,13 +5,13 @@ import {
   PAIRING_CODE_TTL_MS,
   PairingCodeResponse,
   type DeviceDto,
-} from '@agentdock/protocol';
+} from '@pocket-agent/protocol';
 import { CheckCircle2, RefreshCw } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { CopyButton } from '@/components/ui/copy-button';
 import { Modal } from '@/components/ui/dialog';
-import { apiBaseUrl, apiRequest } from '@/lib/api';
+import { agentApiUrl, apiRequest } from '@/lib/api';
 import { mmss } from '@/lib/format';
 
 type Step =
@@ -90,7 +90,7 @@ export function AddDeviceDialog({
     };
   }, [open, step, onPaired]);
 
-  const api = apiBaseUrl();
+  const api = agentApiUrl();
 
   return (
     <Modal
@@ -100,7 +100,7 @@ export function AddDeviceDialog({
       description={
         step.kind === 'paired'
           ? undefined
-          : 'Run the AgentDock Local Agent on the PC you want to connect and enter this one-time code.'
+          : 'Run the Pocket Agent Local Agent on the PC you want to connect and enter this one-time code.'
       }
     >
       {step.kind === 'creating' && (
@@ -143,13 +143,13 @@ export function AddDeviceDialog({
               <span>
                 <span className="font-medium">1.</span> On your PC, pair the Local Agent:
               </span>
-              <CommandLine command={`pnpm agentdock pair ${step.code} --api ${api}`} />
+              <CommandLine command={`pnpm pocket-agent pair ${step.code} --api ${api}`} />
             </li>
             <li className="flex flex-col gap-2">
               <span>
                 <span className="font-medium">2.</span> Then start it:
               </span>
-              <CommandLine command="pnpm agentdock start" />
+              <CommandLine command="pnpm pocket-agent start" />
             </li>
           </ol>
 
@@ -161,7 +161,7 @@ export function AddDeviceDialog({
             Waiting for your PC…
           </p>
           <p className="text-xs text-muted-foreground">
-            Run these from the AgentDock repository for now. A Windows installer arrives with M7.
+            Run these from the Pocket Agent repository for now. A Windows installer arrives with M7.
           </p>
         </div>
       )}
@@ -183,7 +183,7 @@ export function AddDeviceDialog({
             <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-success" aria-hidden />
             <p className="text-sm">
               <span className="font-medium">{step.device.name}</span> is paired. It shows as Online once{' '}
-              <code className="font-mono text-[13px]">pnpm agentdock start</code> is running.
+              <code className="font-mono text-[13px]">pnpm pocket-agent start</code> is running.
             </p>
           </div>
           <Button onClick={() => onOpenChange(false)} className="self-end">

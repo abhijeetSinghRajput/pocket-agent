@@ -3,7 +3,7 @@ import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
 import websocket from '@fastify/websocket';
-import { MAX_FRAME_BYTES } from '@agentdock/protocol';
+import { MAX_FRAME_BYTES } from '@pocket-agent/protocol';
 import Fastify, { type FastifyInstance, type FastifyServerOptions } from 'fastify';
 import type { AppContext } from './context.js';
 import type { Env } from './env.js';

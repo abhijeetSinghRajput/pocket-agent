@@ -1,4 +1,4 @@
-import { createEvent, NotificationPage, NotificationSettingsDto } from '@agentdock/protocol';
+import { createEvent, NotificationPage, NotificationSettingsDto } from '@pocket-agent/protocol';
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { notify } from '../src/notifications/service.js';

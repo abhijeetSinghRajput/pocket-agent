@@ -85,7 +85,7 @@ export const DeviceListResponse = z.object({ devices: z.array(DeviceDto) });
 export type DeviceListResponse = z.infer<typeof DeviceListResponse>;
 
 // ── Device authentication (HTTP + WebSocket upgrade) ─────────────────────────
-export const DEVICE_AUTH_SCHEME = 'AgentDock-Device';
+export const DEVICE_AUTH_SCHEME = 'PocketAgent-Device';
 
 export function deviceAuthHeader(deviceId: string, secret: string): string {
   return `${DEVICE_AUTH_SCHEME} ${deviceId}:${secret}`;
@@ -95,7 +95,7 @@ export function parseDeviceAuthHeader(
   header: string | undefined,
 ): { deviceId: string; secret: string } | null {
   if (!header) return null;
-  const m = /^AgentDock-Device ([0-9a-f-]{36}):([A-Za-z0-9_-]{20,200})$/.exec(header.trim());
+  const m = /^PocketAgent-Device ([0-9a-f-]{36}):([A-Za-z0-9_-]{20,200})$/.exec(header.trim());
   return m ? { deviceId: m[1]!, secret: m[2]! } : null;
 }
 

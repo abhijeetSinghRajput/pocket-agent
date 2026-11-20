@@ -1,4 +1,4 @@
-import { createEvent, type Platform } from '@agentdock/protocol';
+import { createEvent, type Platform } from '@pocket-agent/protocol';
 import path from 'node:path';
 import { ApprovalBroker } from './approvals.js';
 import { CommandRouter, type FullAck } from './command-router.js';
@@ -121,7 +121,7 @@ export class AgentService {
           p.requestId,
           p.decision === 'allow'
             ? { behavior: 'allow' }
-            : { behavior: 'deny', message: p.message ?? 'Denied in AgentDock' },
+            : { behavior: 'deny', message: p.message ?? 'Denied in Pocket Agent' },
         );
         // "stale": nothing was waiting any more (answered on the PC / timed out) — never applied.
         this.enqueue(
@@ -154,7 +154,7 @@ export class AgentService {
     this.link.send(this.registry.snapshot());
   }
 
-  /** Re-reads policy.json (after `agentdock projects …` / `instructions …`) and tells the backend. */
+  /** Re-reads policy.json (after `pocket-agent projects …` / `instructions …`) and tells the backend. */
   async reloadPolicy(): Promise<void> {
     this.policy = await loadPolicy(this.opts.home);
     this.hooks.refreshCapabilities();

@@ -7,7 +7,7 @@ import {
   type NotificationPriority,
   type NotificationSettingsDto,
   type QuietHours,
-} from '@agentdock/protocol';
+} from '@pocket-agent/protocol';
 import type { AppContext } from '../context.js';
 import { Prisma, type Notification } from '../generated/prisma/client.js';
 import { notifyUser, type Bus } from '../realtime/bus.js';

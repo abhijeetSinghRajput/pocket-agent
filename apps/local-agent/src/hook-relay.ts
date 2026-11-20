@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// Claude Code → AgentDock hook relay. Claude Code runs this for each hook event (see
-// `agentdock hooks install`). It forwards the hook JSON to the local agent on 127.0.0.1.
+// Claude Code → Pocket Agent hook relay. Claude Code runs this for each hook event (see
+// `pocket-agent hooks install`). It forwards the hook JSON to the local agent on 127.0.0.1.
 //
 // Rules:
 // - Node built-ins only, so it starts fast (it runs on every tool call).
@@ -8,7 +8,7 @@
 //   does only for Stop, to deliver an instruction the PC owner allowed. Permission hooks are never
 //   answered, so Claude Code's own permission prompt is unchanged — and if the agent is down,
 //   nothing is printed at all.
-// - Managed sessions (started by AgentDock) are skipped: they report through the SDK instead.
+// - Managed sessions (started by Pocket Agent) are skipped: they report through the SDK instead.
 import { readFileSync } from 'node:fs';
 import { request } from 'node:http';
 import path from 'node:path';
@@ -19,7 +19,7 @@ function done(): never {
   process.exit(0);
 }
 
-if (process.env['AGENTDOCK_MANAGED_SESSION']) done();
+if (process.env['POCKET_AGENT_MANAGED_SESSION']) done();
 
 const homeIdx = process.argv.indexOf('--home');
 const home = homeIdx > 0 ? process.argv[homeIdx + 1] : undefined;
@@ -68,7 +68,7 @@ process.stdin.on('end', () => {
       headers: {
         'content-type': 'application/json',
         'content-length': body.length,
-        'x-agentdock-token': endpoint.token,
+        'x-pocket-agent-token': endpoint.token,
       },
       timeout: waitMs,
     },

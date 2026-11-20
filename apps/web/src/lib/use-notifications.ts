@@ -1,6 +1,6 @@
 'use client';
 
-import { NotificationPage } from '@agentdock/protocol';
+import { NotificationPage } from '@pocket-agent/protocol';
 import { useCallback, useEffect } from 'react';
 import { apiRequest } from '@/lib/api';
 import { useLiveRefresh } from '@/lib/live';
@@ -27,7 +27,7 @@ export function useNotifications(limit = 30) {
   return poll;
 }
 
-const READ_EVENT = 'agentdock:notifications-read';
+const READ_EVENT = 'pocket-agent:notifications-read';
 
 export async function markRead(ids?: string[]) {
   await apiRequest('/notifications/read', null, { method: 'POST', body: ids ? { ids } : {} });

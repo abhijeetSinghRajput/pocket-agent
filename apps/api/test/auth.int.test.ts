@@ -1,4 +1,4 @@
-import { MeResponse } from '@agentdock/protocol';
+import { MeResponse } from '@pocket-agent/protocol';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { sha256 } from '../src/lib/crypto.js';
 import {
@@ -146,7 +146,7 @@ describe('login and sessions', () => {
     const res = await t.app.inject({
       method: 'GET',
       url: '/auth/me',
-      headers: { cookie: 'agentdock_session=nope' },
+      headers: { cookie: 'pocket_agent_session=nope' },
     });
     expect(res.statusCode).toBe(401);
   });

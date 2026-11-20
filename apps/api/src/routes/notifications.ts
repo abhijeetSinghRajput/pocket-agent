@@ -1,4 +1,4 @@
-import { MarkReadRequest, RegisterPushRequest, UpdateNotificationSettings } from '@agentdock/protocol';
+import { MarkReadRequest, RegisterPushRequest, UpdateNotificationSettings } from '@pocket-agent/protocol';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { requireTrustedOrigin, requireUser } from '../auth/session.js';
@@ -110,7 +110,7 @@ export async function notificationRoutes(app: FastifyInstance, ctx: NotifyServic
     const n = await notify(ctx, {
       userId: req.user!.id,
       category: 'test',
-      title: 'AgentDock test notification',
+      title: 'Pocket Agent test notification',
       body: 'If you can see this, notifications work on this device.',
       link: '/notifications',
       dedupeKey: `test:${crypto.randomUUID()}`,

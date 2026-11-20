@@ -20,7 +20,7 @@ describe('fetchHealth', () => {
   afterEach(() => vi.unstubAllGlobals());
   const body = {
     status: 'degraded',
-    service: 'agentdock-api',
+    service: 'pocket-agent-api',
     version: '0.1.0',
     uptimeSeconds: 1,
     checks: { database: { status: 'up', latencyMs: 1 }, redis: { status: 'down', error: 'x' } },

@@ -6,7 +6,7 @@ import {
   DeviceStatus,
   Platform,
   SessionMode,
-} from '@agentdock/protocol';
+} from '@pocket-agent/protocol';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 

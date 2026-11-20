@@ -21,8 +21,8 @@ async function pairedAgent(page: Page, opts: { instructions: boolean }) {
 }
 
 /** Runs the real relay like Claude Code does and returns what it printed (the hook's answer). */
-function hook(env: { AGENTDOCK_HOME: string }, payload: object): string {
-  return execFileSync(process.execPath, [RELAY, '--agentdock-hook', '--home', env.AGENTDOCK_HOME], {
+function hook(env: { POCKET_AGENT_HOME: string }, payload: object): string {
+  return execFileSync(process.execPath, [RELAY, '--pocket-agent-hook', '--home', env.POCKET_AGENT_HOME], {
     input: JSON.stringify(payload),
     encoding: 'utf8',
   });
@@ -95,7 +95,7 @@ test('without the PC owner’s consent, sessions they started cannot be instruct
   await page.getByTestId('session-card').filter({ hasText: 'payroll' }).click();
   const instruct = page.getByTestId('capabilities').locator('[data-capability="Send instructions"]');
   await expect(instruct).toHaveAttribute('data-state', 'no');
-  await expect(instruct).toContainText('agentdock instructions enable');
+  await expect(instruct).toContainText('pocket-agent instructions enable');
   await expect(page.getByTestId('composer')).toHaveCount(0);
   // The Stop hook never answers either.
   expect(hook(env, h['Stop']!)).toBe('');
@@ -103,7 +103,7 @@ test('without the PC owner’s consent, sessions they started cannot be instruct
   // New session: no project allowed on the PC yet → the dialog explains how to allow one.
   await page.goto('/agents');
   await page.getByRole('button', { name: 'New session' }).click();
-  await expect(page.getByTestId('no-projects')).toContainText('agentdock projects add');
+  await expect(page.getByTestId('no-projects')).toContainText('pocket-agent projects add');
 
   agent.kill();
   await agent.exited;

@@ -1,6 +1,6 @@
 'use client';
 
-import { LoginRequest, RegisterRequest } from '@agentdock/protocol';
+import { LoginRequest, RegisterRequest } from '@pocket-agent/protocol';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
@@ -112,7 +112,7 @@ export function AuthForm({ mode }: { mode: Mode }) {
       </form>
 
       <p className="mt-6 text-center text-sm text-muted-foreground">
-        {isLogin ? 'New to AgentDock? ' : 'Already have an account? '}
+        {isLogin ? 'New to Pocket Agent? ' : 'Already have an account? '}
         <Link
           href={isLogin ? '/register' : '/login'}
           className="font-medium text-foreground underline underline-offset-4 hover:text-primary"

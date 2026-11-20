@@ -1,4 +1,4 @@
-# AgentDock — Architecture
+# Pocket Agent — Architecture
 
 Status: **proposed** (pending approval). Grounded in the PoC results in
 [`poc/README.md`](../poc/README.md), verified on 2026-11-17 against Claude Code 2.1.325
@@ -36,9 +36,9 @@ Rules that hold everywhere:
 ## 2. Two session modes (the key design decision)
 
 The PoC showed that Claude Code sessions differ in how much control is available through supported
-mechanisms. AgentDock models this explicitly, and the UI shows each session's capabilities.
+mechanisms. Pocket Agent models this explicitly, and the UI shows each session's capabilities.
 
-| Capability | **Managed session** (started by AgentDock) | **Observed session** (user started it in VS Code / CLI) |
+| Capability | **Managed session** (started by Pocket Agent) | **Observed session** (user started it in VS Code / CLI) |
 |---|---|---|
 | Mechanism | Agent SDK `query()` with streaming input, owned by the Local Agent | Command hooks installed in `~/.claude/settings.json`, relayed to the Local Agent |
 | Discovery | Known from creation | `SessionStart` hook; best-effort scan of `~/.claude/sessions/*.json` (undocumented) |
@@ -73,9 +73,9 @@ Agent tray). Otherwise the hook returns immediately with no decision, and the lo
 3. **Remote approval is opt-in and never weakens local settings.**
    - Remote approval is **off by default** for each device. The user turns it on explicitly; for observed
      sessions, Away mode must also be on.
-   - AgentDock never changes `permissionMode`, allow/deny rules or any other Claude Code permission
+   - Pocket Agent never changes `permissionMode`, allow/deny rules or any other Claude Code permission
      setting, and never returns `updatedPermissions` or `updatedInput`. The hook installer adds only
-     AgentDock hook entries.
+     Pocket Agent hook entries.
    - Claude Code's own deny/ask rules are still evaluated after a hook says allow, so local policy always wins.
    - If anything fails, the request falls back to the local prompt (interactive) or a deny (headless).
    - Every request, decision, expiry, cancellation and setting change is written to an append-only audit log.
@@ -109,9 +109,9 @@ Postgres is the source of truth. The MVP runs one API instance, but nothing assu
 - **Backend link**: a WSS client with exponential backoff and jitter, heartbeat every 15 s, and an outbox
   of unacknowledged events that is replayed after reconnect. `eventId` dedupe makes the replay safe.
 - **Hook ingest**: an HTTP server on `127.0.0.1:<port>`. The hook relay (a tiny script that Claude Code
-  runs) forwards hook stdin with an `X-AgentDock-Token` header read from the agent's state directory.
+  runs) forwards hook stdin with an `X-Pocket Agent-Token` header read from the agent's state directory.
   The server rejects requests that carry `Origin` headers, which blocks browser CSRF against localhost.
-- **Hook installer**: `agentdock hooks install|uninstall` merges AgentDock entries into
+- **Hook installer**: `pocket-agent hooks install|uninstall` merges Pocket Agent entries into
   `~/.claude/settings.json`. It makes a backup, leaves other hooks untouched, and is idempotent.
 - **Providers** (`src/providers/<name>/`): implementations of `AgentProvider`. `claude-code` covers
   managed sessions (one SDK `query()` per session, an instruction inbox, `canUseTool` → approval) and
@@ -120,7 +120,7 @@ Postgres is the source of truth. The MVP runs one API instance, but nothing assu
   and checks the pid is alive. It **never** reads `*.key` or `~/.claude/ide/*.lock` files, because they
   contain local auth tokens. This format is undocumented, so discovery degrades gracefully when it changes.
 - **Credential storage**: the device secret is encrypted with Windows DPAPI (current user), through PowerShell with the secret passed on stdin (no native module), and stored in
-  `%APPDATA%\AgentDock`.
+  `%APPDATA%\PocketAgent`.
 
 ### M3 implementation notes (as built)
 
@@ -129,13 +129,13 @@ Claude Code ──hook──► hook-relay.js ──HTTP 127.0.0.1 + token──
  (VS Code / CLI)       (Node built-ins only, ~60 ms,                          │
                         prints nothing, exit 0)                               ▼
 <config>/sessions/<pid>.json ──scan every 10 s──► ClaudeDiscovery ──► SessionRegistry ──► Outbox ──► AgentLink ──► API
-Agent SDK query() ◄── `agentdock run` ──► ManagedSessions ──────────────────────┘      (replayed      (WSS)
+Agent SDK query() ◄── `pocket-agent run` ──► ManagedSessions ──────────────────────┘      (replayed      (WSS)
                                                                                        until acked)
 ```
 
 - **One registry, three sources.** Hooks are authoritative. Discovery adds sessions without hooks (status only)
   and enriches hook sessions with the `entrypoint` (for example `claude-vscode`). Managed sessions report from the SDK
-  stream, and the relay skips them via `AGENTDOCK_MANAGED_SESSION=1`, so nothing is counted twice. Managed session
+  stream, and the relay skips them via `POCKET_AGENT_MANAGED_SESSION=1`, so nothing is counted twice. Managed session
   IDs are chosen by the agent (`sessionId` option), so they're recognised before Claude Code starts.
 - **Capabilities are recorded per session** and never inferred in the UI. A session seen only through discovery gets
   `MONITOR_ONLY`. It's upgraded to the observed capabilities once its hooks arrive.
@@ -164,7 +164,7 @@ Agent SDK query() ◄── `agentdock run` ──► ManagedSessions ───�
 
 ### M5 implementation notes (as built)
 
-- **Two switches, both needed.** `agentdock approvals enable` on the PC (off by default, enforced there) allows remote
+- **Two switches, both needed.** `pocket-agent approvals enable` on the PC (off by default, enforced there) allows remote
   decisions at all. **Away mode**, set from the dashboard, applies only to sessions the user started. Without it Claude
   Code asks on the PC as usual. Managed sessions use remote approval whenever the PC allows it, because no person is at their prompt.
 - **Lifecycle.** The decision is stored once (compare-and-set), sent to the PC, and becomes `Approved`/`Denied` only on the PC's
@@ -184,7 +184,7 @@ Agent SDK query() ◄── `agentdock run` ──► ManagedSessions ───�
 
 1. A logged-in user clicks **Add device**. The API creates a pairing code: 8 characters from the
    Crockford base32 alphabet, valid for 10 minutes, single use, stored as a hash, and rate-limited.
-2. The user runs `agentdock pair <code>` on the PC. The agent calls `POST /devices/pair` with the code,
+2. The user runs `pocket-agent pair <code>` on the PC. The agent calls `POST /devices/pair` with the code,
    machine name, platform and version.
 3. The API creates the `Device` and returns `deviceId` plus a 256-bit `deviceSecret`, shown only once.
    Only `sha256(deviceSecret)` is stored, because the secret is high-entropy. The code is consumed.
@@ -215,7 +215,7 @@ Local Agent: check requestId is still waiting locally → answer the hook / reso
   install (360 s; Claude Code's default is 600 s), so the API marks requests `Expired` before Claude Code gives up. Managed sessions can use a longer TTL.
 - If the decision reaches the agent after the local request has already resolved (timeout, or answered
   locally), the agent replies `stale`, and the API records `Cancelled`, not `Approved`.
-- AgentDock never sends `updatedPermissions` (no "always allow" rules created remotely in the MVP) and
+- Pocket Agent never sends `updatedPermissions` (no "always allow" rules created remotely in the MVP) and
   never sends `updatedInput`. The phone approves exactly what Claude asked for.
 - Audit: every state change is an `AgentEvent` row with the actor `userId`, device and timestamps.
 
@@ -273,7 +273,7 @@ The plan's entities stay. Additions:
 ## 10. Repository layout
 
 ```text
-agentdock/
+pocket-agent/
 ├── apps/
 │   ├── web/            Next.js app
 │   ├── api/            Fastify API (+ prisma/ schema and migrations)
@@ -293,8 +293,8 @@ overlapping sources of truth.
 ## 11. Known limitations (stated in the product)
 
 - Observed sessions cannot receive an instruction while idle, and cannot be interrupted remotely.
-- Discovery of sessions without AgentDock hooks depends on an undocumented Claude Code file. It is best-effort.
+- Discovery of sessions without Pocket Agent hooks depends on an undocumented Claude Code file. It is best-effort.
 - Approvals for observed sessions are bounded by the hook timeout. Requests that expire fall back to the local prompt.
 - Push notifications are best-effort. On iOS they require installing the PWA.
-- Remote Control (official, Anthropic-hosted) already exists for some of these needs. AgentDock's
+- Remote Control (official, Anthropic-hosted) already exists for some of these needs. Pocket Agent's
   advantages are approvals, multi-session overview and notifications on the user's own infrastructure.

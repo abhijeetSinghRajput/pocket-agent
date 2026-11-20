@@ -1,4 +1,4 @@
-import { ApiError, HealthResponse } from '@agentdock/protocol';
+import { ApiError, HealthResponse } from '@pocket-agent/protocol';
 import type { z } from 'zod';
 
 export class ApiClientError extends Error {
@@ -16,7 +16,7 @@ export const NOT_FOUND_MESSAGE = 'Not found';
 
 const FRIENDLY: Record<string, string> = {
   not_found: NOT_FOUND_MESSAGE,
-  unreachable: 'Cannot reach AgentDock. Check your connection and try again.',
+  unreachable: 'Cannot reach Pocket Agent. Check your connection and try again.',
   rate_limited: 'Too many attempts. Please wait a moment and try again.',
   internal_error: 'Something went wrong on our side. Please try again.',
 };
@@ -58,14 +58,23 @@ export async function apiRequest<S extends z.ZodType>(
   if (!schema) return body as z.infer<S>;
   const parsed = schema.safeParse(body);
   if (!parsed.success)
-    throw new ApiClientError(res.status, 'bad_response', 'Unexpected response from AgentDock');
+    throw new ApiClientError(res.status, 'bad_response', 'Unexpected response from Pocket Agent');
   return parsed.data;
 }
 
-/** Base URL of the AgentDock API. Configured per environment (NEXT_PUBLIC_API_URL). */
+/** Base URL of the Pocket Agent API. Configured per environment (NEXT_PUBLIC_API_URL). */
 export function apiBaseUrl(): string {
   const url = process.env.NEXT_PUBLIC_API_URL;
   if (!url) throw new Error('NEXT_PUBLIC_API_URL is not configured');
+  return url.replace(/\/+$/, '');
+}
+
+/**
+ * The API URL a PC should use (`pocket-agent pair --api …`). The Local Agent talks to the API host
+ * directly, never through the web app's /api proxy.
+ */
+export function agentApiUrl(): string {
+  const url = process.env.NEXT_PUBLIC_AGENT_API_URL || apiBaseUrl();
   return url.replace(/\/+$/, '');
 }
 
@@ -84,6 +93,6 @@ export async function fetchHealth(signal?: AbortSignal, base = apiBaseUrl()): Pr
     return { kind: parsed.data.status, health: parsed.data };
   } catch (err) {
     if (err instanceof DOMException && err.name === 'AbortError') throw err;
-    return { kind: 'unreachable', error: 'Cannot reach the AgentDock API' };
+    return { kind: 'unreachable', error: 'Cannot reach the Pocket Agent API' };
   }
 }

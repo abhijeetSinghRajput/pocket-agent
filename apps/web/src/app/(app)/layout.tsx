@@ -39,7 +39,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
     return (
       <div role="alert" className="grid min-h-dvh place-items-center px-4 text-center">
         <div>
-          <h1 className="text-lg font-semibold">Can’t reach AgentDock</h1>
+          <h1 className="text-lg font-semibold">Can’t reach Pocket Agent</h1>
           <p className="mt-2 max-w-sm text-sm text-muted-foreground">{state.message}</p>
           <Button variant="outline" className="mt-6" onClick={() => void refresh()}>
             Try again

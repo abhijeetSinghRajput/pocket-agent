@@ -1,4 +1,4 @@
-# AgentDock — Implementation Roadmap
+# Pocket Agent — Implementation Roadmap
 
 Each milestone ends with a working, tested increment. Before closing any milestone, run
 `pnpm typecheck && pnpm lint && pnpm test`. Its acceptance criteria must pass before the next milestone starts.
@@ -23,7 +23,7 @@ Proven on Claude Code 2.1.325 and Windows 11 (details in `poc/README.md`):
 - `infrastructure/docker/docker-compose.yml`: Postgres 17, Redis 7
 - `apps/api`: Fastify, env validation (Zod), Prisma schema + first migration, `/health` (db + redis), structured logging (pino)
 - `apps/web`: Next.js, Tailwind, shadcn/ui, light/dark themes, responsive shell (sidebar on desktop, bottom nav on mobile), empty/loading/error primitives, `/health` page showing the API status
-- `apps/local-agent`: CLI skeleton (`agentdock --version`, config dir)
+- `apps/local-agent`: CLI skeleton (`pocket-agent --version`, config dir)
 - Vitest in every package; Playwright set up with a mobile viewport project
 - Docs: README (dev setup), `.env.example` files, `.gitignore` that blocks secrets
 
@@ -34,7 +34,7 @@ Proven on Claude Code 2.1.325 and Windows 11 (details in `poc/README.md`):
 - API: register, login, logout, `me`; argon2id; AuthSession table; rate limits on auth and pairing
 - API: pairing codes, `POST /devices/pair`, device list, revoke, rotate
 - WS `/ws/agent`: device auth on upgrade, heartbeat, presence in Redis, online/offline transitions persisted
-- Local Agent: `agentdock pair <code>`, DPAPI-encrypted credentials, WSS link with backoff and heartbeat
+- Local Agent: `pocket-agent pair <code>`, DPAPI-encrypted credentials, WSS link with backoff and heartbeat
 - Web: login/register, Devices page (add device flow with code + instructions, status, last heartbeat, revoke), Settings → account
 - Tests: pairing-code expiry/single-use, revoked device rejected, cross-user isolation, invalid WS frames
 
@@ -42,11 +42,11 @@ Proven on Claude Code 2.1.325 and Windows 11 (details in `poc/README.md`):
 
 ## M3 — Local Agent: Claude Code integration + monitoring ✅ done (2026-11-20)
 
-- Hook relay + localhost ingest (token, Origin rejection), `agentdock hooks install|uninstall` (backup, merge, idempotent)
+- Hook relay + localhost ingest (token, Origin rejection), `pocket-agent hooks install|uninstall` (backup, merge, idempotent)
 - Event normalization (allow-list + truncation) → outbox → `agent.*` events with ack/dedupe
 - Session state machine (Starting/Running/WaitingForInput/WaitingForPermission/Completed/Failed/Stopped/Disconnected)
 - Best-effort discovery via `~/.claude/sessions` (never reading `*.key` or IDE lock files)
-- Managed sessions: `agentdock` service starts SDK sessions on command (`session.start {cwd, prompt}`)
+- Managed sessions: `pocket-agent` service starts SDK sessions on command (`session.start {cwd, prompt}`)
 - API: persist sessions/events; unique `(deviceId, externalSessionId)`; `/ws/client` fan-out
 - Web: Overview (real counts), Agents list, Agent details (timeline, current status, capabilities badge), Activity page
 - ✅ Verified the VS Code PermissionRequest behaviour live (see architecture: M5 notes). Away-mode gating confirmed as the design.
@@ -80,7 +80,7 @@ Proven on Claude Code 2.1.325 and Windows 11 (details in `poc/README.md`):
 
 **Accept:** push arrives on Android Chrome and on an installed iOS PWA; tapping opens the right approval or agent; preferences are respected.
 
-## M7 — Deployment (staging first)
+## M7 — Deployment (staging first) 🚧 in progress (Render + Vercel chosen; see `docs/deployment.md`)
 
 - Choose the API host; Dockerfile; managed Postgres and Redis; secrets; Vercel project; custom domains + TLS
 - Staging and production environments; migration-on-deploy; health checks; log retention

@@ -1,4 +1,4 @@
-import { LoginRequest, RegisterRequest } from '@agentdock/protocol';
+import { LoginRequest, RegisterRequest } from '@pocket-agent/protocol';
 import type { FastifyInstance } from 'fastify';
 import {
   clearSessionCookie,

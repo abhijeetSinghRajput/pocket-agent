@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { PROTOCOL_VERSION } from '@agentdock/protocol';
+import { PROTOCOL_VERSION } from '@pocket-agent/protocol';
 import { Command } from 'commander';
 import { existsSync } from 'node:fs';
 import { stat } from 'node:fs/promises';
@@ -43,27 +43,27 @@ function fail(msg: string, code = 1): never {
 
 async function requirePaired(home: string) {
   const config = await loadConfig(home);
-  if (!config) fail('This PC is not paired. Run: agentdock pair <code> --api <url>');
+  if (!config) fail('This PC is not paired. Run: pocket-agent pair <code> --api <url>');
   if (config.revokedAt)
-    fail('This device was revoked. Pair it again with a new code: agentdock pair <code> --api <url>');
+    fail('This device was revoked. Pair it again with a new code: pocket-agent pair <code> --api <url>');
   const secret = await createSecretStore(home).load();
-  if (!secret) fail('Device credentials are missing. Pair again: agentdock pair <code> --api <url>');
+  if (!secret) fail('Device credentials are missing. Pair again: pocket-agent pair <code> --api <url>');
   return { config, secret };
 }
 
 export function buildCli(): Command {
-  const program = new Command('agentdock')
-    .description('AgentDock Local Agent: connect this PC to your AgentDock dashboard.')
+  const program = new Command('pocket-agent')
+    .description('Pocket Agent Local Agent: connect this PC to your Pocket Agent dashboard.')
     .version(version, '-v, --version');
 
   program
     .command('pair')
     .description('Pair this PC using the code shown in the dashboard (Devices → Add device)')
     .argument('<code>', 'pairing code, e.g. 7KQ2-M9XD')
-    .option('--api <url>', 'AgentDock API URL', process.env['AGENTDOCK_API_URL'])
+    .option('--api <url>', 'Pocket Agent API URL', process.env['POCKET_AGENT_API_URL'])
     .option('--name <name>', 'name shown in the dashboard', os.hostname())
     .action(async (code: string, opts: { api?: string; name: string }) => {
-      if (!opts.api) fail('Missing --api <url> (or set AGENTDOCK_API_URL)');
+      if (!opts.api) fail('Missing --api <url> (or set POCKET_AGENT_API_URL)');
       try {
         validateApiUrl(opts.api);
       } catch (e) {
@@ -84,7 +84,7 @@ export function buildCli(): Command {
           pairedAt: new Date().toISOString(),
         });
         await createSecretStore(home).save(res.deviceSecret);
-        console.log(`Paired as "${opts.name}". Start the agent with: agentdock start`);
+        console.log(`Paired as "${opts.name}". Start the agent with: pocket-agent start`);
       } catch (e) {
         fail(e instanceof ApiRequestError ? e.message : `Pairing failed: ${(e as Error).message}`);
       }
@@ -92,7 +92,7 @@ export function buildCli(): Command {
 
   program
     .command('start')
-    .description('Connect to AgentDock and report Claude Code sessions (foreground)')
+    .description('Connect to Pocket Agent and report Claude Code sessions (foreground)')
     .action(async () => {
       const home = agentHome();
       const { config, secret } = await requirePaired(home);
@@ -134,12 +134,12 @@ export function buildCli(): Command {
         if (reason === 'unauthorized') {
           log(
             'error',
-            "The server rejected this device's credentials. Pair again: agentdock pair <code> --api <url>",
+            "The server rejected this device's credentials. Pair again: pocket-agent pair <code> --api <url>",
           );
           process.exit(4);
         }
         if (reason === 'replaced') {
-          log('error', 'Another AgentDock agent process connected as this device; this one is stopping.');
+          log('error', 'Another Pocket Agent agent process connected as this device; this one is stopping.');
           process.exit(5);
         }
         process.exit(0);
@@ -153,13 +153,13 @@ export function buildCli(): Command {
       };
       process.on('SIGINT', shutdown);
       process.on('SIGTERM', shutdown);
-      log('info', `AgentDock Local Agent ${version} starting`);
+      log('info', `Pocket Agent Local Agent ${version} starting`);
       await service.start();
       if (!service.hooksAreInstalled) {
         log(
           'warn',
           'Claude Code hooks are not installed: sessions you start yourself show coarse status only. ' +
-            'Run: agentdock hooks install',
+            'Run: pocket-agent hooks install',
         );
       }
     });
@@ -182,10 +182,10 @@ export function buildCli(): Command {
         deviceName: config?.deviceName ?? null,
       };
       if (opts.json) return console.log(JSON.stringify(status));
-      console.log(`AgentDock Local Agent ${status.version} (protocol v${status.protocolVersion})`);
+      console.log(`Pocket Agent Local Agent ${status.version} (protocol v${status.protocolVersion})`);
       console.log(`State directory: ${status.home}`);
       if (status.revoked) console.log('Paired: no (this device was revoked; pair again)');
-      else if (!status.paired) console.log('Paired: no (run: agentdock pair <code> --api <url>)');
+      else if (!status.paired) console.log('Paired: no (run: pocket-agent pair <code> --api <url>)');
       else console.log(`Paired: yes, as "${status.deviceName}" with ${status.apiUrl}`);
     });
 
@@ -265,7 +265,7 @@ export function buildCli(): Command {
 
   projects.command('list').action(async () => {
     const { projects: list } = await loadPolicy(agentHome());
-    if (!list.length) return console.log('No projects. Add one with: agentdock projects add <folder>');
+    if (!list.length) return console.log('No projects. Add one with: pocket-agent projects add <folder>');
     for (const p of list) console.log(`${p.name.padEnd(24)} ${p.path}`);
   });
 
@@ -277,7 +277,7 @@ export function buildCli(): Command {
     await savePolicy(home, { ...(await loadPolicy(home)), observedInstructions: on });
     console.log(
       on
-        ? 'Enabled. Sessions with AgentDock hooks can receive instructions from the dashboard; each one is delivered when Claude finishes its current turn. Claude Code still asks you for every permission.'
+        ? 'Enabled. Sessions with Pocket Agent hooks can receive instructions from the dashboard; each one is delivered when Claude finishes its current turn. Claude Code still asks you for every permission.'
         : 'Disabled. Only managed sessions can receive instructions.',
     );
     await reloadAgent();
@@ -310,7 +310,7 @@ export function buildCli(): Command {
       if (st.installed && (st.permissionTimeoutS ?? 0) < PERMISSION_HOOK_TIMEOUT_S) {
         console.log('');
         console.log(
-          'Your installed hooks are from an older version. Update them with: agentdock hooks install',
+          'Your installed hooks are from an older version. Update them with: pocket-agent hooks install',
         );
       }
     } else {
@@ -333,7 +333,7 @@ export function buildCli(): Command {
 
   hooks
     .command('install')
-    .description('Add AgentDock observe-only hooks to Claude Code settings (backs the file up first)')
+    .description('Add Pocket Agent observe-only hooks to Claude Code settings (backs the file up first)')
     .option('--settings <file>', settingsHelp)
     .action(async (opts: { settings?: string }) => {
       const relay = path.join(path.dirname(fileURLToPath(import.meta.url)), 'hook-relay.js');
@@ -343,7 +343,7 @@ export function buildCli(): Command {
           opts.settings ?? defaultSettingsPath(),
           relayCommand(process.execPath, relay, agentHome()),
         );
-        console.log(`Installed AgentDock hooks in ${r.settingsPath}`);
+        console.log(`Installed Pocket Agent hooks in ${r.settingsPath}`);
         if (r.backupPath) console.log(`Backup of the previous file: ${r.backupPath}`);
         console.log('The hooks only report activity; they never answer permission prompts.');
         console.log('Sessions that are already running pick this up after a restart.');
@@ -354,13 +354,15 @@ export function buildCli(): Command {
 
   hooks
     .command('uninstall')
-    .description('Remove AgentDock hooks (other hooks are left untouched)')
+    .description('Remove Pocket Agent hooks (other hooks are left untouched)')
     .option('--settings <file>', settingsHelp)
     .action(async (opts: { settings?: string }) => {
       try {
         const r = await uninstallHooks(opts.settings ?? defaultSettingsPath());
         console.log(
-          r.removed ? `Removed ${r.removed} AgentDock hook entries.` : 'No AgentDock hooks were installed.',
+          r.removed
+            ? `Removed ${r.removed} Pocket Agent hook entries.`
+            : 'No Pocket Agent hooks were installed.',
         );
       } catch (e) {
         fail((e as Error).message);
@@ -369,7 +371,7 @@ export function buildCli(): Command {
 
   hooks
     .command('status')
-    .description('Show whether AgentDock hooks are installed')
+    .description('Show whether Pocket Agent hooks are installed')
     .option('--settings <file>', settingsHelp)
     .action(async (opts: { settings?: string }) => {
       const file = opts.settings ?? defaultSettingsPath();
@@ -425,7 +427,7 @@ export function buildCli(): Command {
   program
     .command('stop-session')
     .description('Stop a managed session')
-    .argument('<id>', 'session id from `agentdock sessions`')
+    .argument('<id>', 'session id from `pocket-agent sessions`')
     .action(async (id: string) => {
       try {
         const r = await callLocalAgent(agentHome(), 'POST', `/sessions/${encodeURIComponent(id)}/stop`);

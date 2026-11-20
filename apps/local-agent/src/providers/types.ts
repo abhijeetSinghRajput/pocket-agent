@@ -1,4 +1,4 @@
-import type { AgentStatus, ProviderId, SessionCapabilities, SessionMode } from '@agentdock/protocol';
+import type { AgentStatus, ProviderId, SessionCapabilities, SessionMode } from '@pocket-agent/protocol';
 
 /**
  * Contract every coding-agent provider implements (architecture: Approved constraints #1).

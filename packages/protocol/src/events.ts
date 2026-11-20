@@ -67,7 +67,7 @@ export const AgentPermissionRequested = defineEvent(
     requestId: id,
     expiresAt: z.iso.datetime({ offset: true }).optional(),
     /**
-     * True when the PC is holding this request for a decision from AgentDock (PC opt-in, and Away
+     * True when the PC is holding this request for a decision from Pocket Agent (PC opt-in, and Away
      * mode for sessions the user started). False/absent: informational only — it is answered on the PC.
      */
     awaitingRemote: z.boolean().optional(),
@@ -78,7 +78,7 @@ export const AgentPermissionResolved = defineEvent(
   z.object({
     requestId: id,
     /**
-     * remote = decided in AgentDock · local = answered on the PC · auto_denied = denied because no
+     * remote = decided in Pocket Agent · local = answered on the PC · auto_denied = denied because no
      * approval channel was available (never auto-allowed) · timeout / cancelled.
      */
     outcome: z.enum(['remote', 'local', 'auto_denied', 'timeout', 'cancelled']),
@@ -206,7 +206,7 @@ export const ConfigUpdate = defineEvent(
   'config.update',
   /**
    * Away mode: the user is away from this PC, so permission requests of sessions they started
-   * themselves wait for a decision from AgentDock (only if the PC allows remote approval).
+   * themselves wait for a decision from Pocket Agent (only if the PC allows remote approval).
    */
   z.object({ awayMode: z.boolean() }),
 );

@@ -1,4 +1,4 @@
-import { APPROVAL_WAIT_MS, CLAUDE_CODE_CAPABILITIES, type SessionCapabilities } from '@agentdock/protocol';
+import { APPROVAL_WAIT_MS, CLAUDE_CODE_CAPABILITIES, type SessionCapabilities } from '@pocket-agent/protocol';
 import { createHash } from 'node:crypto';
 import { truncate, type SessionRegistry } from '../../sessions/registry.js';
 import type { ApprovalBroker } from '../../approvals.js';
@@ -45,9 +45,9 @@ const s = (v: unknown) => (typeof v === 'string' ? v : undefined);
 /**
  * Translates Claude Code hook payloads (see test/fixtures) into session events.
  * It answers only two hooks, and only with the PC owner's consent:
- * - Stop, to deliver an instruction (`agentdock instructions enable`);
- * - PermissionRequest, with a decision made in AgentDock — only when remote approval is enabled on
- *   the PC (`agentdock approvals enable`) AND the user is in Away mode. Otherwise Claude Code's
+ * - Stop, to deliver an instruction (`pocket-agent instructions enable`);
+ * - PermissionRequest, with a decision made in Pocket Agent — only when remote approval is enabled on
+ *   the PC (`pocket-agent approvals enable`) AND the user is in Away mode. Otherwise Claude Code's
  *   own permission prompt is untouched. If no decision arrives in time, it answers nothing and
  *   Claude Code falls back to asking on the PC.
  */
@@ -65,7 +65,7 @@ export class ClaudeHookHandler {
       instructionsAllowed?: () => boolean;
       approvals?: ApprovalBroker;
       remoteApprovalAllowed?: () => boolean;
-      /** Remote approval allowed AND the user is away: hold permission requests for AgentDock. */
+      /** Remote approval allowed AND the user is away: hold permission requests for Pocket Agent. */
       holdForRemote?: () => boolean;
       approvalWaitMs?: number;
       now?: () => number;
@@ -252,7 +252,7 @@ export class ClaudeHookHandler {
     }
   }
 
-  /** Holds a PermissionRequest hook until AgentDock decides, it times out, or the PC answers. */
+  /** Holds a PermissionRequest hook until Pocket Agent decides, it times out, or the PC answers. */
   private async awaitRemote(
     sessionId: string,
     requestId: string,

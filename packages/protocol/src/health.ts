@@ -10,7 +10,7 @@ export type DependencyHealth = z.infer<typeof DependencyHealth>;
 /** Response body of `GET /health` on the API. */
 export const HealthResponse = z.object({
   status: z.enum(['ok', 'degraded']),
-  service: z.literal('agentdock-api'),
+  service: z.literal('pocket-agent-api'),
   version: z.string(),
   uptimeSeconds: z.number().nonnegative(),
   checks: z.object({ database: DependencyHealth, redis: DependencyHealth }),

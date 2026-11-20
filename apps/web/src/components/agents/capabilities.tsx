@@ -1,4 +1,4 @@
-import type { AgentSessionDto } from '@agentdock/protocol';
+import type { AgentSessionDto } from '@pocket-agent/protocol';
 import { Check, Clock, X } from 'lucide-react';
 import { hooksAreConnected } from '@/components/agents/session-badges';
 import { cn } from '@/lib/utils';
@@ -8,7 +8,7 @@ type Row = { label: string; state: 'yes' | 'soon' | 'no'; detail: string };
 /**
  * What this session can and cannot do, stated plainly. Never claims a capability the session
  * doesn't have (capabilities are reported by the PC); features this session supports but
- * AgentDock hasn't shipped yet say which milestone brings them.
+ * Pocket Agent hasn't shipped yet say which milestone brings them.
  */
 export function capabilityRows(s: AgentSessionDto): Row[] {
   const c = s.capabilities;
@@ -16,8 +16,8 @@ export function capabilityRows(s: AgentSessionDto): Row[] {
   const hooksConnected = !managed && hooksAreConnected(s);
   const hooksWhy =
     s.metadata?.['hooks'] === 'not-connected'
-      ? 'This session started before AgentDock hooks were installed. Restart it on the PC to connect it.'
-      : 'AgentDock hooks are not installed on this PC. Run `agentdock hooks install`, then restart the session.';
+      ? 'This session started before Pocket Agent hooks were installed. Restart it on the PC to connect it.'
+      : 'Pocket Agent hooks are not installed on this PC. Run `pocket-agent hooks install`, then restart the session.';
 
   const instruct: Row = managed
     ? {
@@ -35,7 +35,7 @@ export function capabilityRows(s: AgentSessionDto): Row[] {
         ? {
             label: 'Send instructions',
             state: 'no',
-            detail: 'Turned off on this PC. To allow it, run `agentdock instructions enable` on the PC.',
+            detail: 'Turned off on this PC. To allow it, run `pocket-agent instructions enable` on the PC.',
           }
         : { label: 'Send instructions', state: 'no', detail: hooksWhy };
 
@@ -64,7 +64,7 @@ export function capabilityRows(s: AgentSessionDto): Row[] {
           ? 'Requests wait for your decision here. Not decided within 10 minutes: denied.'
           : 'Only while Away mode is on for this PC (Devices). Otherwise, or if not decided within 5 minutes, Claude Code asks on the PC.'
         : managed || hooksConnected
-          ? 'Turned off on this PC; actions that need approval are answered there (managed: denied). To allow it, run `agentdock approvals enable` on the PC.'
+          ? 'Turned off on this PC; actions that need approval are answered there (managed: denied). To allow it, run `pocket-agent approvals enable` on the PC.'
           : hooksWhy,
     },
   ];

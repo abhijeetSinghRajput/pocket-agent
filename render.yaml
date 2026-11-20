@@ -1,0 +1,65 @@
+# Render Blueprint: AgentDock API + Postgres + Redis (Key Value).
+# Create it in the Render dashboard: New → Blueprint → pick this repository.
+# Secrets are never in this file: values marked `sync: false` are entered in the dashboard, and the
+# Firebase key is uploaded as a Secret File named fcm.json (see docs/deployment.md).
+
+services:
+  - type: web
+    name: agentdock-api
+    runtime: node
+    # The API must stay running: PCs hold a WebSocket to it. Free instances sleep, so use a paid plan.
+    plan: starter
+    region: singapore
+    buildCommand: >-
+      corepack enable &&
+      pnpm install --frozen-lockfile --prod=false &&
+      pnpm build:packages &&
+      pnpm --filter @agentdock/api build
+    preDeployCommand: pnpm --filter @agentdock/api db:deploy
+    startCommand: node apps/api/dist/server.js
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: 24.19.0
+      - key: NODE_ENV
+        value: production
+      - key: HOST
+        value: 0.0.0.0
+      - key: LOG_LEVEL
+        value: info
+      - key: DATABASE_URL
+        fromDatabase:
+          name: agentdock-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: agentdock-redis
+          property: connectionString
+      # The dashboard's origin, e.g. https://agentdock.vercel.app (comma-separate several).
+      - key: WEB_ORIGINS
+        sync: false
+      # Set to false after creating your own account, so nobody else can sign up.
+      - key: REGISTRATION_ENABLED
+        value: 'true'
+      # Upload the service-account JSON as Secret File "fcm.json"; Render mounts it here.
+      - key: FCM_SERVICE_ACCOUNT_FILE
+        value: /etc/secrets/fcm.json
+
+  - type: keyvalue
+    name: agentdock-redis
+    plan: free
+    region: singapore
+    # Only reachable from services in this Render account.
+    ipAllowList: []
+    maxmemoryPolicy: noeviction
+
+databases:
+  - name: agentdock-db
+    plan: basic-256mb
+    region: singapore
+    databaseName: agentdock
+    postgresMajorVersion: '17'
+    # Only reachable from services in this Render account.
+    ipAllowList: []

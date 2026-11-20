@@ -12,7 +12,7 @@ describe('console loss', () => {
   it('keeps running after its stdout/stderr pipes are closed', async () => {
     // `status --json` writes once; we close the pipe first, so the write hits a dead pipe.
     const child = spawn(process.execPath, [TSX, CLI, 'status', '--json'], {
-      env: { ...process.env, AGENTDOCK_HOME: mkdtempSync(path.join(os.tmpdir(), 'agentdock-epipe-')) },
+      env: { ...process.env, POCKET_AGENT_HOME: mkdtempSync(path.join(os.tmpdir(), 'pocket-agent-epipe-')) },
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     child.stdout.destroy();

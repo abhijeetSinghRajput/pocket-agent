@@ -1,5 +1,5 @@
 {
-  "extends": "@agentdock/config/tsconfig.node.json",
+  "extends": "@pocket-agent/config/tsconfig.node.json",
   "compilerOptions": { "rootDir": "src", "outDir": "dist", "declaration": false },
   "include": ["src"]
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import { OverviewResponse } from '@agentdock/protocol';
+import { OverviewResponse } from '@pocket-agent/protocol';
 import { Check } from 'lucide-react';
 import Link from 'next/link';
 import { useCallback } from 'react';

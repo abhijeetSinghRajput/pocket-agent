@@ -5,7 +5,7 @@ import {
   CommandResponse,
   type AgentSessionDto,
   type CommandDto,
-} from '@agentdock/protocol';
+} from '@pocket-agent/protocol';
 import { CircleStop, Hand, SendHorizontal } from 'lucide-react';
 import { useCallback, useRef, useState, type KeyboardEvent } from 'react';
 import { Badge } from '@/components/ui/badge';
@@ -237,7 +237,7 @@ export function RemoteControl({ session, onChange }: { session: AgentSessionDto;
       {commands.length > 0 && (
         <div>
           <h3 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-            Sent from AgentDock
+            Sent from Pocket Agent
           </h3>
           <ul className="divide-y" aria-label="Sent commands">
             {commands.slice(0, 10).map((c) => (

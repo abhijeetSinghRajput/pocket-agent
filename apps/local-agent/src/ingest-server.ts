@@ -28,7 +28,7 @@ export class HttpError extends Error {
 }
 
 /**
- * Local endpoint for the hook relay and the `agentdock` CLI. Never reachable from the network or
+ * Local endpoint for the hook relay and the `pocket-agent` CLI. Never reachable from the network or
  * from web pages:
  * - binds 127.0.0.1 only, random port
  * - requires a per-run random token (stored in the user-only agent state dir)
@@ -79,7 +79,7 @@ export class IngestServer {
     if (req.headers.origin || req.headers['sec-fetch-site']) return false;
     const host = req.headers.host ?? '';
     if (host !== `127.0.0.1:${this.port}` && host !== `localhost:${this.port}`) return false;
-    const presented = Buffer.from(String(req.headers['x-agentdock-token'] ?? ''));
+    const presented = Buffer.from(String(req.headers['x-pocket-agent-token'] ?? ''));
     const expected = Buffer.from(this.token);
     return presented.length === expected.length && timingSafeEqual(presented, expected);
   }

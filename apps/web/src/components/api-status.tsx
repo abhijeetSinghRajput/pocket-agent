@@ -71,7 +71,7 @@ export function ApiStatus() {
         <div className="min-w-0">
           <CardTitle>Backend</CardTitle>
           <CardDescription className="mt-1.5">
-            Live status of the AgentDock API and its dependencies.
+            Live status of the Pocket Agent API and its dependencies.
           </CardDescription>
         </div>
         {badge}

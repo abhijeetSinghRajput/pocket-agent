@@ -1,4 +1,4 @@
-import type { AgentSessionDto, AgentStatus } from '@agentdock/protocol';
+import type { AgentSessionDto, AgentStatus } from '@pocket-agent/protocol';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 
@@ -35,7 +35,7 @@ export function SessionStatusBadge({ status }: { status: AgentStatus }) {
 }
 
 /**
- * Whether an observed session reports through AgentDock hooks. The PC records this in metadata;
+ * Whether an observed session reports through Pocket Agent hooks. The PC records this in metadata;
  * capabilities can't be used for it because instructions/approvals are separate PC opt-ins.
  */
 export function hooksAreConnected(s: Pick<AgentSessionDto, 'metadata' | 'capabilities'>): boolean {
@@ -52,7 +52,7 @@ export function sessionKind(s: Pick<AgentSessionDto, 'mode' | 'metadata' | 'capa
   hint: string;
 } {
   if (s.mode === 'managed') {
-    return { label: 'Managed', hint: 'Started by AgentDock on your PC — full remote control.' };
+    return { label: 'Managed', hint: 'Started by Pocket Agent on your PC — full remote control.' };
   }
   const where =
     s.metadata?.['entrypoint'] === 'claude-vscode'
@@ -63,10 +63,10 @@ export function sessionKind(s: Pick<AgentSessionDto, 'mode' | 'metadata' | 'capa
   if (!hooksAreConnected(s)) {
     return {
       label: `${where} · status only`,
-      hint: 'Started by you. AgentDock hooks are not installed, so only the coarse status is visible.',
+      hint: 'Started by you. Pocket Agent hooks are not installed, so only the coarse status is visible.',
     };
   }
-  return { label: where, hint: 'Started by you. AgentDock observes it through Claude Code hooks.' };
+  return { label: where, hint: 'Started by you. Pocket Agent observes it through Claude Code hooks.' };
 }
 
 export function SessionKindBadge({

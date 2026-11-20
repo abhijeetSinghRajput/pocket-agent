@@ -1,6 +1,6 @@
 'use client';
 
-import { NotificationPage, type NotificationDto } from '@agentdock/protocol';
+import { NotificationPage, type NotificationDto } from '@pocket-agent/protocol';
 import { Bell, BellOff } from 'lucide-react';
 import Link from 'next/link';
 import { useState } from 'react';
@@ -101,7 +101,7 @@ export function NotificationsView() {
     <>
       <PageHeader
         title="Notifications"
-        description="Everything AgentDock told you about. Push is only a hint; this history is the record."
+        description="Everything Pocket Agent told you about. Push is only a hint; this history is the record."
         actions={
           first && first.unread > 0 ? (
             <Button

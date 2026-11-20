@@ -1,4 +1,4 @@
-import { CommandResponse, CommandListResponse, createEvent } from '@agentdock/protocol';
+import { CommandResponse, CommandListResponse, createEvent } from '@pocket-agent/protocol';
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { expireCommands } from '../src/commands/service.js';
@@ -145,7 +145,7 @@ describe('instructions', () => {
     const s = await setup(OBSERVED_OFF, 'observed');
     const res = await instruct(s, 'hello');
     expect(res.statusCode).toBe(409);
-    expect(res.json().message).toContain('agentdock instructions enable');
+    expect(res.json().message).toContain('pocket-agent instructions enable');
     s.agent.ws.close();
   });
 

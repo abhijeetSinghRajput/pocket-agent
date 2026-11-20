@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Local broker (PoC stand-in for the AgentDock Local Agent).
+// Local broker (PoC stand-in for the Pocket Agent Local Agent).
 // Listens on 127.0.0.1 only. Receives hook events from relay.mjs, holds
 // PermissionRequest hooks open until a decision arrives (simulating the
 // phone), and can inject a queued instruction via the Stop hook.
@@ -16,7 +16,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 
-const PORT = Number(process.env.AGENTDOCK_BROKER_PORT ?? 47821);
+const PORT = Number(process.env.POCKET_AGENT_BROKER_PORT ?? 47821);
 const APPROVAL_TTL_MS = Number(process.env.APPROVAL_TTL_MS ?? 100_000);
 const STOP_WAIT_MS = Number(process.env.STOP_WAIT_MS ?? 0);
 const LOG = process.env.BROKER_LOG ?? path.join(import.meta.dirname, 'events.jsonl');
@@ -115,7 +115,7 @@ async function handleHook(h) {
         hookEventName: 'PermissionRequest',
         decision: decision.behavior === 'allow'
           ? { behavior: 'allow' }
-          : { behavior: 'deny', message: decision.message ?? 'Denied remotely via AgentDock' },
+          : { behavior: 'deny', message: decision.message ?? 'Denied remotely via Pocket Agent' },
       },
     };
   }
@@ -134,7 +134,7 @@ async function handleHook(h) {
       const text = q.shift();
       s.status = 'Running';
       log({ kind: 'instruction.delivered', session_id: sid, detail: text });
-      return { decision: 'block', reason: `New instruction from the user (via AgentDock): ${text}` };
+      return { decision: 'block', reason: `New instruction from the user (via Pocket Agent): ${text}` };
     }
   }
   return undefined;

@@ -1,4 +1,4 @@
-// Points integration tests at a dedicated database (…/agentdock_test) and applies migrations.
+// Points integration tests at a dedicated database (…/pocket_agent_test) and applies migrations.
 import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 
@@ -7,7 +7,7 @@ export function testDatabaseUrl(): string {
   const base = process.env['DATABASE_URL'];
   if (!base) throw new Error('DATABASE_URL is required for integration tests');
   const url = new URL(base);
-  url.pathname = '/agentdock_test';
+  url.pathname = '/pocket_agent_test';
   return url.toString();
 }
 

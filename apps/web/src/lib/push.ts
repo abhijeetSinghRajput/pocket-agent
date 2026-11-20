@@ -58,7 +58,7 @@ export function browserPushSupport(): PushSupport {
   });
 }
 
-const TOKEN_KEY = 'agentdock.pushToken';
+const TOKEN_KEY = 'pocket-agent.pushToken';
 
 function storedToken(): string | null {
   try {

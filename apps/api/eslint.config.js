@@ -1,1 +1,1 @@
-export { default } from '@agentdock/config/eslint';
+export { default } from '@pocket-agent/config/eslint';

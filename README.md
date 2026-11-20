@@ -1,8 +1,8 @@
-# AgentDock
+# Pocket Agent
 
 > Your agents. Your machines. Your control.
 
-AgentDock is a remote command center for AI coding agents (starting with Claude Code) that run on your
+Pocket Agent is a remote command center for AI coding agents (starting with Claude Code) that run on your
 own computer. From a phone or desktop browser you can watch sessions, approve permission requests and send instructions.
 
 - Architecture: [docs/architecture.md](docs/architecture.md)
@@ -39,24 +39,24 @@ pnpm dev:web               # http://localhost:3000
 ### Pair this PC (local development)
 
 ```bash
-pnpm --filter @agentdock/local-agent build
+pnpm --filter @pocket-agent/local-agent build
 # In the dashboard: create an account → Devices → Add device → copy the code, then:
-pnpm agentdock pair ABCD-EFGH --api http://localhost:4000
-pnpm agentdock start        # stays in the foreground; Ctrl+C to stop
-pnpm agentdock status       # shows pairing state; other commands: rotate, unpair
+pnpm pocket-agent pair ABCD-EFGH --api http://localhost:4000
+pnpm pocket-agent start        # stays in the foreground; Ctrl+C to stop
+pnpm pocket-agent status       # shows pairing state; other commands: rotate, unpair
 ```
 
-Credentials are stored in `%APPDATA%\AgentDock` and the device secret is encrypted with Windows DPAPI.
-Set `AGENTDOCK_HOME` to use a different folder.
+Credentials are stored in `%APPDATA%\PocketAgent` and the device secret is encrypted with Windows DPAPI.
+Set `POCKET_AGENT_HOME` to use a different folder.
 
 ### Connect Claude Code
 
 ```bash
-pnpm agentdock hooks install   # once: lets sessions you start in VS Code / a terminal report activity
+pnpm pocket-agent hooks install   # once: lets sessions you start in VS Code / a terminal report activity
                                # (backs up ~/.claude/settings.json; observe-only; `hooks uninstall` reverts)
-pnpm agentdock start           # sessions appear under Agents in the dashboard
-pnpm agentdock run "Fix the failing test" --cwd C:\path\to\project   # start a managed session
-pnpm agentdock sessions        # what the running agent sees; `stop-session <id>` stops a managed one
+pnpm pocket-agent start           # sessions appear under Agents in the dashboard
+pnpm pocket-agent run "Fix the failing test" --cwd C:\path\to\project   # start a managed session
+pnpm pocket-agent sessions        # what the running agent sees; `stop-session <id>` stops a managed one
 ```
 
 Without hooks, sessions you start yourself still appear, but with status only.
@@ -64,17 +64,17 @@ Without hooks, sessions you start yourself still appear, but with status only.
 ### Control from your phone (you decide on the PC what is allowed)
 
 ```bash
-pnpm agentdock projects add C:\path\to\project   # folders where the dashboard may start managed sessions
-pnpm agentdock projects list                     # (and `projects remove <folder>`)
-pnpm agentdock instructions enable               # optional: allow instructions to sessions YOU started
+pnpm pocket-agent projects add C:\path\to\project   # folders where the dashboard may start managed sessions
+pnpm pocket-agent projects list                     # (and `projects remove <folder>`)
+pnpm pocket-agent instructions enable               # optional: allow instructions to sessions YOU started
                                                  # (delivered when Claude finishes its current turn)
 ```
 
 To answer Claude Code's permission requests from your phone:
 
 ```bash
-pnpm agentdock approvals enable    # off by default; `approvals disable` turns it off again
-pnpm agentdock hooks install       # re-run after upgrading, so the permission hook gets its longer timeout
+pnpm pocket-agent approvals enable    # off by default; `approvals disable` turns it off again
+pnpm pocket-agent hooks install       # re-run after upgrading, so the permission hook gets its longer timeout
 ```
 
 Managed sessions then ask in the dashboard (**Approvals**). Sessions you start yourself ask there only while **Away mode** is on
@@ -99,7 +99,7 @@ Quality gate (run before closing any milestone):
 ```bash
 pnpm check                 # prettier --check, typecheck, lint (zero warnings), unit tests
 pnpm test:integration      # API against real Postgres + Redis (needs infra:up + db:migrate)
-pnpm test:e2e              # Playwright: desktop, mobile and 360px viewports (first: pnpm --filter @agentdock/web exec playwright install chromium)
+pnpm test:e2e              # Playwright: desktop, mobile and 360px viewports (first: pnpm --filter @pocket-agent/web exec playwright install chromium)
 ```
 
 ### Windows notes
@@ -108,6 +108,10 @@ pnpm test:e2e              # Playwright: desktop, mobile and 360px viewports (fi
   Application Control** turned on, Windows blocks Next's unsigned native Turbopack binary. The webpack
   build is officially supported and works there.
 - If `corepack enable` fails with `EPERM`, run `corepack enable --install-directory "%APPDATA%\npm" pnpm`.
+
+## Deployment
+
+Render (API, Postgres, Redis) via [`render.yaml`](render.yaml) plus Vercel (web). See [docs/deployment.md](docs/deployment.md).
 
 ## Configuration
 

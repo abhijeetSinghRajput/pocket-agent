@@ -4,7 +4,7 @@ import {
   PairDeviceRequest,
   type DeviceDto,
   type PairingCodeResponse,
-} from '@agentdock/protocol';
+} from '@pocket-agent/protocol';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { authenticateDevice } from '../auth/device-auth.js';

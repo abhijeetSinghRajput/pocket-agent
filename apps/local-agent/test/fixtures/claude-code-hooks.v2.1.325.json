@@ -15,7 +15,7 @@
     "prompt_id": "89205924-a289-41aa-87ab-e1701f1d1990",
     "permission_mode": "default",
     "hook_event_name": "UserPromptSubmit",
-    "prompt": "Run this exact bash command and report its output: echo agentdock-poc > poc.txt && cat poc.txt"
+    "prompt": "Run this exact bash command and report its output: echo pocket-agent-poc > poc.txt && cat poc.txt"
   },
   {
     "session_id": "c2effe64-c5fa-40c2-a54d-2a596b804145",
@@ -30,7 +30,7 @@
     "hook_event_name": "PreToolUse",
     "tool_name": "Bash",
     "tool_input": {
-      "command": "echo agentdock-poc > poc.txt && cat poc.txt",
+      "command": "echo pocket-agent-poc > poc.txt && cat poc.txt",
       "description": "Write poc.txt and print its contents"
     },
     "tool_use_id": "toolu_01K17ATDhN9fFK36z2AinEBA"
@@ -48,7 +48,7 @@
     "hook_event_name": "PermissionRequest",
     "tool_name": "Bash",
     "tool_input": {
-      "command": "echo agentdock-poc > poc.txt && cat poc.txt",
+      "command": "echo pocket-agent-poc > poc.txt && cat poc.txt",
       "description": "Write poc.txt and print its contents"
     },
     "permission_suggestions": [
@@ -72,11 +72,11 @@
     "hook_event_name": "PostToolUse",
     "tool_name": "Bash",
     "tool_input": {
-      "command": "echo agentdock-poc > poc.txt && cat poc.txt",
+      "command": "echo pocket-agent-poc > poc.txt && cat poc.txt",
       "description": "Write poc.txt and print its contents"
     },
     "tool_response": {
-      "stdout": "agentdock-poc",
+      "stdout": "pocket-agent-poc",
       "stderr": "\nShell cwd was reset to C:\\work\\demo-project",
       "interrupted": false,
       "isImage": false,
@@ -97,7 +97,7 @@
     },
     "hook_event_name": "Stop",
     "stop_hook_active": false,
-    "last_assistant_message": "The command ran and printed:\n\n```\nagentdock-poc\n```\n\nIt wrote `agentdock-poc` to `poc.txt` in the working directory. The shell's working directory was reset to `C:\\work\\demo-project` after the command.",
+    "last_assistant_message": "The command ran and printed:\n\n```\npocket-agent-poc\n```\n\nIt wrote `pocket-agent-poc` to `poc.txt` in the working directory. The shell's working directory was reset to `C:\\work\\demo-project` after the command.",
     "background_tasks": [],
     "session_crons": []
   },

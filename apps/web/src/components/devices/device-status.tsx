@@ -1,4 +1,4 @@
-import type { DeviceStatus } from '@agentdock/protocol';
+import type { DeviceStatus } from '@pocket-agent/protocol';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 

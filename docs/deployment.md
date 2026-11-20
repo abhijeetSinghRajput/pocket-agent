@@ -67,7 +67,7 @@ Vercel's Hobby plan is enough for the web app. Check current prices on render.co
 On any PC with Node.js 24+ (no repository or pnpm needed):
 
 ```bash
-npm install -g pocketagent
+npm install -g @mrcodium/pocket-agent
 pocket-agent setup <CODE> --api https://pocket-agent-api.onrender.com
 ```
 

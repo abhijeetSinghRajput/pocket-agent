@@ -39,7 +39,7 @@ pnpm dev:web               # http://localhost:3000
 ### Install on a PC (users)
 
 ```bash
-npm install -g pocketagent
+npm install -g @mrcodium/pocket-agent
 pocket-agent setup <CODE> --api <API-URL>     # code and URL: dashboard → Devices → Add device
 ```
 

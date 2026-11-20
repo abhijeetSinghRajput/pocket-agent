@@ -23,6 +23,8 @@ export const EnvSchema = z.object({
     .pipe(z.array(z.url()).min(1)),
   /** Prefix for every Redis key, so environments/tests can share one Redis safely. */
   REDIS_KEY_PREFIX: z.string().default('agentdock:'),
+  /** Agent events older than this are deleted (audit logs are kept). */
+  EVENT_RETENTION_DAYS: z.coerce.number().int().min(1).max(3650).default(30),
   /** Absolute lifetime of a browser login session. */
   SESSION_TTL_DAYS: z.coerce.number().int().min(1).max(90).default(30),
   /** Defaults to true in production. Only set false for plain-http local development. */

@@ -1,32 +1,12 @@
 // Full stack: browser ↔ real API ↔ real Local Agent CLI (DPAPI credentials, outbound WebSocket).
 import { expect, test } from '@playwright/test';
-import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
-import { mkdtempSync } from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
+import { execFileSync } from 'node:child_process';
+import { agentEnv, CLI, startAgent } from './agent';
 import { API, registerViaApi } from './helpers';
-
-const CLI = path.resolve(import.meta.dirname, '../../local-agent/dist/cli.js');
 
 test.describe.configure({ mode: 'serial' });
 
-function agentEnv() {
-  return { ...process.env, AGENTDOCK_HOME: mkdtempSync(path.join(os.tmpdir(), 'agentdock-e2e-')) };
-}
-
-function startAgent(
-  env: NodeJS.ProcessEnv,
-): ChildProcess & { exited: Promise<number | null>; output: () => string } {
-  const child = spawn(process.execPath, [CLI, 'start'], { env, stdio: ['ignore', 'pipe', 'pipe'] });
-  let out = '';
-  child.stdout!.on('data', (d) => (out += d));
-  child.stderr!.on('data', (d) => (out += d));
-  const exited = new Promise<number | null>((r) => child.on('exit', (code) => r(code)));
-  return Object.assign(child, { exited, output: () => out });
-}
-
 test('pair a real Local Agent, watch it go online/offline, then revoke it', async ({ page }, info) => {
-  test.skip(info.project.name === 'mobile-narrow', 'covered by the desktop and mobile projects');
   test.setTimeout(120_000);
   await registerViaApi(page.request, `Pairing ${info.project.name}`);
   const deviceName = `E2E PC ${info.project.name}`;

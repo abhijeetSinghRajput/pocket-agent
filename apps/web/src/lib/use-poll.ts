@@ -8,18 +8,15 @@ export type PollState<T> =
   | { status: 'error'; data: null; error: string };
 
 /**
- * Fetches immediately, then every `intervalMs` while the tab is visible. Keeps the last good data
- * when a refresh fails (and reports the error alongside it), so a blip doesn't blank the page.
- * Live WebSocket updates for the browser replace polling in M3.
+ * Fetches immediately, then every `intervalMs` while the tab is visible (a fallback: live updates
+ * call `refresh()`). Keeps the last good data when a refresh fails and reports the error alongside
+ * it, so a blip doesn't blank the page. When `fetcher` changes (e.g. a filter), it goes back to
+ * loading and fetches right away — it never shows the previous query's data as the new one's.
  */
 export function usePoll<T>(fetcher: (signal: AbortSignal) => Promise<T>, intervalMs: number) {
   const [state, setState] = useState<PollState<T>>({ status: 'loading', data: null, error: null });
   const fetcherRef = useRef(fetcher);
   const inflight = useRef<AbortController | null>(null);
-
-  useEffect(() => {
-    fetcherRef.current = fetcher;
-  }, [fetcher]);
 
   const refresh = useCallback(async () => {
     inflight.current?.abort();
@@ -27,7 +24,7 @@ export function usePoll<T>(fetcher: (signal: AbortSignal) => Promise<T>, interva
     inflight.current = c;
     try {
       const data = await fetcherRef.current(c.signal);
-      setState({ status: 'ready', data, error: null });
+      if (!c.signal.aborted) setState({ status: 'ready', data, error: null });
     } catch (err) {
       if (c.signal.aborted) return;
       const message = (err as Error).message;
@@ -40,7 +37,12 @@ export function usePoll<T>(fetcher: (signal: AbortSignal) => Promise<T>, interva
   }, []);
 
   useEffect(() => {
-    const first = setTimeout(() => void refresh(), 0);
+    const changed = fetcherRef.current !== fetcher;
+    fetcherRef.current = fetcher;
+    const first = setTimeout(() => {
+      if (changed) setState({ status: 'loading', data: null, error: null });
+      void refresh();
+    }, 0);
     const id = setInterval(() => {
       if (document.visibilityState === 'visible') void refresh();
     }, intervalMs);
@@ -52,7 +54,7 @@ export function usePoll<T>(fetcher: (signal: AbortSignal) => Promise<T>, interva
       document.removeEventListener('visibilitychange', onVisible);
       inflight.current?.abort();
     };
-  }, [refresh, intervalMs]);
+  }, [fetcher, refresh, intervalMs]);
 
   return { state, refresh };
 }

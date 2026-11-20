@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/dialog';
 import { apiRequest } from '@/lib/api';
 import { formatDate, timeAgo } from '@/lib/format';
+import { useLiveRefresh } from '@/lib/live';
 import { usePoll } from '@/lib/use-poll';
 
 const PLATFORM = {
@@ -123,7 +124,11 @@ export function DevicesView() {
     (signal: AbortSignal) => apiRequest('/devices', DeviceListResponse, { signal }).then((r) => r.devices),
     [],
   );
-  const { state, refresh } = usePoll(fetcher, 10_000);
+  const { state, refresh } = usePoll(fetcher, 30_000);
+  useLiveRefresh(
+    () => void refresh(),
+    (e) => e.eventType === 'device.status.changed',
+  );
   const [adding, setAdding] = useState(false);
   const [revoking, setRevoking] = useState<DeviceDto | null>(null);
 

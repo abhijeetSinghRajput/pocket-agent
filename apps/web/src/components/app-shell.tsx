@@ -7,8 +7,34 @@ import { usePathname } from 'next/navigation';
 import { Dialog } from 'radix-ui';
 import { useState, type ReactNode } from 'react';
 import { ThemeToggle } from '@/components/theme';
+import { useLiveState } from '@/lib/live';
 import { isActive, NAV_ITEMS } from '@/lib/nav';
 import { cn } from '@/lib/utils';
+
+function LiveDot() {
+  const state = useLiveState();
+  const label =
+    state === 'live'
+      ? 'Live updates on'
+      : state === 'connecting'
+        ? 'Connecting…'
+        : 'Reconnecting… (data refreshes every 30s)';
+  return (
+    <span
+      role="status"
+      title={label}
+      data-testid="live-indicator"
+      data-state={state}
+      className="grid size-9 place-items-center"
+    >
+      <span
+        aria-hidden
+        className={cn('size-2 rounded-full', state === 'live' ? 'bg-success' : 'animate-pulse bg-warning')}
+      />
+      <span className="sr-only">{label}</span>
+    </span>
+  );
+}
 
 export function Logo() {
   return (
@@ -62,7 +88,10 @@ function Sidebar({ pathname, user, onSignOut }: { pathname: string; user: UserDt
     <aside className="sticky top-0 hidden h-dvh w-60 shrink-0 flex-col border-r bg-sidebar lg:flex">
       <div className="flex h-14 items-center justify-between px-4">
         <Logo />
-        <ThemeToggle />
+        <div className="flex items-center">
+          <LiveDot />
+          <ThemeToggle />
+        </div>
       </div>
       <nav aria-label="Main" className="flex flex-1 flex-col gap-0.5 px-3 py-2">
         {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
@@ -92,7 +121,10 @@ function MobileTopBar() {
   return (
     <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b bg-background/85 px-4 backdrop-blur-md lg:hidden">
       <Logo />
-      <ThemeToggle />
+      <div className="flex items-center">
+        <LiveDot />
+        <ThemeToggle />
+      </div>
     </header>
   );
 }

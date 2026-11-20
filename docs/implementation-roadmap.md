@@ -29,7 +29,7 @@ Proven on Claude Code 2.1.325 and Windows 11 (details in `poc/README.md`):
 
 **Accept:** all three apps start independently; the migration applies; `/health` is green; CI-style script passes; no secrets in the repo.
 
-## M2 — Authentication + device pairing ✅ done (2026-11-17, awaiting owner sign-off)
+## M2 — Authentication + device pairing ✅ done (2026-11-17)
 
 - API: register, login, logout, `me`; argon2id; AuthSession table; rate limits on auth and pairing
 - API: pairing codes, `POST /devices/pair`, device list, revoke, rotate
@@ -40,7 +40,7 @@ Proven on Claude Code 2.1.325 and Windows 11 (details in `poc/README.md`):
 
 **Accept:** pair the real Windows PC; it shows Online; stopping the agent → Offline within 45 s; a revoked device cannot reconnect.
 
-## M3 — Local Agent: Claude Code integration + monitoring
+## M3 — Local Agent: Claude Code integration + monitoring ✅ done (2026-11-20, awaiting owner sign-off)
 
 - Hook relay + localhost ingest (token, Origin rejection), `agentdock hooks install|uninstall` (backup, merge, idempotent)
 - Event normalization (allow-list + truncation) → outbox → `agent.*` events with ack/dedupe
@@ -49,7 +49,7 @@ Proven on Claude Code 2.1.325 and Windows 11 (details in `poc/README.md`):
 - Managed sessions: `agentdock` service starts SDK sessions on command (`session.start {cwd, prompt}`)
 - API: persist sessions/events; unique `(deviceId, externalSessionId)`; `/ws/client` fan-out
 - Web: Overview (real counts), Agents list, Agent details (timeline, current status, capabilities badge), Activity page
-- **Verify the VS Code PermissionRequest behaviour** and finalize the Away-mode design accordingly
+- **Still open:** verify the VS Code PermissionRequest behaviour while a hook waits. This needs hooks in the real ~/.claude/settings.json and an interactive session, so it was moved to the start of M5, where it decides the Away-mode design.
 
 **Accept:** a real VS Code session and a real managed session both appear with live status; tool events stream into the timeline; an agent reconnect creates no duplicate sessions or events.
 

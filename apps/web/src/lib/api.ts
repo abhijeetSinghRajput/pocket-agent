@@ -12,7 +12,10 @@ export class ApiClientError extends Error {
   }
 }
 
+export const NOT_FOUND_MESSAGE = 'Not found';
+
 const FRIENDLY: Record<string, string> = {
+  not_found: NOT_FOUND_MESSAGE,
   unreachable: 'Cannot reach AgentDock. Check your connection and try again.',
   rate_limited: 'Too many attempts. Please wait a moment and try again.',
   internal_error: 'Something went wrong on our side. Please try again.',

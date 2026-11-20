@@ -43,7 +43,12 @@ export const DeviceHeartbeat = defineEvent(
 );
 export const AgentSessionStarted = defineEvent(
   'agent.session.started',
-  SessionRef.extend({ capabilities: SessionCapabilities, status: AgentStatus }),
+  SessionRef.extend({
+    capabilities: SessionCapabilities,
+    status: AgentStatus,
+    /** Provider-specific, non-sensitive facts (e.g. entrypoint "claude-vscode", discovery source). */
+    metadata: z.record(z.string().max(50), z.string().max(500)).optional(),
+  }),
 );
 export const AgentSessionUpdated = defineEvent(
   'agent.session.updated',
@@ -58,17 +63,32 @@ export const AgentToolCompleted = defineEvent('agent.tool.completed', ToolCall.e
 export const AgentToolFailed = defineEvent('agent.tool.failed', ToolCall.extend({ error: text }));
 export const AgentPermissionRequested = defineEvent(
   'agent.permission.requested',
-  ToolCall.extend({ requestId: id, expiresAt: z.iso.datetime({ offset: true }) }),
+  ToolCall.extend({ requestId: id, expiresAt: z.iso.datetime({ offset: true }).optional() }),
 );
 export const AgentPermissionResolved = defineEvent(
   'agent.permission.resolved',
-  z.object({ requestId: id, outcome: z.enum(['remote', 'local', 'timeout', 'cancelled']) }),
+  z.object({
+    requestId: id,
+    /**
+     * remote = decided in AgentDock · local = answered on the PC · auto_denied = denied because no
+     * approval channel was available (never auto-allowed) · timeout / cancelled.
+     */
+    outcome: z.enum(['remote', 'local', 'auto_denied', 'timeout', 'cancelled']),
+  }),
 );
 export const AgentOutput = defineEvent(
   'agent.output',
   z.object({ role: z.enum(['assistant', 'user', 'system']), text }),
 );
 export const AgentError = defineEvent('agent.error', z.object({ message: text }));
+/**
+ * Sent after every (re)connect: the complete set of sessions the PC currently knows are live.
+ * The backend restores their status and ends any other open session of this device.
+ */
+export const AgentSessionsSnapshot = defineEvent(
+  'agent.sessions.snapshot',
+  z.object({ sessions: z.array(z.object({ externalSessionId: id, status: AgentStatus })).max(500) }),
+);
 export const CommandAck = defineEvent(
   'command.ack',
   z.object({ commandId: z.uuid(), status: CommandStatus, error: text.optional() }),
@@ -91,10 +111,25 @@ export const AgentToBackend = z.discriminatedUnion('eventType', [
   AgentPermissionResolved,
   AgentOutput,
   AgentError,
+  AgentSessionsSnapshot,
   CommandAck,
   ApprovalDecisionAck,
 ]);
 export type AgentToBackend = z.infer<typeof AgentToBackend>;
+
+/** Events that describe one session; their envelope must carry sessionId = externalSessionId. */
+export const SESSION_SCOPED_EVENTS = new Set<AgentToBackend['eventType']>([
+  'agent.session.started',
+  'agent.session.updated',
+  'agent.session.ended',
+  'agent.tool.started',
+  'agent.tool.completed',
+  'agent.tool.failed',
+  'agent.permission.requested',
+  'agent.permission.resolved',
+  'agent.output',
+  'agent.error',
+]);
 
 // ───────────────────────────── Backend → Local Agent ─────────────────────────────
 

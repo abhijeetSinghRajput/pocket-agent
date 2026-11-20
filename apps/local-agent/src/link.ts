@@ -19,6 +19,8 @@ export interface LinkOptions {
   agentVersion: string;
   platform: Platform;
   heartbeatMs?: number;
+  /** Live session count reported with each heartbeat. */
+  activeSessions?: () => number;
   backoff?: { baseMs: number; maxMs: number };
 }
 
@@ -76,8 +78,15 @@ export class AgentLink extends EventEmitter<LinkEvents> {
     this.heartbeat = null;
   }
 
-  private send(msg: unknown): void {
-    if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify(msg));
+  get isOpen(): boolean {
+    return this.ws?.readyState === WebSocket.OPEN;
+  }
+
+  /** Sends now if connected; returns false otherwise (callers keep their own retry queue). */
+  send(msg: unknown): boolean {
+    if (!this.isOpen) return false;
+    this.ws!.send(JSON.stringify(msg));
+    return true;
   }
 
   private connect(): void {
@@ -120,7 +129,13 @@ export class AgentLink extends EventEmitter<LinkEvents> {
           ws.terminate();
           return;
         }
-        this.send(createEvent('device.heartbeat', { activeSessions: 0 }, { deviceId }));
+        this.send(
+          createEvent(
+            'device.heartbeat',
+            { activeSessions: this.opts.activeSessions?.() ?? 0 },
+            { deviceId },
+          ),
+        );
       }, every);
     });
 

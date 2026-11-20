@@ -26,7 +26,7 @@ for (const { path, heading } of ROUTES) {
 }
 
 test('placeholder sections never show mock data', async ({ page }) => {
-  for (const path of ['/agents', '/approvals', '/activity']) {
+  for (const path of ['/approvals']) {
     await page.goto(path);
     await expect(page.getByTestId('not-yet-available')).toContainText(/Arrives in M\d/);
   }

@@ -49,6 +49,18 @@ pnpm agentdock status       # shows pairing state; other commands: rotate, unpai
 Credentials are stored in `%APPDATA%\AgentDock` and the device secret is encrypted with Windows DPAPI.
 Set `AGENTDOCK_HOME` to use a different folder.
 
+### Connect Claude Code
+
+```bash
+pnpm agentdock hooks install   # once: lets sessions you start in VS Code / a terminal report activity
+                               # (backs up ~/.claude/settings.json; observe-only; `hooks uninstall` reverts)
+pnpm agentdock start           # sessions appear under Agents in the dashboard
+pnpm agentdock run "Fix the failing test" --cwd C:\path\to\project   # start a managed session
+pnpm agentdock sessions        # what the running agent sees; `stop-session <id>` stops a managed one
+```
+
+Without hooks, sessions you start yourself still appear, but with status only.
+
 Quality gate (run before closing any milestone):
 
 ```bash

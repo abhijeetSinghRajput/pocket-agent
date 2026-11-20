@@ -1,5 +1,7 @@
 // Shared helpers for integration tests (real Postgres + Redis, real HTTP/WebSocket).
+import { createEvent, deviceAuthHeader } from '@agentdock/protocol';
 import { randomUUID } from 'node:crypto';
+import WebSocket from 'ws';
 import type { FastifyInstance } from 'fastify';
 import { buildApp } from '../src/app.js';
 import { loadEnv } from '../src/env.js';
@@ -97,3 +99,79 @@ export async function pairDevice(t: TestApp, cookie: string) {
 export async function deleteUser(ctx: AppContext, userId: string): Promise<void> {
   await ctx.prisma.user.delete({ where: { id: userId } }).catch(() => undefined);
 }
+
+// ── WebSocket helpers ───────────────────────────────────────────────────────
+
+/** Connects and buffers incoming JSON messages so none are missed. */
+export function wsClient(url: string, headers: Record<string, string>) {
+  const ws = new WebSocket(url, { headers });
+  const inbox: Array<Record<string, unknown>> = [];
+  const waiters: Array<() => void> = [];
+  ws.on('message', (d) => {
+    inbox.push(JSON.parse(d.toString()));
+    waiters.splice(0).forEach((w) => w());
+  });
+  const closed = new Promise<{ code: number }>((resolve) => ws.on('close', (code) => resolve({ code })));
+  const opened = new Promise<void>((resolve, reject) => {
+    ws.on('open', () => resolve());
+    ws.on('unexpected-response', (_req, res) => reject(new Error(`HTTP ${res.statusCode}`)));
+    ws.on('error', reject);
+  });
+  const next = async (pred: (m: Record<string, unknown>) => boolean, ms = 5000) => {
+    const deadline = Date.now() + ms;
+    for (;;) {
+      const i = inbox.findIndex(pred);
+      if (i >= 0) return inbox.splice(i, 1)[0]!;
+      if (Date.now() > deadline) throw new Error('timed out waiting for message');
+      await new Promise<void>((r) => {
+        waiters.push(r);
+        setTimeout(r, 50);
+      });
+    }
+  };
+  return { ws, opened, closed, next, inbox };
+}
+
+/** A connected Local Agent that sends protocol events and waits for their acks. */
+export async function connectAgent(t: TestApp, d: { deviceId: string; deviceSecret: string }) {
+  const c = wsClient(t.wsUrl, { authorization: deviceAuthHeader(d.deviceId, d.deviceSecret) });
+  await c.opened;
+  const sendRaw = (msg: { eventId: string }) => c.ws.send(JSON.stringify(msg));
+  const send = async (msg: { eventId: string }) => {
+    sendRaw(msg);
+    await c.next((m) => (m['payload'] as { ackEventId?: string } | undefined)?.ackEventId === msg.eventId);
+  };
+  return { ...c, send, sendRaw };
+}
+
+export function sessionStarted(externalSessionId: string, over: Record<string, unknown> = {}) {
+  return createEvent(
+    'agent.session.started',
+    {
+      provider: 'claude-code' as const,
+      mode: 'observed' as const,
+      externalSessionId,
+      projectPath: String.raw`C:\work\demo`,
+      projectName: 'demo',
+      status: 'WaitingForInput' as const,
+      capabilities: {
+        monitor: true,
+        remoteApproval: true,
+        instructAnytime: false,
+        instructBetweenTurns: true,
+        interrupt: false,
+      },
+      metadata: { entrypoint: 'claude-vscode' },
+      ...over,
+    },
+    { sessionId: externalSessionId },
+  );
+}
+
+export const waitFor = async (check: () => Promise<boolean>, ms = 5000) => {
+  const deadline = Date.now() + ms;
+  while (!(await check())) {
+    if (Date.now() > deadline) throw new Error('condition not met in time');
+    await new Promise((r) => setTimeout(r, 50));
+  }
+};

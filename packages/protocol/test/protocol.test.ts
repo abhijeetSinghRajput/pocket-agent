@@ -14,6 +14,7 @@ import {
   isTerminal,
   MAX_TEXT_FIELD,
   PROTOCOL_VERSION,
+  SESSION_SCOPED_EVENTS,
 } from '../src/index.js';
 
 const base = () => ({ v: PROTOCOL_VERSION, eventId: randomUUID(), timestamp: new Date().toISOString() });
@@ -90,6 +91,43 @@ describe('envelope parsing', () => {
       payload: { approvalId: randomUUID(), requestId: 'toolu_1', decision: 'always' },
     });
     expect(r.success).toBe(false);
+  });
+});
+
+describe('session events (M3)', () => {
+  it('accepts a snapshot and caps its size', () => {
+    const ok = AgentToBackend.safeParse({
+      ...base(),
+      eventType: 'agent.sessions.snapshot',
+      payload: { sessions: [{ externalSessionId: 's1', status: 'Running' }] },
+    });
+    expect(ok.success).toBe(true);
+    const tooMany = AgentToBackend.safeParse({
+      ...base(),
+      eventType: 'agent.sessions.snapshot',
+      payload: {
+        sessions: Array.from({ length: 501 }, (_, i) => ({ externalSessionId: `s${i}`, status: 'Running' })),
+      },
+    });
+    expect(tooMany.success).toBe(false);
+  });
+
+  it('records auto-denials but has no "auto-allow" outcome', () => {
+    const resolved = (outcome: string) =>
+      AgentToBackend.safeParse({
+        ...base(),
+        sessionId: 's1',
+        eventType: 'agent.permission.resolved',
+        payload: { requestId: 'r', outcome },
+      }).success;
+    expect(resolved('auto_denied')).toBe(true);
+    expect(resolved('auto_allowed')).toBe(false);
+  });
+
+  it('marks session-scoped event types', () => {
+    expect(SESSION_SCOPED_EVENTS.has('agent.tool.started')).toBe(true);
+    expect(SESSION_SCOPED_EVENTS.has('device.heartbeat')).toBe(false);
+    expect(SESSION_SCOPED_EVENTS.has('agent.sessions.snapshot')).toBe(false);
   });
 });
 

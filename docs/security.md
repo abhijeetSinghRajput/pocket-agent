@@ -38,8 +38,25 @@ Living document. The full threat model is completed in M8. Architecture-level ru
 
 Audit log entries are written for: register, login, failed login, logout, pairing-code creation, pairing, rotation request, rotation completion and revocation.
 
+## Controls added in M3 (Claude Code integration and live dashboard)
+
+| Threat | Control | Test |
+|---|---|---|
+| AgentDock changes how Claude Code behaves | The hook relay **never answers a hook**: it prints nothing and always exits 0, even when the agent is down, so Claude Code's own permission prompt works exactly as before. The installer adds only AgentDock hook entries (tagged `--agentdock-hook`), backs `settings.json` up first, never touches `permissions`, and refuses to edit a file it can't parse. | `ingest-relay`, `install` |
+| Managed sessions approving actions on their own | `canUseTool` **denies** every request that needs approval until remote approval ships (M5), and records it as `auto_denied`. Claude Code's user, project and local settings, including deny rules, still apply. | `discovery-managed` |
+| Leaking code, file contents or secrets to the cloud | Tool inputs are allow-listed per tool: commands, paths and patterns only. `Write`/`Edit` bodies are reduced to a size, `Read` output is never sent, and MCP and unknown tools send argument *names* only. Only `Bash`/`PowerShell` output is forwarded (truncated), because it's the "terminal output" feature. `transcript_path` and `scratchpad_dir` are never forwarded. | `hooks` (recorded payloads) |
+| Reading Claude Code's local auth tokens | Discovery reads only `<config>/sessions/<pid>.json`, never the `*.key` files beside them or `ide/*.lock`. | `discovery-managed` |
+| Other local processes or web pages talking to the agent | The ingest endpoint binds 127.0.0.1 on a random port with a per-run 256-bit token (in the user-only state dir). It rejects requests with `Origin`/`Sec-Fetch-Site` (CSRF from a browser) and unexpected `Host` headers (DNS rebinding), and caps bodies at 1 MB. | `ingest-relay` |
+| Cross-site WebSocket hijacking of the dashboard feed | `/ws/client` requires an allow-listed `Origin` plus the session cookie. It's server → browser only and closes when the login session signs out. | `client-gateway.int` |
+| One user seeing another's sessions or live events | All session, event and activity queries are scoped by the owner's devices. Live events are routed per user. | `sessions.int`, `client-gateway.int` |
+| Replayed or forged agent events | `eventId` dedupe, session events must name their session, envelope `deviceId` must match the authenticated device. | `sessions.int`, `gateway.int` |
+| Unbounded data retention | Agent events are pruned after `EVENT_RETENTION_DAYS` (30 by default). Audit logs are kept. | `sessions.int` |
+| Agent killed by losing its console | stdout/stderr `EPIPE` is ignored, so the agent keeps running when its terminal or parent process goes away. | `console-loss` |
+
 ## Known issues
 
+- Unacknowledged agent events are held in memory only. If the agent process restarts while offline, those events are lost (the post-connect snapshot still corrects session states).
+- `Bash` output is forwarded (truncated to 4 KB). A command that prints a secret will show it in the timeline.
 - If Redis is down, rate-limited routes (login, register, pairing) return 500 instead of running unthrottled. This is a deliberate fail-closed choice.
 - There is no "sign out other sessions" or session list UI yet.
 - On macOS and Linux the device secret is stored in a 0600 file rather than the OS keychain.

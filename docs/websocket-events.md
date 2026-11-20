@@ -26,6 +26,28 @@ gateway that carries them is built in M2 (`/ws/agent`) and M3 (`/ws/client`).
 `approval.decision` can carry only `allow` or `deny`. The protocol has no way to express "always allow"
 or modified input, so AgentDock cannot weaken local Claude Code permissions.
 
+## Sessions (M3)
+
+- Session events (`agent.session.*`, `agent.tool.*`, `agent.permission.*`, `agent.output`, `agent.error`)
+  **must** carry `sessionId`, which is the provider's `externalSessionId`. Frames without it are invalid and not acknowledged.
+- The API acknowledges a session event only after it has been stored. The agent keeps unacknowledged events in an in-memory
+  outbox (10 000 maximum) and replays them in order after each reconnect. `AgentEvent.eventId` is unique, so a replay is a no-op.
+- `agent.session.started` is an upsert keyed by `(deviceId, externalSessionId)`. Sending it again updates the
+  description (capabilities, metadata) and reopens an ended session (resume). It never creates a duplicate.
+- After every connect the agent sends `agent.sessions.snapshot {sessions:[{externalSessionId,status}]}`. Listed
+  sessions get that status. Every other open session of the device is ended (`Stopped`), because the PC no longer knows it.
+- When a device's link drops, its open sessions become `Disconnected` until the next snapshot.
+- An event for a session the API was never told about is acknowledged and dropped.
+- `agent.permission.resolved.outcome`: `local` = answered on the PC, `auto_denied` = denied because no approval channel
+  exists yet (managed sessions before M5; never auto-allowed), `remote` / `timeout` / `cancelled` arrive in M5.
+
+## `/ws/client` (browser, M3)
+
+Server → browser only. The Origin is checked, and a session cookie is required. Frames are `BackendToWeb` events that say *what changed*
+(`device.status.changed`, `agent.status.changed`, `agent.event.created` with `sessionId`), and the dashboard then re-fetches
+over REST. Events fan out to every API instance through Redis pub/sub. The socket closes with `4401` when that login
+session signs out.
+
 ## `/ws/agent` link behaviour (M2)
 
 | Aspect | Behaviour |

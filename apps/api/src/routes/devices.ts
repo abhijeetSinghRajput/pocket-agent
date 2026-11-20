@@ -1,4 +1,5 @@
 import {
+  createEvent,
   PAIRING_CODE_TTL_MS,
   PairDeviceRequest,
   type DeviceDto,
@@ -9,6 +10,7 @@ import { z } from 'zod';
 import { authenticateDevice } from '../auth/device-auth.js';
 import { requireTrustedOrigin, requireUser } from '../auth/session.js';
 import { limit, type AppContext } from '../context.js';
+import { notifyUser, type Bus } from '../realtime/bus.js';
 import { publishRevocation } from '../gateway/agent-gateway.js';
 import type { Device } from '../generated/prisma/client.js';
 import { audit } from '../lib/audit.js';
@@ -32,7 +34,7 @@ export function toDeviceDto(d: Device): DeviceDto {
 }
 
 /** Browser-facing device management (session cookie). */
-export async function deviceRoutes(app: FastifyInstance, ctx: AppContext): Promise<void> {
+export async function deviceRoutes(app: FastifyInstance, ctx: AppContext & { bus: Bus }): Promise<void> {
   const user = requireUser(ctx);
   const trusted = requireTrustedOrigin(ctx);
 
@@ -100,7 +102,21 @@ export async function deviceRoutes(app: FastifyInstance, ctx: AppContext): Promi
       targetId: device.id,
       ip: req.ip,
     });
+    // A revoked device can't report on its sessions any more: end them.
+    await ctx.prisma.agentSession.updateMany({
+      where: { deviceId: device.id, endedAt: null },
+      data: { status: 'Stopped', endedAt: ctx.now() },
+    });
     await publishRevocation(ctx, device.id);
+    await notifyUser(
+      ctx.bus,
+      userId,
+      createEvent(
+        'device.status.changed',
+        { status: 'Revoked', lastHeartbeatAt: null },
+        { deviceId: device.id },
+      ),
+    );
     return { device: toDeviceDto(revoked) };
   });
 }

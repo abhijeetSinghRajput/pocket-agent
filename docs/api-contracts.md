@@ -45,3 +45,17 @@ Source of truth for request and response shapes: the Zod schemas in `packages/pr
 | POST | `/agent/credentials/rotate` | device | 5/min | `200 {deviceSecret}` issues a *pending* secret. The old secret keeps working until the new one is used. |
 | POST | `/agent/credentials/confirm` | device (new secret) | 10/min | `204`. The pending secret becomes current and the old one stops working. |
 | GET | `/ws/agent` | device | | WebSocket upgrade. `401 unauthorized` or `401 device_revoked` before upgrade. See [websocket-events.md](websocket-events.md). |
+
+## Sessions and activity (M3)
+
+All of these require the session cookie and return only the signed-in user's data. Any other user's
+session returns `404`.
+
+| Method | Path | Response |
+|---|---|---|
+| GET | `/sessions?scope=active\|all` | `{sessions: AgentSessionDto[]}`. `active` (the default) lists sessions that haven't ended, most recent activity first, up to 200. |
+| GET | `/sessions/:id` | `{session}` with `mode`, `capabilities`, `metadata` (for example `entrypoint: "claude-vscode"`), `status` and `currentTask` |
+| GET | `/sessions/:id/events?limit=50&before=<eventId>` | `EventPage {events, nextCursor}`, newest first. Pass `nextCursor` as `before` to page back. |
+| GET | `/activity?limit=50&before=<eventId>` | Same as above across all of the user's sessions. Each event also carries `session {id, projectName, deviceName}`. |
+| GET | `/overview` | `{devices {online,total}, sessions {active,running,waitingForInput,waitingForPermission,disconnected}, recent: AgentEventDto[8]}` |
+| GET | `/ws/client` | WebSocket for live dashboard updates. It needs the session cookie and an allow-listed `Origin` (otherwise `401` / `403`), and only sends server → browser. Close code `4401` means the user signed out. |

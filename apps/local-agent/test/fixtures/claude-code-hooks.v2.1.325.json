@@ -1,0 +1,113 @@
+[
+  {
+    "session_id": "c2effe64-c5fa-40c2-a54d-2a596b804145",
+    "transcript_path": "C:\\Users\\dev\\.claude\\projects\\C--Users-user-AppData-Local-Temp-claude-poc-sandbox\\c2effe64-c5fa-40c2-a54d-2a596b804145.jsonl",
+    "cwd": "C:\\work\\demo-project",
+    "scratchpad_dir": "C:\\Users\\dev\\AppData\\Local\\Temp\\claude\\49085f1f727ae0de\\c2effe64-c5fa-40c2-a54d-2a596b804145\\scratchpad",
+    "hook_event_name": "SessionStart",
+    "source": "startup"
+  },
+  {
+    "session_id": "c2effe64-c5fa-40c2-a54d-2a596b804145",
+    "transcript_path": "C:\\Users\\dev\\.claude\\projects\\C--Users-user-AppData-Local-Temp-claude-poc-sandbox\\c2effe64-c5fa-40c2-a54d-2a596b804145.jsonl",
+    "cwd": "C:\\work\\demo-project",
+    "scratchpad_dir": "C:\\Users\\dev\\AppData\\Local\\Temp\\claude\\49085f1f727ae0de\\c2effe64-c5fa-40c2-a54d-2a596b804145\\scratchpad",
+    "prompt_id": "89205924-a289-41aa-87ab-e1701f1d1990",
+    "permission_mode": "default",
+    "hook_event_name": "UserPromptSubmit",
+    "prompt": "Run this exact bash command and report its output: echo agentdock-poc > poc.txt && cat poc.txt"
+  },
+  {
+    "session_id": "c2effe64-c5fa-40c2-a54d-2a596b804145",
+    "transcript_path": "C:\\Users\\dev\\.claude\\projects\\C--Users-user-AppData-Local-Temp-claude-poc-sandbox\\c2effe64-c5fa-40c2-a54d-2a596b804145.jsonl",
+    "cwd": "C:\\work\\demo-project",
+    "scratchpad_dir": "C:\\Users\\dev\\AppData\\Local\\Temp\\claude\\49085f1f727ae0de\\c2effe64-c5fa-40c2-a54d-2a596b804145\\scratchpad",
+    "prompt_id": "89205924-a289-41aa-87ab-e1701f1d1990",
+    "permission_mode": "default",
+    "effort": {
+      "level": "medium"
+    },
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+      "command": "echo agentdock-poc > poc.txt && cat poc.txt",
+      "description": "Write poc.txt and print its contents"
+    },
+    "tool_use_id": "toolu_01K17ATDhN9fFK36z2AinEBA"
+  },
+  {
+    "session_id": "c2effe64-c5fa-40c2-a54d-2a596b804145",
+    "transcript_path": "C:\\Users\\dev\\.claude\\projects\\C--Users-user-AppData-Local-Temp-claude-poc-sandbox\\c2effe64-c5fa-40c2-a54d-2a596b804145.jsonl",
+    "cwd": "C:\\work\\demo-project",
+    "scratchpad_dir": "C:\\Users\\dev\\AppData\\Local\\Temp\\claude\\49085f1f727ae0de\\c2effe64-c5fa-40c2-a54d-2a596b804145\\scratchpad",
+    "prompt_id": "89205924-a289-41aa-87ab-e1701f1d1990",
+    "permission_mode": "default",
+    "effort": {
+      "level": "medium"
+    },
+    "hook_event_name": "PermissionRequest",
+    "tool_name": "Bash",
+    "tool_input": {
+      "command": "echo agentdock-poc > poc.txt && cat poc.txt",
+      "description": "Write poc.txt and print its contents"
+    },
+    "permission_suggestions": [
+      {
+        "type": "addDirectories",
+        "directories": ["C:\\work\\demo-project"],
+        "destination": "session"
+      }
+    ]
+  },
+  {
+    "session_id": "c2effe64-c5fa-40c2-a54d-2a596b804145",
+    "transcript_path": "C:\\Users\\dev\\.claude\\projects\\C--Users-user-AppData-Local-Temp-claude-poc-sandbox\\c2effe64-c5fa-40c2-a54d-2a596b804145.jsonl",
+    "cwd": "C:\\work\\demo-project",
+    "scratchpad_dir": "C:\\Users\\dev\\AppData\\Local\\Temp\\claude\\49085f1f727ae0de\\c2effe64-c5fa-40c2-a54d-2a596b804145\\scratchpad",
+    "prompt_id": "89205924-a289-41aa-87ab-e1701f1d1990",
+    "permission_mode": "default",
+    "effort": {
+      "level": "medium"
+    },
+    "hook_event_name": "PostToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+      "command": "echo agentdock-poc > poc.txt && cat poc.txt",
+      "description": "Write poc.txt and print its contents"
+    },
+    "tool_response": {
+      "stdout": "agentdock-poc",
+      "stderr": "\nShell cwd was reset to C:\\work\\demo-project",
+      "interrupted": false,
+      "isImage": false,
+      "noOutputExpected": false
+    },
+    "tool_use_id": "toolu_01K17ATDhN9fFK36z2AinEBA",
+    "duration_ms": 522
+  },
+  {
+    "session_id": "c2effe64-c5fa-40c2-a54d-2a596b804145",
+    "transcript_path": "C:\\Users\\dev\\.claude\\projects\\C--Users-user-AppData-Local-Temp-claude-poc-sandbox\\c2effe64-c5fa-40c2-a54d-2a596b804145.jsonl",
+    "cwd": "C:\\work\\demo-project",
+    "scratchpad_dir": "C:\\Users\\dev\\AppData\\Local\\Temp\\claude\\49085f1f727ae0de\\c2effe64-c5fa-40c2-a54d-2a596b804145\\scratchpad",
+    "prompt_id": "89205924-a289-41aa-87ab-e1701f1d1990",
+    "permission_mode": "default",
+    "effort": {
+      "level": "medium"
+    },
+    "hook_event_name": "Stop",
+    "stop_hook_active": false,
+    "last_assistant_message": "The command ran and printed:\n\n```\nagentdock-poc\n```\n\nIt wrote `agentdock-poc` to `poc.txt` in the working directory. The shell's working directory was reset to `C:\\work\\demo-project` after the command.",
+    "background_tasks": [],
+    "session_crons": []
+  },
+  {
+    "session_id": "c2effe64-c5fa-40c2-a54d-2a596b804145",
+    "transcript_path": "C:\\Users\\dev\\.claude\\projects\\C--Users-user-AppData-Local-Temp-claude-poc-sandbox\\c2effe64-c5fa-40c2-a54d-2a596b804145.jsonl",
+    "cwd": "C:\\work\\demo-project",
+    "scratchpad_dir": "C:\\Users\\dev\\AppData\\Local\\Temp\\claude\\49085f1f727ae0de\\c2effe64-c5fa-40c2-a54d-2a596b804145\\scratchpad",
+    "prompt_id": "89205924-a289-41aa-87ab-e1701f1d1990",
+    "hook_event_name": "SessionEnd",
+    "reason": "other"
+  }
+]

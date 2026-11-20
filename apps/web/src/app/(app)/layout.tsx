@@ -5,6 +5,7 @@ import { useEffect, type ReactNode } from 'react';
 import { AppShell } from '@/components/app-shell';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/lib/auth';
+import { LiveProvider } from '@/lib/live';
 
 /** Everything in (app) requires a signed-in user. The API enforces this too; this only drives the UI. */
 export default function AppLayout({ children }: { children: ReactNode }) {
@@ -20,15 +21,17 @@ export default function AppLayout({ children }: { children: ReactNode }) {
 
   if (state.status === 'authenticated') {
     return (
-      <AppShell
-        user={state.user}
-        onSignOut={async () => {
-          await logout();
-          router.replace('/login');
-        }}
-      >
-        {children}
-      </AppShell>
+      <LiveProvider>
+        <AppShell
+          user={state.user}
+          onSignOut={async () => {
+            await logout();
+            router.replace('/login');
+          }}
+        >
+          {children}
+        </AppShell>
+      </LiveProvider>
     );
   }
 

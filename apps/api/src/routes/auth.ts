@@ -8,6 +8,7 @@ import {
   toUserDto,
 } from '../auth/session.js';
 import { limit, redisKey, type AppContext } from '../context.js';
+import { CHANNELS, type Bus } from '../realtime/bus.js';
 import { audit } from '../lib/audit.js';
 import { DUMMY_PASSWORD_HASH, hashPassword, sha256, verifyPassword } from '../lib/crypto.js';
 import { Prisma } from '../generated/prisma/client.js';
@@ -16,7 +17,7 @@ import { Prisma } from '../generated/prisma/client.js';
 const MAX_FAILED_LOGINS = 10;
 const FAILED_LOGIN_WINDOW_MS = 15 * 60 * 1000;
 
-export async function authRoutes(app: FastifyInstance, ctx: AppContext): Promise<void> {
+export async function authRoutes(app: FastifyInstance, ctx: AppContext & { bus: Bus }): Promise<void> {
   const trusted = requireTrustedOrigin(ctx);
   const failKey = (email: string) => redisKey(ctx, 'login-fail', sha256(email));
 
@@ -112,6 +113,8 @@ export async function authRoutes(app: FastifyInstance, ctx: AppContext): Promise
       ip: req.ip,
     });
     clearSessionCookie(ctx, reply);
+    // Close live dashboard sockets that were opened with this login session.
+    await ctx.bus.publish(CHANNELS.authSessionEnded, user.sessionId).catch(() => undefined);
     return reply.code(204).send();
   });
 

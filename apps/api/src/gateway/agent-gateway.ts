@@ -1,20 +1,18 @@
-import {
-  AgentToBackend,
-  BackendToAgent,
-  createEvent,
-  MAX_FRAME_BYTES,
-  OFFLINE_AFTER_MS,
-  WS_CLOSE,
-} from '@agentdock/protocol';
-import websocket from '@fastify/websocket';
+import { AgentToBackend, BackendToAgent, createEvent, OFFLINE_AFTER_MS, WS_CLOSE } from '@agentdock/protocol';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { randomUUID } from 'node:crypto';
 import type { WebSocket } from 'ws';
 import { authenticateDevice } from '../auth/device-auth.js';
 import { redisKey, type AppContext } from '../context.js';
-import type { Device } from '../generated/prisma/client.js';
+import { Prisma, type Device } from '../generated/prisma/client.js';
+import { CHANNELS, notifyUser, type Bus } from '../realtime/bus.js';
+import {
+  ingestSessionEvent,
+  InvalidAgentEvent,
+  isSessionEvent,
+  markDeviceSessionsDisconnected,
+} from '../sessions/ingest.js';
 
-const REVOKE_CHANNEL = 'device-revoked';
 /** Invalid frames tolerated per connection before it is closed. */
 const MAX_INVALID_FRAMES = 10;
 const PING_INTERVAL_MS = 15_000;
@@ -22,7 +20,7 @@ const SWEEP_INTERVAL_MS = 15_000;
 
 /** Tells every API instance to drop the device's live connection. */
 export async function publishRevocation(ctx: AppContext, deviceId: string): Promise<void> {
-  await ctx.redis.publish(redisKey(ctx, REVOKE_CHANNEL), deviceId);
+  await ctx.redis.publish(redisKey(ctx, CHANNELS.deviceRevoked), deviceId);
 }
 
 export interface GatewayOptions {
@@ -30,11 +28,13 @@ export interface GatewayOptions {
   sweepIntervalMs?: number;
 }
 
+export type GatewayServices = AppContext & GatewayOptions & { bus: Bus };
+
 /**
  * `/ws/agent`: the only way a Local Agent talks to the backend in real time.
  * The PC always dials out; credentials are checked before the WebSocket upgrade.
  */
-export async function agentGateway(app: FastifyInstance, ctx: AppContext & GatewayOptions): Promise<void> {
+export async function agentGateway(app: FastifyInstance, ctx: GatewayServices): Promise<void> {
   const instanceId = randomUUID();
   const sockets = new Map<string, WebSocket>();
   const authed = new WeakMap<FastifyRequest, Device>();
@@ -53,35 +53,57 @@ export async function agentGateway(app: FastifyInstance, ctx: AppContext & Gatew
     }
   };
 
-  // Cross-instance revocation. ioredis re-subscribes automatically after reconnects.
-  const subscriber = ctx.redis.duplicate({ enableOfflineQueue: true, lazyConnect: false });
-  subscriber.on('error', (err) => app.log.warn({ err: err.message }, 'revocation subscriber error'));
-  void subscriber.subscribe(redisKey(ctx, REVOKE_CHANNEL)).catch(() => undefined);
-  subscriber.on('message', (_channel, deviceId) => {
+  const deviceChanged = async (deviceId: string) => {
+    const d = await ctx.prisma.device.findUnique({ where: { id: deviceId } });
+    if (!d) return;
+    await notifyUser(
+      ctx.bus,
+      d.userId,
+      createEvent(
+        'device.status.changed',
+        {
+          status: d.revokedAt ? 'Revoked' : d.status,
+          lastHeartbeatAt: d.lastHeartbeatAt?.toISOString() ?? null,
+        },
+        { deviceId },
+      ),
+    );
+  };
+
+  const goOffline = async (deviceId: string) => {
+    await markDeviceSessionsDisconnected(ctx, deviceId);
+    await deviceChanged(deviceId);
+  };
+
+  ctx.bus.on(CHANNELS.deviceRevoked, (deviceId) => {
     const socket = sockets.get(deviceId);
     if (socket) closeRevoked(socket);
   });
 
   // Marks devices Offline when their heartbeats stop (covers crashed API instances too).
   const sweeper = setInterval(() => {
-    void ctx.prisma.device
-      .updateMany({
+    void (async () => {
+      const stale = await ctx.prisma.device.findMany({
         where: {
           status: 'Online',
           lastHeartbeatAt: { lt: new Date(ctx.now().getTime() - OFFLINE_AFTER_MS) },
         },
-        data: { status: 'Offline' },
-      })
-      .catch((err: unknown) => app.log.warn({ err }, 'offline sweep failed'));
+        select: { id: true },
+      });
+      for (const { id } of stale) {
+        const r = await ctx.prisma.device.updateMany({
+          where: { id, status: 'Online' },
+          data: { status: 'Offline' },
+        });
+        if (r.count) await goOffline(id);
+      }
+    })().catch((err: unknown) => app.log.warn({ err }, 'offline sweep failed'));
   }, ctx.sweepIntervalMs ?? SWEEP_INTERVAL_MS);
 
   app.addHook('onClose', async () => {
     clearInterval(sweeper);
     for (const s of sockets.values()) s.close(WS_CLOSE.GOING_AWAY, 'server shutting down');
-    await subscriber.quit().catch(() => undefined);
   });
-
-  await app.register(websocket, { options: { maxPayload: MAX_FRAME_BYTES } });
 
   app.get(
     '/ws/agent',
@@ -131,6 +153,7 @@ export async function agentGateway(app: FastifyInstance, ctx: AppContext & Gatew
         log.warn({ why, invalid }, 'invalid frame from agent');
         if (invalid > MAX_INVALID_FRAMES) socket.close(WS_CLOSE.POLICY_VIOLATION, 'too many invalid frames');
       };
+      const ack = (eventId: string) => send(socket, createEvent('ack', { ackEventId: eventId }));
 
       const handle = async (raw: Buffer, isBinary: boolean) => {
         if (isBinary) return reject('binary frame');
@@ -145,21 +168,33 @@ export async function agentGateway(app: FastifyInstance, ctx: AppContext & Gatew
         const msg = parsed.data;
         if (msg.deviceId && msg.deviceId !== device.id) return reject('deviceId mismatch');
 
-        switch (msg.eventType) {
-          case 'device.connected':
-          case 'device.heartbeat': {
-            const fields =
-              msg.eventType === 'device.connected'
-                ? { agentVersion: msg.payload.agentVersion, platform: msg.payload.platform }
-                : {};
-            if (!(await touch(fields))) return closeRevoked(socket);
-            send(socket, createEvent('ack', { ackEventId: msg.eventId }));
-            return;
-          }
-          default:
-            // Session/tool/permission events are processed from M3 on.
-            log.debug({ eventType: msg.eventType }, 'event not handled yet');
+        if (msg.eventType === 'device.connected' || msg.eventType === 'device.heartbeat') {
+          const fields =
+            msg.eventType === 'device.connected'
+              ? { agentVersion: msg.payload.agentVersion, platform: msg.payload.platform }
+              : {};
+          if (!(await touch(fields))) return closeRevoked(socket);
+          if (msg.eventType === 'device.connected') void deviceChanged(device.id);
+          return ack(msg.eventId);
         }
+
+        if (isSessionEvent(msg)) {
+          try {
+            const notifications = await ingestSessionEvent(ctx, device, msg);
+            ack(msg.eventId); // only after the event is durably stored
+            for (const n of notifications) await notifyUser(ctx.bus, device.userId, n);
+          } catch (err) {
+            if (err instanceof InvalidAgentEvent) return reject(err.message);
+            if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+              return ack(msg.eventId); // concurrent replay already stored it
+            }
+            throw err; // not acked → the agent resends after reconnecting
+          }
+          return;
+        }
+
+        // command.ack / approval.decision.ack are processed from M4/M5 on.
+        log.debug({ eventType: msg.eventType }, 'event not handled yet');
       };
 
       // Process frames strictly in order.
@@ -175,16 +210,18 @@ export async function agentGateway(app: FastifyInstance, ctx: AppContext & Gatew
         if (sockets.get(device.id) !== socket) return; // replaced: the new socket owns presence
         sockets.delete(device.id);
         log.info({ code }, 'agent disconnected');
-        void ctx.prisma.device
-          .updateMany({ where: { id: device.id, revokedAt: null }, data: { status: 'Offline' } })
-          .catch(() => undefined);
-        void ctx.redis.del(presenceKey(device.id)).catch(() => undefined);
+        void (async () => {
+          await ctx.prisma.device.updateMany({
+            where: { id: device.id, revokedAt: null },
+            data: { status: 'Offline' },
+          });
+          await ctx.redis.del(presenceKey(device.id)).catch(() => undefined);
+          await goOffline(device.id);
+        })().catch(() => undefined);
       });
 
       log.info('agent connected');
-      void touch().then((ok) => {
-        if (!ok) closeRevoked(socket);
-      });
+      void touch().then((ok) => (ok ? deviceChanged(device.id) : closeRevoked(socket)));
     },
   );
 }

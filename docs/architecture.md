@@ -122,6 +122,32 @@ Postgres is the source of truth. The MVP runs one API instance, but nothing assu
 - **Credential storage**: the device secret is encrypted with Windows DPAPI (current user), through PowerShell with the secret passed on stdin (no native module), and stored in
   `%APPDATA%\AgentDock`.
 
+### M3 implementation notes (as built)
+
+```text
+Claude Code ──hook──► hook-relay.js ──HTTP 127.0.0.1 + token──► IngestServer ─┐
+ (VS Code / CLI)       (Node built-ins only, ~60 ms,                          │
+                        prints nothing, exit 0)                               ▼
+<config>/sessions/<pid>.json ──scan every 10 s──► ClaudeDiscovery ──► SessionRegistry ──► Outbox ──► AgentLink ──► API
+Agent SDK query() ◄── `agentdock run` ──► ManagedSessions ──────────────────────┘      (replayed      (WSS)
+                                                                                       until acked)
+```
+
+- **One registry, three sources.** Hooks are authoritative. Discovery adds sessions without hooks (status only)
+  and enriches hook sessions with the `entrypoint` (for example `claude-vscode`). Managed sessions report from the SDK
+  stream, and the relay skips them via `AGENTDOCK_MANAGED_SESSION=1`, so nothing is counted twice. Managed session
+  IDs are chosen by the agent (`sessionId` option), so they're recognised before Claude Code starts.
+- **Capabilities are recorded per session** and never inferred in the UI. A session seen only through discovery gets
+  `MONITOR_ONLY`. It's upgraded to the observed capabilities once its hooks arrive.
+- **`PermissionRequest` has no `tool_use_id`** (verified against Claude Code 2.1.325 payloads, which are the test fixtures).
+  The handler matches it to the preceding `PreToolUse` with the same tool and input.
+- **The relay never answers a hook in M3.** Claude Code's own prompt stays in charge. M5 will add an opt-in
+  decision path for Away mode only.
+- **Delivery.** Session events go through an in-memory outbox (10 000 maximum) and are removed when acknowledged.
+  After each connect the agent replays unacknowledged events, then sends `agent.sessions.snapshot`.
+- **Browser updates.** `/ws/client` pushes "what changed" events, the dashboard re-fetches over REST, and pages poll
+  every 30 s as a fallback.
+
 ## 4. Identity, pairing and trust
 
 1. A logged-in user clicks **Add device**. The API creates a pairing code: 8 characters from the

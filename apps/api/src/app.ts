@@ -2,13 +2,19 @@ import cookie from '@fastify/cookie';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
+import websocket from '@fastify/websocket';
+import { MAX_FRAME_BYTES } from '@agentdock/protocol';
 import Fastify, { type FastifyInstance, type FastifyServerOptions } from 'fastify';
 import type { AppContext } from './context.js';
 import type { Env } from './env.js';
 import { agentGateway, type GatewayOptions } from './gateway/agent-gateway.js';
+import { retentionJob } from './jobs/retention.js';
+import { createBus } from './realtime/bus.js';
+import { clientGateway } from './realtime/client-gateway.js';
 import { authRoutes } from './routes/auth.js';
 import { agentRoutes, deviceRoutes } from './routes/devices.js';
 import { healthRoutes, type HealthDeps } from './routes/health.js';
+import { sessionRoutes } from './routes/sessions.js';
 
 export interface AppDeps {
   env: Pick<Env, 'WEB_ORIGINS' | 'NODE_ENV'>;
@@ -64,10 +70,16 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
         message: `Too many requests. Try again in ${Math.ceil(c.ttl / 1000)}s.`,
       }),
     });
-    await app.register(authRoutes, ctx);
-    await app.register(deviceRoutes, ctx);
-    await app.register(agentRoutes, ctx);
-    await app.register(agentGateway, ctx);
+    const services = { ...ctx, bus: createBus(ctx, app.log) };
+    app.addHook('onClose', async () => services.bus.close());
+    await app.register(websocket, { options: { maxPayload: MAX_FRAME_BYTES } });
+    await app.register(authRoutes, services);
+    await app.register(deviceRoutes, services);
+    await app.register(agentRoutes, services);
+    await app.register(sessionRoutes, services);
+    await app.register(agentGateway, services);
+    await app.register(clientGateway, services);
+    await app.register(retentionJob, services);
   }
 
   app.setNotFoundHandler((_req, reply) => reply.code(404).send({ error: 'not_found' }));

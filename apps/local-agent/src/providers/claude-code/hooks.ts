@@ -3,11 +3,13 @@ import { createHash } from 'node:crypto';
 import { truncate, type SessionRegistry } from '../../sessions/registry.js';
 import type { ApprovalBroker } from '../../approvals.js';
 import type { ObservedInstructions } from './instructions.js';
+import type { IdleWake } from './wake.js';
 import { summarizeToolInput, summarizeToolOutput, toolKey } from './summarize.js';
 
 /** JSON a hook may print to answer Claude Code: Stop (deliver an instruction) or PermissionRequest (remote decision). */
 export type HookOutput =
   | { decision: 'block'; reason: string }
+  | { hookSpecificOutput: { hookEventName: 'UserPromptSubmit'; additionalContext: string } }
   | {
       hookSpecificOutput: {
         hookEventName: 'PermissionRequest';
@@ -23,10 +25,13 @@ export const OBSERVED_WITH_HOOKS: SessionCapabilities = CLAUDE_CODE_CAPABILITIES
 export function observedCapabilities(
   instructionsAllowed: boolean,
   remoteApprovalAllowed = false,
+  wakeIdleAllowed = false,
 ): SessionCapabilities {
   return {
     ...OBSERVED_WITH_HOOKS,
     instructBetweenTurns: instructionsAllowed,
+    // With wake on, an idle session takes an instruction at once (a busy one: after its turn).
+    instructAnytime: instructionsAllowed && wakeIdleAllowed,
     remoteApproval: remoteApprovalAllowed,
   };
 }
@@ -63,6 +68,8 @@ export class ClaudeHookHandler {
     private readonly opts: {
       instructions?: ObservedInstructions;
       instructionsAllowed?: () => boolean;
+      wakeIdleAllowed?: () => boolean;
+      wake?: IdleWake;
       approvals?: ApprovalBroker;
       remoteApprovalAllowed?: () => boolean;
       /** Remote approval allowed AND the user is away: hold permission requests for Pocket Agent. */
@@ -76,6 +83,7 @@ export class ClaudeHookHandler {
     return observedCapabilities(
       this.opts.instructionsAllowed?.() ?? false,
       this.opts.remoteApprovalAllowed?.() ?? false,
+      this.opts.wakeIdleAllowed?.() ?? false,
     );
   }
 
@@ -103,6 +111,7 @@ export class ClaudeHookHandler {
       }
       this.forget(sessionId);
       this.opts.instructions?.onSessionEnd(sessionId);
+      this.opts.wake?.onSessionEnd(sessionId);
       this.registry.end(sessionId, s(p['reason']) ?? 'ended');
       return;
     }
@@ -115,10 +124,19 @@ export class ClaudeHookHandler {
         break;
 
       case 'UserPromptSubmit': {
+        // A turn sent from Pocket Agent is running in this session right now: hold the PC's prompt
+        // back rather than let two copies of the conversation diverge.
+        const busy = this.opts.wake?.blockPrompt(sessionId);
+        if (busy) return { decision: 'block', reason: busy };
         const prompt = s(p['prompt']) ?? '';
         this.resolvePending(sessionId);
         this.registry.event(sessionId, 'agent.output', { role: 'user', text: truncate(prompt) });
         this.registry.setStatus(sessionId, 'Running', firstLine(prompt));
+        // Tell Claude (in the editor) what was done through Pocket Agent while it was idle.
+        const catchUp = this.opts.wake?.catchUp(sessionId);
+        if (catchUp) {
+          return { hookSpecificOutput: { hookEventName: 'UserPromptSubmit', additionalContext: catchUp } };
+        }
         break;
       }
 

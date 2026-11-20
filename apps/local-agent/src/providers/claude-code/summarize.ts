@@ -12,6 +12,25 @@ const num = (v: unknown): number | undefined => (typeof v === 'number' ? v : und
 const len = (v: unknown): number | undefined => (typeof v === 'string' ? v.length : undefined);
 const clean = (o: Json): Json => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined));
 
+/** AskUserQuestion questions, bounded: at most 4 questions × 6 options, short strings. */
+function questions(v: unknown): Json[] | undefined {
+  if (!Array.isArray(v)) return undefined;
+  return v.slice(0, 4).map((q) => {
+    const o = (q && typeof q === 'object' ? q : {}) as Json;
+    return clean({
+      question: str(o['question'], 500),
+      header: str(o['header'], 40),
+      multiSelect: o['multiSelect'] === true || undefined,
+      options: Array.isArray(o['options'])
+        ? o['options'].slice(0, 6).map((opt) => {
+            const x = (opt && typeof opt === 'object' ? opt : {}) as Json;
+            return clean({ label: str(x['label'], 120), description: str(x['description'], 300) });
+          })
+        : undefined,
+    });
+  });
+}
+
 export function summarizeToolInput(toolName: string, raw: unknown): string {
   const i = (raw && typeof raw === 'object' ? raw : {}) as Json;
   let out: Json;
@@ -59,6 +78,10 @@ export function summarizeToolInput(toolName: string, raw: unknown): string {
     case 'Agent':
       out = { description: str(i['description']), subagent_type: str(i['subagent_type'], 100) };
       break;
+    case 'AskUserQuestion':
+      // Claude's question to the user is conversation (like its replies), so the text is forwarded.
+      out = { questions: questions(i['questions']) };
+      break;
     case 'TodoWrite':
       out = { todos: Array.isArray(i['todos']) ? i['todos'].length : undefined };
       break;
@@ -69,8 +92,21 @@ export function summarizeToolInput(toolName: string, raw: unknown): string {
   return truncate(JSON.stringify(clean(out)), 4000);
 }
 
-/** Output shown in the timeline. Only command output is forwarded (it is the "terminal output"). */
+/**
+ * Output shown in the timeline. Only command output (the "terminal output") and the user's own
+ * answers to Claude's questions are forwarded.
+ */
 export function summarizeToolOutput(toolName: string, raw: unknown): string {
+  if (toolName === 'AskUserQuestion') {
+    const answers = raw && typeof raw === 'object' ? (raw as Json)['answers'] : undefined;
+    if (!answers || typeof answers !== 'object') return '';
+    const out = Object.fromEntries(
+      Object.entries(answers as Json)
+        .slice(0, 4)
+        .map(([q, a]) => [truncate(q, 500), typeof a === 'string' ? truncate(a, 500) : ''] as const),
+    );
+    return truncate(JSON.stringify({ answers: out }), 4000);
+  }
   if (toolName === 'Bash' || toolName === 'PowerShell') {
     if (raw && typeof raw === 'object') {
       const r = raw as Json;

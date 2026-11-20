@@ -55,6 +55,99 @@ interface Managed {
  * mid-turn waits for that turn to finish (or for an interrupt). That keeps "this instruction
  * completed" meaningful.
  */
+/**
+ * Permission gate for turns Pocket Agent runs through the SDK (managed sessions and woken idle
+ * sessions). Claude Code's own permission rules apply first; anything that would ask goes to
+ * Pocket Agent only if the PC owner enabled remote approval — otherwise it is denied, never allowed.
+ */
+export function approvalGate(
+  registry: SessionRegistry,
+  id: string,
+  approvals: ManagedApprovalOptions | undefined,
+  now: () => number,
+): CanUseTool {
+  return async (toolName, toolInput, { toolUseID, signal }) => {
+    const inputSummary = summarizeToolInput(toolName, toolInput);
+    const remote = !!approvals?.enabled();
+    const waitMs = approvals?.waitMs ?? APPROVAL_WAIT_MS.managed;
+    registry.event(id, 'agent.permission.requested', {
+      toolUseId: toolUseID,
+      toolName,
+      input: inputSummary,
+      requestId: toolUseID,
+      ...(remote ? { awaitingRemote: true, expiresAt: new Date(now() + waitMs).toISOString() } : {}),
+    });
+    if (!remote) {
+      // No approval channel: deny, never allow.
+      registry.event(id, 'agent.permission.resolved', { requestId: toolUseID, outcome: 'auto_denied' });
+      return { behavior: 'deny', message: NO_APPROVAL_CHANNEL };
+    }
+    registry.setStatus(id, 'WaitingForPermission');
+    const broker = approvals!.broker;
+    const onAbort = () => broker.cancel(toolUseID); // interrupted / stopped
+    signal.addEventListener('abort', onAbort, { once: true });
+    const decision = await broker.wait(toolUseID, waitMs);
+    signal.removeEventListener('abort', onAbort);
+    if (!decision) {
+      const outcome = signal.aborted ? 'cancelled' : 'timeout';
+      registry.event(id, 'agent.permission.resolved', { requestId: toolUseID, outcome });
+      return { behavior: 'deny', message: NO_DECISION_IN_TIME };
+    }
+    registry.event(id, 'agent.permission.resolved', { requestId: toolUseID, outcome: 'remote' });
+    registry.setStatus(id, 'Running');
+    // Exactly what Claude asked for — the input is passed back unchanged, never modified.
+    return decision.behavior === 'allow'
+      ? { behavior: 'allow', updatedInput: toolInput }
+      : { behavior: 'deny', message: decision.message };
+  };
+}
+
+/** Reports Claude's text and tool calls/results from an SDK stream as session events. */
+export function reportSdkMessage(
+  registry: SessionRegistry,
+  id: string,
+  toolNames: Map<string, string>,
+  msg: SDKMessage,
+): void {
+  if (msg.type === 'assistant') {
+    for (const block of msg.message.content) {
+      if (block.type === 'text' && block.text.trim()) {
+        registry.event(id, 'agent.output', { role: 'assistant', text: truncate(block.text) });
+      } else if (block.type === 'tool_use') {
+        toolNames.set(block.id, block.name);
+        registry.event(id, 'agent.tool.started', {
+          toolUseId: block.id,
+          toolName: block.name,
+          input: summarizeToolInput(block.name, block.input),
+        });
+      }
+    }
+    return;
+  }
+  if (msg.type !== 'user') return;
+  const content = msg.message.content;
+  if (!Array.isArray(content)) return;
+  for (const block of content) {
+    if (typeof block !== 'object' || block.type !== 'tool_result') continue;
+    const toolName = toolNames.get(block.tool_use_id) ?? 'unknown';
+    const text =
+      typeof block.content === 'string'
+        ? block.content
+        : Array.isArray(block.content)
+          ? block.content.map((c) => ('text' in c && typeof c.text === 'string' ? c.text : '')).join('\n')
+          : '';
+    const base = { toolUseId: block.tool_use_id, toolName, input: '{}' };
+    if (block.is_error) {
+      registry.event(id, 'agent.tool.failed', { ...base, error: truncate(text || 'Tool failed', 2000) });
+    } else {
+      registry.event(id, 'agent.tool.completed', {
+        ...base,
+        output: summarizeToolOutput(toolName, { stdout: text }),
+      });
+    }
+  }
+}
+
 export class ManagedSessions {
   private readonly sessions = new Map<string, Managed>();
 
@@ -125,43 +218,7 @@ export class ManagedSessions {
       'managed',
     );
 
-    const canUseTool: CanUseTool = async (toolName, toolInput, { toolUseID, signal }) => {
-      const inputSummary = summarizeToolInput(toolName, toolInput);
-      const remote = !!this.approvals?.enabled();
-      const waitMs = this.approvals?.waitMs ?? APPROVAL_WAIT_MS.managed;
-      this.registry.event(id, 'agent.permission.requested', {
-        toolUseId: toolUseID,
-        toolName,
-        input: inputSummary,
-        requestId: toolUseID,
-        ...(remote ? { awaitingRemote: true, expiresAt: new Date(this.now() + waitMs).toISOString() } : {}),
-      });
-      if (!remote) {
-        // No approval channel: deny, never allow.
-        this.registry.event(id, 'agent.permission.resolved', {
-          requestId: toolUseID,
-          outcome: 'auto_denied',
-        });
-        return { behavior: 'deny', message: NO_APPROVAL_CHANNEL };
-      }
-      this.registry.setStatus(id, 'WaitingForPermission');
-      const broker = this.approvals!.broker;
-      const onAbort = () => broker.cancel(toolUseID); // interrupted / stopped
-      signal.addEventListener('abort', onAbort, { once: true });
-      const decision = await broker.wait(toolUseID, waitMs);
-      signal.removeEventListener('abort', onAbort);
-      if (!decision) {
-        const outcome = signal.aborted ? 'cancelled' : 'timeout';
-        this.registry.event(id, 'agent.permission.resolved', { requestId: toolUseID, outcome });
-        return { behavior: 'deny', message: NO_DECISION_IN_TIME };
-      }
-      this.registry.event(id, 'agent.permission.resolved', { requestId: toolUseID, outcome: 'remote' });
-      this.registry.setStatus(id, 'Running');
-      // Exactly what Claude asked for — the input is passed back unchanged, never modified.
-      return decision.behavior === 'allow'
-        ? { behavior: 'allow', updatedInput: toolInput }
-        : { behavior: 'deny', message: decision.message };
-    };
+    const canUseTool = approvalGate(this.registry, id, this.approvals, this.now);
 
     m.query = this.query({
       prompt: this.messages(id, m),
@@ -282,48 +339,9 @@ export class ManagedSessions {
         if (msg.subtype === 'init') this.registry.setStatus(id, 'Running');
         return;
       case 'assistant':
-        for (const block of msg.message.content) {
-          if (block.type === 'text' && block.text.trim()) {
-            this.registry.event(id, 'agent.output', { role: 'assistant', text: truncate(block.text) });
-          } else if (block.type === 'tool_use') {
-            m.toolNames.set(block.id, block.name);
-            this.registry.event(id, 'agent.tool.started', {
-              toolUseId: block.id,
-              toolName: block.name,
-              input: summarizeToolInput(block.name, block.input),
-            });
-          }
-        }
+      case 'user':
+        reportSdkMessage(this.registry, id, m.toolNames, msg);
         return;
-      case 'user': {
-        const content = msg.message.content;
-        if (!Array.isArray(content)) return;
-        for (const block of content) {
-          if (typeof block !== 'object' || block.type !== 'tool_result') continue;
-          const toolName = m.toolNames.get(block.tool_use_id) ?? 'unknown';
-          const text =
-            typeof block.content === 'string'
-              ? block.content
-              : Array.isArray(block.content)
-                ? block.content
-                    .map((c) => ('text' in c && typeof c.text === 'string' ? c.text : ''))
-                    .join('\n')
-                : '';
-          const base = { toolUseId: block.tool_use_id, toolName, input: '{}' };
-          if (block.is_error) {
-            this.registry.event(id, 'agent.tool.failed', {
-              ...base,
-              error: truncate(text || 'Tool failed', 2000),
-            });
-          } else {
-            this.registry.event(id, 'agent.tool.completed', {
-              ...base,
-              output: summarizeToolOutput(toolName, { stdout: text }),
-            });
-          }
-        }
-        return;
-      }
       case 'result':
         if (msg.subtype === 'success') {
           this.registry.setStatus(id, 'WaitingForInput');

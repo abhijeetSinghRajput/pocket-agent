@@ -3,6 +3,7 @@ import { isAllowedProject, type Policy } from './policy.js';
 import type { CommandAck } from './providers/claude-code/instructions.js';
 import type { ObservedInstructions } from './providers/claude-code/instructions.js';
 import type { ManagedSessions } from './providers/claude-code/managed.js';
+import type { IdleWake } from './providers/claude-code/wake.js';
 import type { SessionRegistry } from './sessions/registry.js';
 
 type CommandExecute = Extract<BackendToAgent, { eventType: 'command.execute' }>;
@@ -27,6 +28,7 @@ export class CommandRouter {
       registry: SessionRegistry;
       managed: ManagedSessions;
       observed: ObservedInstructions;
+      wake?: IdleWake;
       policy: () => Policy;
       ack: FullAck;
       log?: (level: 'info' | 'warn' | 'error', msg: string) => void;
@@ -72,7 +74,17 @@ export class CommandRouter {
           }
           if (!this.deps.policy().observedInstructions) return fail('instructions_disabled_on_pc');
           if (!s.sources.has('hooks')) return fail('hooks_not_connected');
-          this.deps.observed.enqueue(sid, { commandId: p.commandId, text: p.text, expiresAt });
+          const item = { commandId: p.commandId, text: p.text, expiresAt };
+          // Idle (or already woken): run it now instead of waiting for the next turn on the PC.
+          const wake = this.deps.wake;
+          if (
+            wake &&
+            this.deps.policy().wakeIdle &&
+            (wake.isRunning(sid) || s.status === 'WaitingForInput')
+          ) {
+            return wake.run(sid, s.projectPath, item);
+          }
+          this.deps.observed.enqueue(sid, item);
           return;
         }
 

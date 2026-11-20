@@ -44,7 +44,7 @@ mechanisms. Pocket Agent models this explicitly, and the UI shows each session's
 | Discovery | Known from creation | `SessionStart` hook; best-effort scan of `~/.claude/sessions/*.json` (undocumented) |
 | Live status, tool events | Yes (SDK message stream) | Yes (hooks) |
 | Remote approve/deny | Yes, via `canUseTool`. No timeout, so the request can wait indefinitely | Yes, via `PermissionRequest` hook (bounded by hook timeout) |
-| Send instruction anytime | **Yes**, as an SDK streaming input message | **Only at the end of a turn.** It is queued and delivered through `Stop` → `{"decision":"block","reason":…}`. It cannot wake an already-idle session |
+| Send instruction anytime | **Yes**, as an SDK streaming input message | **At the end of a turn**, through `Stop` → `{"decision":"block","reason":…}`. **While idle**, only with the PC opt-in `instructions wake enable`: the Local Agent resumes the same session through the SDK (`resume: <session id>`) for one turn (see "Waking idle observed sessions") |
 | Interrupt / stop | Yes (`interrupt()`, abort) | No supported mechanism |
 | Conversation history | SDK stream | Transcript JSONL (`transcript_path` from hook input) |
 
@@ -159,8 +159,24 @@ Agent SDK query() ◄── `pocket-agent run` ──► ManagedSessions ──�
 - **Managed sessions** run one instruction per turn, so "completed" refers to a real turn. `interrupt` uses the SDK's
   `query.interrupt()`, and stop aborts the session.
 - **Observed sessions** get an instruction when Claude's turn ends. The Stop hook answers `decision: "block"` with the
-  instruction as the reason, verified with real Claude Code to continue in the same session. An idle session can't be woken;
-  the UI says so.
+  instruction as the reason, verified with real Claude Code to continue in the same session. An idle session can be woken
+  only with the PC opt-in below; otherwise the instruction waits (and may expire), and the UI says so.
+
+### Waking idle observed sessions (as built)
+
+Claude Code has no supported way to push a prompt into an idle interactive session. With the PC opt-in
+`pocket-agent instructions wake enable` (off by default; it also enables `instructions`), an instruction to an observed
+session that is `WaitingForInput` runs at once: the Local Agent calls the Agent SDK with `resume: <session id>`, one turn
+per instruction, queued while one runs. Verified with real Claude Code: the same session id continues with its full
+history, and a message sent in the browser gets Claude's answer in the chat.
+
+- Permissions are never widened. The user's Claude Code settings (all sources) apply first; anything that would ask goes to
+  Pocket Agent only if remote approval is enabled on the PC, otherwise it is denied (the managed-session gate).
+- The turn reports through the SDK stream; its own hooks are skipped (`POCKET_AGENT_MANAGED_SESSION`), so nothing is
+  counted twice. A busy session is never woken: its instruction still waits for the `Stop` hook.
+- The editor keeps its own in-memory copy of the conversation and doesn't see these turns (verified). So while a woken turn
+  runs, a prompt typed on the PC is held back (`UserPromptSubmit` → `decision: "block"` with the reason), and the next
+  prompt typed on the PC receives a summary of the remote turns as `additionalContext`.
 
 ### M5 implementation notes (as built)
 
@@ -292,7 +308,8 @@ overlapping sources of truth.
 
 ## 11. Known limitations (stated in the product)
 
-- Observed sessions cannot receive an instruction while idle, and cannot be interrupted remotely.
+- Observed sessions receive an instruction while idle only with the wake opt-in, and the editor doesn't show those turns
+  live (it gets a summary with its next prompt). They cannot be interrupted remotely.
 - Discovery of sessions without Pocket Agent hooks depends on an undocumented Claude Code file. It is best-effort.
 - Approvals for observed sessions are bounded by the hook timeout. Requests that expire fall back to the local prompt.
 - Push notifications are best-effort. On iOS they require installing the PWA.

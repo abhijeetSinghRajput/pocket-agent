@@ -74,6 +74,7 @@ Without hooks, sessions you start yourself still appear, but with status only.
 pnpm pocket-agent projects add C:\path\to\project   # folders where the dashboard may start managed sessions
 pnpm pocket-agent projects list                     # (and `projects remove <folder>`)
 pnpm pocket-agent instructions enable               # optional: allow instructions to sessions YOU started
+pnpm pocket-agent instructions wake enable          # optional: run them at once when that session is idle
                                                  # (delivered when Claude finishes its current turn)
 ```
 

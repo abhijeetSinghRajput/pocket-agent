@@ -11,6 +11,7 @@ import { ClaudeHookHandler } from './providers/claude-code/hooks.js';
 import { claudeConfigDir, defaultSettingsPath, hooksStatus } from './providers/claude-code/install.js';
 import { ObservedInstructions } from './providers/claude-code/instructions.js';
 import { ManagedSessions, type QueryFn } from './providers/claude-code/managed.js';
+import { IdleWake } from './providers/claude-code/wake.js';
 import { SessionRegistry, type SessionEventOut } from './sessions/registry.js';
 
 export interface ServiceOptions {
@@ -37,13 +38,19 @@ export class AgentService {
   readonly registry: SessionRegistry;
   readonly managed: ManagedSessions;
   readonly observed: ObservedInstructions;
+  readonly wake: IdleWake;
   readonly link: AgentLink;
   readonly ingest: IngestServer;
   private readonly hooks: ClaudeHookHandler;
   private readonly discovery: ClaudeDiscovery;
   private readonly router: CommandRouter;
   private hooksInstalled = false;
-  private policy: Policy = { projects: [], observedInstructions: false, remoteApproval: false };
+  private policy: Policy = {
+    projects: [],
+    observedInstructions: false,
+    wakeIdle: false,
+    remoteApproval: false,
+  };
   /** Set from the dashboard (config.update). Only matters for sessions the user started. */
   private awayMode = false;
   readonly approvals = new ApprovalBroker();
@@ -59,9 +66,15 @@ export class AgentService {
       enabled: () => this.policy.remoteApproval,
     });
     this.observed = new ObservedInstructions(this.registry, ack);
+    this.wake = new IdleWake(this.registry, opts.query, ack, opts.log, Date.now, {
+      broker: this.approvals,
+      enabled: () => this.policy.remoteApproval,
+    });
     this.hooks = new ClaudeHookHandler(this.registry, this.managed.isManaged, {
       instructions: this.observed,
       instructionsAllowed: () => this.policy.observedInstructions,
+      wakeIdleAllowed: () => this.policy.observedInstructions && this.policy.wakeIdle,
+      wake: this.wake,
       approvals: this.approvals,
       remoteApprovalAllowed: () => this.policy.remoteApproval,
       holdForRemote: () => this.policy.remoteApproval && this.awayMode,
@@ -76,6 +89,7 @@ export class AgentService {
       registry: this.registry,
       managed: this.managed,
       observed: this.observed,
+      wake: this.wake,
       policy: () => this.policy,
       ack,
       log: opts.log,
@@ -187,6 +201,7 @@ export class AgentService {
     this.discovery.stop();
     if (this.expiryTimer) clearInterval(this.expiryTimer);
     this.approvals.cancelAll();
+    this.wake.stopAll();
     await this.managed.stopAll();
     const deadline = Date.now() + 2000;
     while (this.outbox.size && this.link.isOpen && Date.now() < deadline)

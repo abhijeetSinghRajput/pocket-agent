@@ -11,6 +11,11 @@ export const Policy = z.object({
   projects: z.array(z.object({ name: z.string(), path: z.string() })).default([]),
   /** Instructions to sessions the user started themselves (delivered between turns). Off by default. */
   observedInstructions: z.boolean().default(false),
+  /**
+   * An instruction to an idle session the user started is run at once, by resuming that session
+   * through the SDK (instead of waiting for the next turn on the PC). Needs observedInstructions. Off by default.
+   */
+  wakeIdle: z.boolean().default(false),
   /** Permission requests may be decided in Pocket Agent. Off by default. */
   remoteApproval: z.boolean().default(false),
 });

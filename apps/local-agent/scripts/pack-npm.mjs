@@ -52,6 +52,13 @@ const published = {
   os: ['win32', 'darwin', 'linux'],
   dependencies: { [SDK]: pkg.dependencies[SDK] },
   keywords: ['claude', 'claude-code', 'agent', 'remote', 'pocket-agent'],
+  repository: {
+    type: 'git',
+    url: 'git+https://github.com/abhijeetSinghRajput/pocket-agent.git',
+    directory: 'apps/local-agent',
+  },
+  homepage: 'https://github.com/abhijeetSinghRajput/pocket-agent#readme',
+  bugs: { url: 'https://github.com/abhijeetSinghRajput/pocket-agent/issues' },
   license: 'UNLICENSED',
 };
 await writeFile(path.join(out, 'package.json'), JSON.stringify(published, null, 2) + '\n');

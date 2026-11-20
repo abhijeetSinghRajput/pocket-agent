@@ -14,7 +14,8 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const out = path.join(root, 'npm');
 const args = process.argv.slice(2);
 const nameArg = args.indexOf('--name');
-const name = nameArg >= 0 ? args[nameArg + 1] : (process.env.POCKET_AGENT_NPM_NAME ?? '@mrcodium/pocket-agent');
+const name =
+  nameArg >= 0 ? args[nameArg + 1] : (process.env.POCKET_AGENT_NPM_NAME ?? '@mrcodium/pocket-agent');
 
 const pkg = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'));
 const SDK = '@anthropic-ai/claude-agent-sdk';

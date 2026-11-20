@@ -4,6 +4,9 @@
   "private": true,
   "type": "module",
   "description": "Pocket Agent web dashboard (desktop + mobile).",
+  "engines": {
+    "node": ">=24.7"
+  },
   "scripts": {
     "dev": "next dev --webpack --port 3000",
     "build": "next build --webpack",

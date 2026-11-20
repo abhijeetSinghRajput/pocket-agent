@@ -1,11 +1,11 @@
-# Render Blueprint: AgentDock API + Postgres + Redis (Key Value).
+# Render Blueprint: Pocket Agent API + Postgres + Redis (Key Value).
 # Create it in the Render dashboard: New → Blueprint → pick this repository.
 # Secrets are never in this file: values marked `sync: false` are entered in the dashboard, and the
 # Firebase key is uploaded as a Secret File named fcm.json (see docs/deployment.md).
 
 services:
   - type: web
-    name: agentdock-api
+    name: pocket-agent-api
     runtime: node
     # The API must stay running: PCs hold a WebSocket to it. Free instances sleep, so use a paid plan.
     plan: starter
@@ -14,8 +14,8 @@ services:
       corepack enable &&
       pnpm install --frozen-lockfile --prod=false &&
       pnpm build:packages &&
-      pnpm --filter @agentdock/api build
-    preDeployCommand: pnpm --filter @agentdock/api db:deploy
+      pnpm --filter @pocket-agent/api --fail-if-no-match build
+    preDeployCommand: pnpm --filter @pocket-agent/api --fail-if-no-match db:deploy
     startCommand: node apps/api/dist/server.js
     healthCheckPath: /health
     autoDeploy: true
@@ -30,14 +30,14 @@ services:
         value: info
       - key: DATABASE_URL
         fromDatabase:
-          name: agentdock-db
+          name: pocket-agent-db
           property: connectionString
       - key: REDIS_URL
         fromService:
           type: keyvalue
-          name: agentdock-redis
+          name: pocket-agent-redis
           property: connectionString
-      # The dashboard's origin, e.g. https://agentdock.vercel.app (comma-separate several).
+      # The dashboard's origin, e.g. https://pocket-agent.vercel.app (comma-separate several).
       - key: WEB_ORIGINS
         sync: false
       # Set to false after creating your own account, so nobody else can sign up.
@@ -48,7 +48,7 @@ services:
         value: /etc/secrets/fcm.json
 
   - type: keyvalue
-    name: agentdock-redis
+    name: pocket-agent-redis
     plan: free
     region: singapore
     # Only reachable from services in this Render account.
@@ -56,10 +56,10 @@ services:
     maxmemoryPolicy: noeviction
 
 databases:
-  - name: agentdock-db
+  - name: pocket-agent-db
     plan: basic-256mb
     region: singapore
-    databaseName: agentdock
+    databaseName: pocket_agent
     postgresMajorVersion: '17'
     # Only reachable from services in this Render account.
     ipAllowList: []

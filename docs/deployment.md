@@ -18,9 +18,9 @@ page asks `POST /api/ws/tickets` for a single-use ticket that lasts 60 seconds a
 
 | Resource | Plan | Why |
 |---|---|---|
-| `agentdock-api` web service | Starter (paid) | It must never sleep, because PCs keep a WebSocket open to it. |
-| `agentdock-db` Postgres | Basic 256 MB (paid) | Free Postgres databases are deleted after 30 days. |
-| `agentdock-redis` Key Value | Free | It only holds rate-limit counters, pub/sub and WebSocket tickets, so nothing needs to persist. |
+| `pocket-agent-api` web service | Starter (paid) | It must never sleep, because PCs keep a WebSocket open to it. |
+| `pocket-agent-db` Postgres | Basic 256 MB (paid) | Free Postgres databases are deleted after 30 days. |
+| `pocket-agent-redis` Key Value | Free | It only holds rate-limit counters, pub/sub and WebSocket tickets, so nothing needs to persist. |
 
 Vercel's Hobby plan is enough for the web app. Check current prices on render.com and vercel.com before creating anything.
 
@@ -28,13 +28,13 @@ Vercel's Hobby plan is enough for the web app. Check current prices on render.co
 
 1. Push this repository to GitHub. Render reads `render.yaml` from it.
 2. In Render: **New → Blueprint**, connect GitHub, pick the repository, and approve the three resources.
-3. When it asks for **`WEB_ORIGINS`**, enter the Vercel URL, for example `https://agentdock-xyz.vercel.app` (no trailing slash). If you
+3. When it asks for **`WEB_ORIGINS`**, enter the Vercel URL, for example `https://pocket-agent-xyz.vercel.app` (no trailing slash). If you
    don't know the URL yet, enter a placeholder and fix it after step 2 of the web app section.
-4. Go to **agentdock-api → Environment → Secret Files → Add**. Name the file `fcm.json` and paste the contents of the Firebase
+4. Go to **pocket-agent-api → Environment → Secret Files → Add**. Name the file `fcm.json` and paste the contents of the Firebase
    service-account JSON. Render mounts it at `/etc/secrets/fcm.json`, which `FCM_SERVICE_ACCOUNT_FILE` already points to.
    Without it, the API still runs, but notifications are in-app only.
 5. Deploys run `prisma migrate deploy` before starting the new version. Check the API at
-   `https://agentdock-api.onrender.com/health` (your service URL may differ).
+   `https://pocket-agent-api.onrender.com/health` (your service URL may differ).
 
 ## 2. Web on Vercel
 
@@ -45,9 +45,9 @@ Vercel's Hobby plan is enough for the web app. Check current prices on render.co
 | Variable | Value |
 |---|---|
 | `NEXT_PUBLIC_API_URL` | `/api` |
-| `API_PROXY_TARGET` | `https://agentdock-api.onrender.com` (your Render URL) |
-| `NEXT_PUBLIC_WS_URL` | `wss://agentdock-api.onrender.com/ws/client` |
-| `NEXT_PUBLIC_AGENT_API_URL` | `https://agentdock-api.onrender.com` |
+| `API_PROXY_TARGET` | `https://pocket-agent-api.onrender.com` (your Render URL) |
+| `NEXT_PUBLIC_WS_URL` | `wss://pocket-agent-api.onrender.com/ws/client` |
+| `NEXT_PUBLIC_AGENT_API_URL` | `https://pocket-agent-api.onrender.com` |
 | `NEXT_PUBLIC_FIREBASE_API_KEY`, `…_PROJECT_ID`, `…_MESSAGING_SENDER_ID`, `…_APP_ID` | from the Firebase web app (the same values as `apps/web/.env.local`) |
 | `NEXT_PUBLIC_FIREBASE_VAPID_KEY` | Firebase → Project settings → Cloud Messaging → Web Push certificates |
 
@@ -60,15 +60,15 @@ Vercel's Hobby plan is enough for the web app. Check current prices on render.co
 1. Open the Vercel URL on your phone and create your account.
 2. On Render, set `REGISTRATION_ENABLED=false`, so nobody else can sign up on your instance.
 3. **Settings → Notifications → Enable push on this device → Send test notification.**
-   On iPhone, first use Share → **Add to Home Screen**, then open AgentDock from the Home Screen.
+   On iPhone, first use Share → **Add to Home Screen**, then open Pocket Agent from the Home Screen.
 
 ## 4. Point your PC at it
 
 ```bash
-pnpm --filter @agentdock/local-agent build
-pnpm agentdock unpair                      # if it was paired with your local API
-pnpm agentdock pair <CODE> --api https://agentdock-api.onrender.com
-pnpm agentdock start
+pnpm --filter @pocket-agent/local-agent build
+pnpm pocket-agent unpair                      # if it was paired with your local API
+pnpm pocket-agent pair <CODE> --api https://pocket-agent-api.onrender.com
+pnpm pocket-agent start
 ```
 
 The **Add device** dialog in the deployed dashboard shows this command with the right URL.

@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { stat } from 'node:fs/promises';
 import path from 'node:path';
 import { truncate, type SessionRegistry } from '../../sessions/registry.js';
+import type { CommandAck } from './instructions.js';
 import { summarizeToolInput, summarizeToolOutput } from './summarize.js';
 
 export type QueryFn = (args: { prompt: AsyncIterable<SDKUserMessage>; options: Options }) => Query;
@@ -13,18 +14,34 @@ export const NO_APPROVAL_CHANNEL =
   'AgentDock denied this action: remote approval is not available yet, and AgentDock never approves ' +
   'actions on its own. Continue without it, or ask the user to run this step themselves.';
 
+interface Instruction {
+  text: string;
+  /** The command it came from (absent for local `agentdock run`). */
+  commandId?: string;
+  expiresAt?: number;
+}
+
 interface Managed {
-  inbox: string[];
+  inbox: Instruction[];
+  /** The instruction Claude is working on now (one turn at a time). */
+  current: Instruction | null;
+  turnActive: boolean;
   wake: (() => void) | null;
   closed: boolean;
+  interrupted: boolean;
   abort: AbortController;
+  query: Query | null;
   toolNames: Map<string, string>;
 }
 
 /**
  * Sessions AgentDock starts itself with the Claude Agent SDK: full control (instructions at any
- * time, interrupt), and their events come from the SDK stream rather than hooks.
+ * time, interrupt, stop), and their events come from the SDK stream rather than hooks.
  * Claude Code's own settings (user/project/local) still apply — permission rules included.
+ *
+ * One instruction per turn: an instruction sent while Claude is idle starts a turn at once; one sent
+ * mid-turn waits for that turn to finish (or for an interrupt). That keeps "this instruction
+ * completed" meaningful.
  */
 export class ManagedSessions {
   private readonly sessions = new Map<string, Managed>();
@@ -33,6 +50,8 @@ export class ManagedSessions {
     private readonly registry: SessionRegistry,
     private readonly query: QueryFn,
     private readonly log: (level: 'info' | 'warn' | 'error', msg: string) => void = () => undefined,
+    private readonly ack: CommandAck = () => undefined,
+    private readonly now: () => number = Date.now,
   ) {}
 
   isManaged = (id: string) => this.sessions.has(id);
@@ -41,7 +60,13 @@ export class ManagedSessions {
     return [...this.sessions.keys()];
   }
 
-  async start(input: { projectPath: string; prompt: string; model?: string }): Promise<string> {
+  /** Starts a session. The first instruction may carry the session.start command id. */
+  async start(input: {
+    projectPath: string;
+    prompt: string;
+    model?: string;
+    commandId?: string;
+  }): Promise<string> {
     const projectPath = path.resolve(input.projectPath);
     const st = await stat(projectPath).catch(() => null);
     if (!st?.isDirectory()) throw new Error(`Not a directory: ${projectPath}`);
@@ -50,9 +75,13 @@ export class ManagedSessions {
     const id = randomUUID();
     const m: Managed = {
       inbox: [],
+      current: null,
+      turnActive: false,
       wake: null,
       closed: false,
+      interrupted: false,
       abort: new AbortController(),
+      query: null,
       toolNames: new Map(),
     };
     this.sessions.set(id, m);
@@ -83,7 +112,7 @@ export class ManagedSessions {
       return { behavior: 'deny', message: NO_APPROVAL_CHANNEL };
     };
 
-    const q = this.query({
+    m.query = this.query({
       prompt: this.messages(id, m),
       options: {
         cwd: projectPath,
@@ -97,19 +126,32 @@ export class ManagedSessions {
       },
     });
 
-    this.send(id, input.prompt);
-    void this.consume(id, m, q);
+    // The session.start command is already reported Executing by the caller (with the new id).
+    this.enqueue(
+      id,
+      m,
+      { text: input.prompt, ...(input.commandId ? { commandId: input.commandId } : {}) },
+      false,
+    );
+    void this.consume(id, m, m.query);
     return id;
   }
 
-  /** Queues an instruction; it is delivered as the session's next user message. */
-  send(id: string, text: string): boolean {
+  /** Queues an instruction; it runs as soon as Claude isn't busy with another one. */
+  send(id: string, text: string, command?: { commandId: string; expiresAt: number }): boolean {
     const m = this.sessions.get(id);
     if (!m || m.closed) return false;
-    m.inbox.push(text);
-    this.registry.event(id, 'agent.output', { role: 'user', text: truncate(text) });
-    this.registry.setStatus(id, 'Running', truncate(text.trim().split(/\r?\n/)[0] ?? '', 200));
-    m.wake?.();
+    this.enqueue(id, m, { text, ...command }, true);
+    return true;
+  }
+
+  /** Stops the current turn; the session stays open for further instructions. */
+  async interrupt(id: string): Promise<boolean> {
+    const m = this.sessions.get(id);
+    if (!m?.query || m.closed) return false;
+    if (!m.turnActive) return true; // nothing running: nothing to interrupt
+    m.interrupted = true;
+    await m.query.interrupt();
     return true;
   }
 
@@ -126,13 +168,39 @@ export class ManagedSessions {
     await Promise.all(this.ids().map((id) => this.stop(id)));
   }
 
-  private async *messages(_id: string, m: Managed): AsyncGenerator<SDKUserMessage> {
+  private enqueue(id: string, m: Managed, item: Instruction, ackAccepted: boolean): void {
+    m.inbox.push(item);
+    if (ackAccepted && item.commandId) this.ack(item.commandId, 'Accepted');
+    m.wake?.();
+  }
+
+  private async *messages(id: string, m: Managed): AsyncGenerator<SDKUserMessage> {
     for (;;) {
-      while (!m.inbox.length && !m.closed) await new Promise<void>((r) => (m.wake = r));
+      while ((m.turnActive || !m.inbox.length) && !m.closed) {
+        await new Promise<void>((r) => (m.wake = r));
+      }
       if (m.closed) return;
-      const text = m.inbox.shift()!;
-      yield { type: 'user', message: { role: 'user', content: text }, parent_tool_use_id: null };
+      const item = m.inbox.shift()!;
+      if (item.expiresAt !== undefined && item.expiresAt <= this.now()) {
+        if (item.commandId) this.ack(item.commandId, 'Expired');
+        continue; // never run an instruction late
+      }
+      m.current = item;
+      m.turnActive = true;
+      m.interrupted = false;
+      // session.start was already reported Executing; plain instructions are reported now.
+      if (item.commandId && item.expiresAt !== undefined) this.ack(item.commandId, 'Executing');
+      this.registry.event(id, 'agent.output', { role: 'user', text: truncate(item.text) });
+      this.registry.setStatus(id, 'Running', truncate(item.text.trim().split(/\r?\n/)[0] ?? '', 200));
+      yield { type: 'user', message: { role: 'user', content: item.text }, parent_tool_use_id: null };
     }
+  }
+
+  private finishTurn(m: Managed, outcome: 'Completed' | 'Failed', error?: string): void {
+    if (m.current?.commandId) this.ack(m.current.commandId, outcome, error ? { error } : {});
+    m.current = null;
+    m.turnActive = false;
+    m.wake?.();
   }
 
   private async consume(id: string, m: Managed, q: Query): Promise<void> {
@@ -148,6 +216,10 @@ export class ManagedSessions {
       }
     } finally {
       m.closed = true;
+      // Anything still waiting will never run.
+      if (m.current?.commandId) this.ack(m.current.commandId, 'Failed', { error: `session_${reason}` });
+      for (const item of m.inbox)
+        if (item.commandId) this.ack(item.commandId, 'Failed', { error: `session_${reason}` });
       this.sessions.delete(id);
       this.registry.end(id, reason);
     }
@@ -202,10 +274,17 @@ export class ManagedSessions {
         return;
       }
       case 'result':
-        if (msg.subtype === 'success') this.registry.setStatus(id, 'WaitingForInput');
-        else {
+        if (msg.subtype === 'success') {
+          this.registry.setStatus(id, 'WaitingForInput');
+          this.finishTurn(m, 'Completed');
+        } else if (m.interrupted) {
+          this.registry.event(id, 'agent.output', { role: 'system', text: 'Turn interrupted remotely' });
+          this.registry.setStatus(id, 'WaitingForInput');
+          this.finishTurn(m, 'Failed', 'interrupted');
+        } else {
           this.registry.event(id, 'agent.error', { message: `Turn ended: ${msg.subtype}` });
           this.registry.setStatus(id, 'Failed');
+          this.finishTurn(m, 'Failed', msg.subtype);
         }
         return;
       default:

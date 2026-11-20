@@ -30,6 +30,12 @@ export function toDeviceDto(d: Device): DeviceDto {
     createdAt: d.createdAt.toISOString(),
     revokedAt: d.revokedAt?.toISOString() ?? null,
     remoteApprovalEnabled: d.remoteApprovalEnabled,
+    projects: Array.isArray(d.projects)
+      ? (d.projects as Array<{ name?: unknown; path?: unknown }>)
+          .filter((p) => typeof p.name === 'string' && typeof p.path === 'string')
+          .map((p) => ({ name: p.name as string, path: p.path as string }))
+      : [],
+    observedInstructions: d.observedInstructions,
   };
 }
 

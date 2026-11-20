@@ -40,7 +40,7 @@ Proven on Claude Code 2.1.325 and Windows 11 (details in `poc/README.md`):
 
 **Accept:** pair the real Windows PC; it shows Online; stopping the agent → Offline within 45 s; a revoked device cannot reconnect.
 
-## M3 — Local Agent: Claude Code integration + monitoring ✅ done (2026-11-20, awaiting owner sign-off)
+## M3 — Local Agent: Claude Code integration + monitoring ✅ done (2026-11-20)
 
 - Hook relay + localhost ingest (token, Origin rejection), `agentdock hooks install|uninstall` (backup, merge, idempotent)
 - Event normalization (allow-list + truncation) → outbox → `agent.*` events with ack/dedupe
@@ -53,7 +53,7 @@ Proven on Claude Code 2.1.325 and Windows 11 (details in `poc/README.md`):
 
 **Accept:** a real VS Code session and a real managed session both appear with live status; tool events stream into the timeline; an agent reconnect creates no duplicate sessions or events.
 
-## M4 — Remote instructions
+## M4 — Remote instructions ✅ done (2026-11-20, awaiting owner sign-off)
 
 - Command lifecycle + idempotency key; `command.execute` routing; offline → immediate `Failed(device_offline)`
 - Managed: inbox delivery, `interrupt`/stop, live assistant output

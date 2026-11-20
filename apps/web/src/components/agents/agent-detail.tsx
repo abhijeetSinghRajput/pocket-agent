@@ -7,6 +7,7 @@ import { useCallback } from 'react';
 import { duration } from '@/components/agents/agents-view';
 import { CapabilityList } from '@/components/agents/capabilities';
 import { SessionKindBadge, SessionStatusBadge, sessionKind } from '@/components/agents/session-badges';
+import { RemoteControl } from '@/components/agents/remote-control';
 import { Timeline } from '@/components/agents/timeline';
 import { Button } from '@/components/ui/button';
 import { Card, CardTitle } from '@/components/ui/card';
@@ -97,7 +98,16 @@ export function AgentDetail({ id }: { id: string }) {
       </header>
 
       <div className="grid gap-4 lg:grid-cols-[1fr_300px]">
-        <Card className="order-2 lg:order-1">
+        <div className="lg:col-start-1">
+          <RemoteControl
+            session={s}
+            onChange={() => {
+              void refresh();
+              void feed.refreshHead();
+            }}
+          />
+        </div>
+        <Card className="lg:col-start-1">
           <CardTitle>Activity</CardTitle>
           {feed.status === 'loading' ? (
             <div className="h-32 animate-pulse rounded-md bg-muted" aria-busy="true" />
@@ -123,7 +133,7 @@ export function AgentDetail({ id }: { id: string }) {
           )}
         </Card>
 
-        <Card className="order-1 h-fit lg:order-2">
+        <Card className="h-fit lg:col-start-2 lg:row-span-2 lg:row-start-1">
           <div>
             <CardTitle>What you can do here</CardTitle>
             <p className="mt-1.5 text-xs text-muted-foreground">{sessionKind(s).hint}</p>

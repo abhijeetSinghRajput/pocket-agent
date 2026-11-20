@@ -19,8 +19,8 @@ gateway that carries them is built in M2 (`/ws/agent`) and M3 (`/ws/client`).
 
 | Direction | Events |
 |---|---|
-| Local Agent → API | `device.connected`, `device.heartbeat`, `agent.session.started`, `agent.session.updated`, `agent.session.ended`, `agent.tool.started`, `agent.tool.completed`, `agent.tool.failed`, `agent.permission.requested`, `agent.permission.resolved`, `agent.output`, `agent.error`, `command.ack`, `approval.decision.ack` |
-| API → Local Agent | `command.execute` (`instruction` / `session.start`), `command.stop`, `approval.decision` (`allow` / `deny` only), `device.revoke`, `config.update` (`remoteApprovalEnabled`, `awayMode`), `ack` |
+| Local Agent → API | `device.connected`, `device.heartbeat`, `agent.session.started`, `agent.session.updated`, `agent.session.ended`, `agent.tool.started`, `agent.tool.completed`, `agent.tool.failed`, `agent.permission.requested`, `agent.permission.resolved`, `agent.output`, `agent.error`, `agent.sessions.snapshot`, `device.settings`, `command.ack`, `approval.decision.ack` |
+| API → Local Agent | `command.execute` (`instruction` / `session.start` / `interrupt` / `session.stop`), `approval.decision` (`allow` / `deny` only), `device.revoke`, `config.update` (`remoteApprovalEnabled`, `awayMode`), `ack` |
 | API → Web | `device.status.changed`, `agent.status.changed`, `agent.event.created`, `command.status.changed`, `approval.created`, `approval.updated`, `notification.created` |
 
 `approval.decision` can carry only `allow` or `deny`. The protocol has no way to express "always allow"
@@ -40,6 +40,22 @@ or modified input, so AgentDock cannot weaken local Claude Code permissions.
 - An event for a session the API was never told about is acknowledged and dropped.
 - `agent.permission.resolved.outcome`: `local` = answered on the PC, `auto_denied` = denied because no approval channel
   exists yet (managed sessions before M5; never auto-allowed), `remote` / `timeout` / `cancelled` arrive in M5.
+
+## Commands (M4)
+
+- `command.execute {commandId, commandType, …, expiresAt}`: session-scoped commands name the target in the envelope's
+  `sessionId` (the `externalSessionId`). The API sends it to whichever instance holds the device's socket, using Redis
+  pub/sub. When the PC reconnects, commands still `Pending` are sent again.
+- The PC runs each `commandId` at most once, drops anything past `expiresAt`, and checks its local policy (project allow-list,
+  observed-instructions switch) **before** anything runs. It reports progress with `command.ack {commandId, status, error?, externalSessionId?}`,
+  which goes through the same outbox as session events. The API applies a report only if it moves the command forward in the state
+  machine, and only for the device that owns the command.
+- `device.settings {projects, observedInstructions}` is sent after every connect and whenever the PC policy changes. The
+  backend stores it for display only.
+- **Observed sessions** get instructions through the Stop hook. When Claude finishes a turn, the relay answers
+  `{"decision":"block","reason":"New instruction from the user, sent remotely through AgentDock: …"}` and Claude continues
+  in the same session. The next Stop marks the instruction `Completed`. This is the only hook AgentDock ever answers.
+- **Managed sessions** run one instruction per turn. An instruction sent mid-turn waits for the turn to end, or for `interrupt`.
 
 ## `/ws/client` (browser, M3)
 

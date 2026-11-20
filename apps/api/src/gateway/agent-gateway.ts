@@ -5,6 +5,7 @@ import type { WebSocket } from 'ws';
 import { authenticateDevice } from '../auth/device-auth.js';
 import { redisKey, type AppContext } from '../context.js';
 import { Prisma, type Device } from '../generated/prisma/client.js';
+import { applyCommandAck, resendPending } from '../commands/service.js';
 import { CHANNELS, notifyUser, type Bus } from '../realtime/bus.js';
 import {
   ingestSessionEvent,
@@ -74,6 +75,13 @@ export async function agentGateway(app: FastifyInstance, ctx: GatewayServices): 
     await markDeviceSessionsDisconnected(ctx, deviceId);
     await deviceChanged(deviceId);
   };
+
+  // Commands are created on any instance; the one holding the device's socket delivers them.
+  ctx.bus.on(CHANNELS.agentCommands, (raw) => {
+    const { deviceId, frame } = JSON.parse(raw) as { deviceId: string; frame: unknown };
+    const socket = sockets.get(deviceId);
+    if (socket) send(socket, frame);
+  });
 
   ctx.bus.on(CHANNELS.deviceRevoked, (deviceId) => {
     const socket = sockets.get(deviceId);
@@ -193,7 +201,21 @@ export async function agentGateway(app: FastifyInstance, ctx: GatewayServices): 
           return;
         }
 
-        // command.ack / approval.decision.ack are processed from M4/M5 on.
+        if (msg.eventType === 'command.ack') {
+          await applyCommandAck(ctx, device, msg.payload);
+          return ack(msg.eventId);
+        }
+
+        if (msg.eventType === 'device.settings') {
+          await ctx.prisma.device.updateMany({
+            where: { id: device.id, revokedAt: null },
+            data: { projects: msg.payload.projects, observedInstructions: msg.payload.observedInstructions },
+          });
+          void deviceChanged(device.id);
+          return ack(msg.eventId);
+        }
+
+        // approval.decision.ack is processed from M5 on.
         log.debug({ eventType: msg.eventType }, 'event not handled yet');
       };
 
@@ -221,7 +243,11 @@ export async function agentGateway(app: FastifyInstance, ctx: GatewayServices): 
       });
 
       log.info('agent connected');
-      void touch().then((ok) => (ok ? deviceChanged(device.id) : closeRevoked(socket)));
+      void touch().then(async (ok) => {
+        if (!ok) return closeRevoked(socket);
+        await deviceChanged(device.id);
+        await resendPending(ctx, device.id).catch((err: unknown) => log.warn({ err }, 'resend failed'));
+      });
     },
   );
 }

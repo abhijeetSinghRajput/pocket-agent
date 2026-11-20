@@ -1,6 +1,6 @@
 // Full stack: browser ↔ real API ↔ real Local Agent CLI (DPAPI credentials, outbound WebSocket).
 import { expect, test } from '@playwright/test';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { agentEnv, CLI, startAgent } from './agent';
 import { API, registerViaApi } from './helpers';
 
@@ -28,10 +28,15 @@ test('pair a real Local Agent, watch it go online/offline, then revoke it', asyn
   await expect(page.getByText('is paired')).toBeVisible({ timeout: 10_000 });
   await page.getByRole('button', { name: 'Done' }).click();
 
-  // The code is single-use.
-  expect(() =>
-    execFileSync(process.execPath, [CLI, 'pair', code, '--api', API], { env: agentEnv(), stdio: 'pipe' }),
-  ).toThrow();
+  // The code is single-use — and the CLI reports that cleanly (exit 1, no crash; this used to
+  // crash on Windows with a libuv assertion when exiting with an open fetch connection).
+  const reuse = spawnSync(process.execPath, [CLI, 'pair', code, '--api', API], {
+    env: agentEnv(),
+    encoding: 'utf8',
+  });
+  expect(reuse.status).toBe(1);
+  expect(reuse.stderr).toContain('invalid or has expired');
+  expect(reuse.stderr).not.toContain('Assertion failed');
 
   const row = page.getByTestId('device-row').filter({ hasText: deviceName });
   const status = row.getByTestId('device-status');

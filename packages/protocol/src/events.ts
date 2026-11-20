@@ -91,7 +91,26 @@ export const AgentSessionsSnapshot = defineEvent(
 );
 export const CommandAck = defineEvent(
   'command.ack',
-  z.object({ commandId: z.uuid(), status: CommandStatus, error: text.optional() }),
+  z.object({
+    commandId: z.uuid(),
+    status: CommandStatus,
+    error: text.optional(),
+    /** session.start: the id of the session that was created. */
+    externalSessionId: id.optional(),
+  }),
+);
+/**
+ * PC-side policy, sent after every connect and whenever it changes. The PC enforces it; the
+ * backend uses it only to show what is possible.
+ */
+export const DeviceSettings = defineEvent(
+  'device.settings',
+  z.object({
+    /** Directories the PC owner allows managed sessions to be started in. */
+    projects: z.array(z.object({ name: z.string().max(200), path: z.string().max(1024) })).max(50),
+    /** Whether sessions the user starts themselves may receive instructions (between turns). */
+    observedInstructions: z.boolean(),
+  }),
 );
 export const ApprovalDecisionAck = defineEvent(
   'approval.decision.ack',
@@ -113,6 +132,7 @@ export const AgentToBackend = z.discriminatedUnion('eventType', [
   AgentError,
   AgentSessionsSnapshot,
   CommandAck,
+  DeviceSettings,
   ApprovalDecisionAck,
 ]);
 export type AgentToBackend = z.infer<typeof AgentToBackend>;
@@ -133,23 +153,35 @@ export const SESSION_SCOPED_EVENTS = new Set<AgentToBackend['eventType']>([
 
 // ───────────────────────────── Backend → Local Agent ─────────────────────────────
 
+export const INSTRUCTION_MAX = 20_000;
+const expiresAt = z.iso.datetime({ offset: true });
+
+/**
+ * A command for the PC. Session-scoped commands (instruction, interrupt, session.stop) carry the
+ * target session in the envelope's sessionId (= externalSessionId). The PC drops commands past
+ * expiresAt and never executes the same commandId twice.
+ */
 export const CommandExecute = defineEvent(
   'command.execute',
   z.discriminatedUnion('commandType', [
     z.object({
       commandId: z.uuid(),
       commandType: z.literal('instruction'),
-      text: z.string().min(1).max(20_000),
+      text: z.string().min(1).max(INSTRUCTION_MAX),
+      expiresAt,
     }),
     z.object({
       commandId: z.uuid(),
       commandType: z.literal('session.start'),
       projectPath: z.string().max(1024),
-      text: z.string().min(1).max(20_000),
+      text: z.string().min(1).max(INSTRUCTION_MAX),
+      expiresAt,
     }),
+    z.object({ commandId: z.uuid(), commandType: z.literal('interrupt'), expiresAt }),
+    z.object({ commandId: z.uuid(), commandType: z.literal('session.stop'), expiresAt }),
   ]),
 );
-export const CommandStop = defineEvent('command.stop', z.object({ commandId: z.uuid() }));
+export type CommandType = z.infer<typeof CommandExecute>['payload']['commandType'];
 export const ApprovalDecision = defineEvent(
   'approval.decision',
   z.object({
@@ -168,7 +200,6 @@ export const Ack = defineEvent('ack', z.object({ ackEventId: z.uuid() }));
 
 export const BackendToAgent = z.discriminatedUnion('eventType', [
   CommandExecute,
-  CommandStop,
   ApprovalDecision,
   DeviceRevoke,
   ConfigUpdate,

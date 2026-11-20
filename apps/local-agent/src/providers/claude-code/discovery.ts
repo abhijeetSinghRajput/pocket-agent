@@ -2,7 +2,7 @@ import type { AgentStatus } from '@agentdock/protocol';
 import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { SessionRegistry } from '../../sessions/registry.js';
-import { MONITOR_ONLY, OBSERVED_WITH_HOOKS } from './hooks.js';
+import { MONITOR_ONLY } from './hooks.js';
 
 /**
  * Best-effort discovery of running Claude Code sessions from `<claude config>/sessions/<pid>.json`.
@@ -118,8 +118,10 @@ export class ClaudeDiscovery {
             projectPath: d.cwd,
             status: status ?? 'Running',
             // Without hooks we can only watch the coarse status; never claim more.
-            capabilities: this.opts.hooksInstalled() ? OBSERVED_WITH_HOOKS : MONITOR_ONLY,
-            metadata: { ...metadata, hooks: this.opts.hooksInstalled() ? 'installed' : 'not-installed' },
+            // Status only until this session's own hooks are seen. Claude Code loads hooks when a
+            // session starts, so a session older than `hooks install` never reports — never claim more.
+            capabilities: MONITOR_ONLY,
+            metadata: { ...metadata, hooks: this.opts.hooksInstalled() ? 'not-connected' : 'not-installed' },
           },
           'discovery',
           { pid: d.pid },

@@ -64,9 +64,7 @@ test('a Claude Code session streams into the dashboard live, survives a reconnec
   await expect(page.getByRole('heading', { level: 1, name: 'checkout-service' })).toBeVisible();
   const caps = page.getByTestId('capabilities');
   await expect(caps.locator('[data-capability="Live status"]')).toHaveAttribute('data-state', 'yes');
-  await expect(caps.locator('[data-capability="Send instructions"]')).toContainText(
-    'Only after Claude finishes',
-  );
+  await expect(caps.locator('[data-capability="Send instructions"]')).toContainText('Turned off on this PC');
   await expect(caps.locator('[data-capability="Stop / interrupt"]')).toHaveAttribute('data-state', 'no');
   const timeline = page.getByTestId('timeline');
   await expect(timeline).toContainText('Permission requested: Bash');

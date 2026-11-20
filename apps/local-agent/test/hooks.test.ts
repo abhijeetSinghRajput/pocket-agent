@@ -4,6 +4,7 @@ import { AgentToBackend } from '@agentdock/protocol';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { ClaudeHookHandler, MONITOR_ONLY } from '../src/providers/claude-code/hooks.js';
+import { ObservedInstructions } from '../src/providers/claude-code/instructions.js';
 import { SessionRegistry, type SessionEventOut } from '../src/sessions/registry.js';
 
 type Payload = Record<string, unknown>;
@@ -125,8 +126,95 @@ describe('Claude Code hook payloads → protocol events', () => {
     const announcements = events.filter((e) => e.eventType === 'agent.session.started');
     expect(announcements).toHaveLength(2);
     expect(announcements[1]!.payload).toMatchObject({
-      capabilities: { remoteApproval: true, instructBetweenTurns: true },
+      // Instructions are off until the PC owner enables them.
+      capabilities: { remoteApproval: true, instructBetweenTurns: false },
       metadata: { entrypoint: 'claude-vscode', hooks: 'connected' },
     });
+  });
+});
+
+describe('instructions to sessions the user started (Stop hook delivery)', () => {
+  function withInstructions(allowed: boolean) {
+    const events: SessionEventOut[] = [];
+    const acks: Array<[string, string, object?]> = [];
+    const registry = new SessionRegistry((e) => events.push(e));
+    let now = 1_000;
+    const instructions = new ObservedInstructions(
+      registry,
+      (id, status, extra) => acks.push([id, status, extra]),
+      () => now,
+    );
+    let enabled = allowed;
+    const handler = new ClaudeHookHandler(registry, () => false, {
+      instructions,
+      instructionsAllowed: () => enabled,
+    });
+    return {
+      events,
+      acks,
+      instructions,
+      handler,
+      enable: (v: boolean) => (enabled = v),
+      advance: (ms: number) => (now += ms),
+    };
+  }
+
+  it('delivers a queued instruction at the next Stop, in the same session, and completes it at the following Stop', () => {
+    const t = withInstructions(true);
+    t.handler.handle(byEvent('SessionStart'));
+    const sid = fixtures[0]!['session_id'] as string;
+    t.instructions.enqueue(sid, { commandId: 'c1', text: 'Now add tests', expiresAt: 60_000 });
+
+    expect(t.handler.handle(byEvent('PreToolUse'))).toBeUndefined(); // only Stop is ever answered
+    const out = t.handler.handle(byEvent('Stop'));
+    expect(out).toEqual({ decision: 'block', reason: expect.stringContaining('Now add tests') });
+    expect(t.acks.map(([, s]) => s)).toEqual(['Accepted', 'Executing']);
+    expect(t.events.at(-1)).toMatchObject({
+      eventType: 'agent.session.updated',
+      payload: { status: 'Running' },
+    });
+
+    expect(t.handler.handle(byEvent('Stop'))).toBeUndefined(); // queue empty
+    expect(t.acks.at(-1)).toEqual(['c1', 'Completed', undefined]);
+  });
+
+  it('never answers Stop when the PC owner has not enabled instructions', () => {
+    const t = withInstructions(false);
+    t.handler.handle(byEvent('SessionStart'));
+    t.instructions.enqueue(fixtures[0]!['session_id'] as string, {
+      commandId: 'c1',
+      text: 'x',
+      expiresAt: 60_000,
+    });
+    expect(t.handler.handle(byEvent('Stop'))).toBeUndefined();
+  });
+
+  it('drops instructions that waited too long instead of delivering them late', () => {
+    const t = withInstructions(true);
+    t.handler.handle(byEvent('SessionStart'));
+    t.instructions.enqueue(fixtures[0]!['session_id'] as string, {
+      commandId: 'old',
+      text: 'stale',
+      expiresAt: 2_000,
+    });
+    t.advance(5_000);
+    expect(t.handler.handle(byEvent('Stop'))).toBeUndefined();
+    expect(t.acks.at(-1)).toEqual(['old', 'Expired', undefined]);
+  });
+
+  it('fails queued and in-flight instructions when the session ends', () => {
+    const t = withInstructions(true);
+    t.handler.handle(byEvent('SessionStart'));
+    const sid = fixtures[0]!['session_id'] as string;
+    t.instructions.enqueue(sid, { commandId: 'a', text: 'one', expiresAt: 60_000 });
+    t.instructions.enqueue(sid, { commandId: 'b', text: 'two', expiresAt: 60_000 });
+    t.handler.handle(byEvent('Stop')); // delivers "a"
+    t.handler.handle(byEvent('SessionEnd'));
+    expect(
+      t.acks
+        .filter(([, s]) => s === 'Failed')
+        .map(([id]) => id)
+        .sort(),
+    ).toEqual(['a', 'b']);
   });
 });

@@ -6,7 +6,9 @@ import path from 'node:path';
 const MAX_BODY = 1024 * 1024;
 
 export interface IngestHandlers {
-  hook(payload: Record<string, unknown>): void;
+  /** Returns hook output for Claude Code (only ever for Stop), or undefined to stay silent. */
+  hook(payload: Record<string, unknown>): object | undefined;
+  reloadPolicy(): Promise<void>;
   listSessions(): unknown;
   startSession(body: {
     projectPath: string;
@@ -93,9 +95,13 @@ export class IngestServer {
 
       if (req.method === 'POST' && url.pathname === '/hook') {
         const body = await readJson(req);
-        send(204); // answer immediately; the relay never waits on processing
-        this.handlers.hook(body);
-        return;
+        // Synchronous and fast: the relay is waiting, and so is Claude Code.
+        const output = this.handlers.hook(body);
+        return output ? send(200, output) : send(204);
+      }
+      if (req.method === 'POST' && url.pathname === '/policy/reload') {
+        await this.handlers.reloadPolicy();
+        return send(204);
       }
       if (req.method === 'GET' && url.pathname === '/sessions')
         return send(200, this.handlers.listSessions());

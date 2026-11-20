@@ -9,7 +9,7 @@ export const AUTH_FILE = 'e2e/.auth/user.json';
  * Running them alongside 8 parallel browsers starved this Windows dev machine and made unrelated
  * tests time out, so they run in their own phase after the UI suite, two at a time.
  */
-const AGENT_SPECS = /(agents|pairing)\.spec\.ts/;
+const AGENT_SPECS = /(agents|pairing|control)\.spec\.ts/;
 
 const desktop = { ...devices['Desktop Chrome'], storageState: AUTH_FILE };
 const mobile = { ...devices['Pixel 7'], storageState: AUTH_FILE };

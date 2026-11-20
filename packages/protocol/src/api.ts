@@ -69,6 +69,10 @@ export const DeviceDto = z.object({
   createdAt: z.iso.datetime({ offset: true }),
   revokedAt: z.iso.datetime({ offset: true }).nullable(),
   remoteApprovalEnabled: z.boolean(),
+  /** PC-side allow-list for starting managed sessions (empty until the owner adds projects). */
+  projects: z.array(z.object({ name: z.string(), path: z.string() })),
+  /** PC-side switch: instructions to sessions the user started themselves. */
+  observedInstructions: z.boolean(),
 });
 export type DeviceDto = z.infer<typeof DeviceDto>;
 

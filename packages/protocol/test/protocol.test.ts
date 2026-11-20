@@ -131,6 +131,50 @@ describe('session events (M3)', () => {
   });
 });
 
+describe('commands (M4)', () => {
+  const exec = (payload: Record<string, unknown>) =>
+    BackendToAgent.safeParse({
+      ...base(),
+      eventType: 'command.execute',
+      payload: { commandId: randomUUID(), expiresAt: new Date().toISOString(), ...payload },
+    }).success;
+
+  it('accepts the four command types and requires an expiry', () => {
+    expect(exec({ commandType: 'instruction', text: 'hi' })).toBe(true);
+    expect(exec({ commandType: 'session.start', projectPath: 'C:\\p', text: 'hi' })).toBe(true);
+    expect(exec({ commandType: 'interrupt' })).toBe(true);
+    expect(exec({ commandType: 'session.stop' })).toBe(true);
+    expect(exec({ commandType: 'shell', command: 'rm -rf /' })).toBe(false);
+    expect(
+      BackendToAgent.safeParse({
+        ...base(),
+        eventType: 'command.execute',
+        payload: { commandId: randomUUID(), commandType: 'interrupt' },
+      }).success,
+    ).toBe(false);
+  });
+
+  it('caps instruction size', () => {
+    expect(exec({ commandType: 'instruction', text: 'x'.repeat(20_001) })).toBe(false);
+    expect(exec({ commandType: 'instruction', text: '' })).toBe(false);
+  });
+
+  it('validates device settings reported by the PC', () => {
+    const settings = (payload: unknown) =>
+      AgentToBackend.safeParse({ ...base(), eventType: 'device.settings', payload }).success;
+    expect(
+      settings({ projects: [{ name: 'api', path: 'C:\\work\\api' }], observedInstructions: false }),
+    ).toBe(true);
+    expect(
+      settings({
+        projects: Array.from({ length: 51 }, () => ({ name: 'p', path: 'C:\\p' })),
+        observedInstructions: false,
+      }),
+    ).toBe(false);
+    expect(settings({ projects: [] })).toBe(false);
+  });
+});
+
 describe('state machines', () => {
   it('allows normal agent flow', () => {
     expect(canTransition(AGENT_TRANSITIONS, 'Running', 'WaitingForPermission')).toBe(true);

@@ -148,6 +148,20 @@ Agent SDK query() ◄── `agentdock run` ──► ManagedSessions ───�
 - **Browser updates.** `/ws/client` pushes "what changed" events, the dashboard re-fetches over REST, and pages poll
   every 30 s as a fallback.
 
+### M4 implementation notes (as built)
+
+- **The PC decides.** `policy.json` in the agent state dir holds `projects` (the allow-list for remote session starts) and
+  `observedInstructions` (off by default). The CLI edits it and tells the running agent to reload, and the agent reports it to
+  the backend as `device.settings`, for display only. Every command is checked against it on the PC.
+- **Commands** (`instruction`, `session.start`, `interrupt`, `session.stop`) are recorded in Postgres first, then
+  delivered through Redis pub/sub to the instance holding the device's socket. Status comes back as `command.ack` through the agent's
+  outbox and only moves forward. Commands expire, and an offline PC means immediate failure.
+- **Managed sessions** run one instruction per turn, so "completed" refers to a real turn. `interrupt` uses the SDK's
+  `query.interrupt()`, and stop aborts the session.
+- **Observed sessions** get an instruction when Claude's turn ends. The Stop hook answers `decision: "block"` with the
+  instruction as the reason, verified with real Claude Code to continue in the same session. An idle session can't be woken;
+  the UI says so.
+
 ## 4. Identity, pairing and trust
 
 1. A logged-in user clicks **Add device**. The API creates a pairing code: 8 characters from the

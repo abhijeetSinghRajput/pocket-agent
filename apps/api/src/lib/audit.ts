@@ -11,14 +11,15 @@ export type AuditAction =
   | 'device.paired'
   | 'device.revoked'
   | 'device.secret_rotation_requested'
-  | 'device.secret_rotated';
+  | 'device.secret_rotated'
+  | 'command.created';
 
 export interface AuditEntry {
   userId: string;
   actorType: 'user' | 'device' | 'system';
   actorId?: string | null;
   action: AuditAction;
-  targetType: 'user' | 'device' | 'pairing_code';
+  targetType: 'user' | 'device' | 'pairing_code' | 'command';
   targetId?: string | null;
   metadata?: Prisma.InputJsonValue;
   ip?: string | null;

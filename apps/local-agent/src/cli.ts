@@ -2,6 +2,7 @@
 import { PROTOCOL_VERSION } from '@agentdock/protocol';
 import { Command } from 'commander';
 import { existsSync } from 'node:fs';
+import { stat } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
@@ -10,6 +11,7 @@ import { ApiRequestError, confirmSecret, pairDevice, rotateSecret } from './api-
 import { currentPlatform, deleteConfig, loadConfig, saveConfig, validateApiUrl } from './config.js';
 import { callLocalAgent } from './local-client.js';
 import { agentHome } from './paths.js';
+import { isAllowedProject, loadPolicy, normalizeProjectPath, savePolicy } from './policy.js';
 import {
   defaultSettingsPath,
   hooksStatus,
@@ -212,6 +214,79 @@ export function buildCli(): Command {
       await deleteConfig(home);
       console.log('Local credentials removed. Also revoke this device under Devices in the dashboard.');
     });
+
+  // ── What remote users may do on this PC (enforced here) ─────────────────────
+  /** Tells a running agent to pick up policy changes; fine if it isn't running. */
+  const reloadAgent = async () => {
+    try {
+      await callLocalAgent(agentHome(), 'POST', '/policy/reload');
+      console.log('The running agent picked up the change.');
+    } catch {
+      console.log('Takes effect the next time the agent starts.');
+    }
+  };
+
+  const projects = program
+    .command('projects')
+    .description('Folders where managed sessions may be started from the dashboard');
+
+  projects
+    .command('add')
+    .argument('<dir>', 'project folder')
+    .option('--name <name>', 'name shown in the dashboard')
+    .action(async (dir: string, opts: { name?: string }) => {
+      const full = path.resolve(dir);
+      const st = await stat(full).catch(() => null);
+      if (!st?.isDirectory()) fail(`Not a folder: ${full}`);
+      const home = agentHome();
+      const policy = await loadPolicy(home);
+      if (isAllowedProject(policy, full)) return console.log(`Already allowed: ${full}`);
+      if (policy.projects.length >= 50) fail('At most 50 projects.');
+      policy.projects.push({ name: (opts.name ?? path.basename(full)).slice(0, 200), path: full });
+      await savePolicy(home, policy);
+      console.log(`Allowed: ${full}`);
+      await reloadAgent();
+    });
+
+  projects
+    .command('remove')
+    .argument('<dir>', 'project folder')
+    .action(async (dir: string) => {
+      const home = agentHome();
+      const policy = await loadPolicy(home);
+      const target = normalizeProjectPath(dir);
+      const next = policy.projects.filter((p) => normalizeProjectPath(p.path) !== target);
+      if (next.length === policy.projects.length) return console.log('That folder was not on the list.');
+      await savePolicy(home, { ...policy, projects: next });
+      console.log(`Removed: ${path.resolve(dir)}`);
+      await reloadAgent();
+    });
+
+  projects.command('list').action(async () => {
+    const { projects: list } = await loadPolicy(agentHome());
+    if (!list.length) return console.log('No projects. Add one with: agentdock projects add <folder>');
+    for (const p of list) console.log(`${p.name.padEnd(24)} ${p.path}`);
+  });
+
+  const instructions = program
+    .command('instructions')
+    .description('Instructions to Claude Code sessions you start yourself (VS Code, terminal)');
+  const setInstructions = async (on: boolean) => {
+    const home = agentHome();
+    await savePolicy(home, { ...(await loadPolicy(home)), observedInstructions: on });
+    console.log(
+      on
+        ? 'Enabled. Sessions with AgentDock hooks can receive instructions from the dashboard; each one is delivered when Claude finishes its current turn. Claude Code still asks you for every permission.'
+        : 'Disabled. Only managed sessions can receive instructions.',
+    );
+    await reloadAgent();
+  };
+  instructions.command('enable').action(() => setInstructions(true));
+  instructions.command('disable').action(() => setInstructions(false));
+  instructions.command('status').action(async () => {
+    const { observedInstructions } = await loadPolicy(agentHome());
+    console.log(observedInstructions ? 'Enabled' : 'Disabled (default)');
+  });
 
   // ── Claude Code integration ────────────────────────────────────────────────
   const hooks = program

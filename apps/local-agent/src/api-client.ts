@@ -6,6 +6,7 @@ import {
   type PairDeviceRequest,
 } from '@agentdock/protocol';
 import { validateApiUrl } from './config.js';
+import { requestJson } from './http.js';
 
 export class ApiRequestError extends Error {
   constructor(
@@ -18,17 +19,20 @@ export class ApiRequestError extends Error {
   }
 }
 
-async function call(apiUrl: string, pathname: string, init: RequestInit): Promise<unknown> {
+async function call(
+  apiUrl: string,
+  pathname: string,
+  init: { method: 'POST'; headers?: Record<string, string>; body?: string },
+): Promise<unknown> {
   const url = new URL(pathname, validateApiUrl(apiUrl));
-  let res: Response;
+  let res: { status: number; body: unknown };
   try {
-    res = await fetch(url, { ...init, signal: AbortSignal.timeout(15_000) });
+    res = await requestJson(url, init);
   } catch {
     throw new ApiRequestError(0, 'unreachable', `Cannot reach AgentDock at ${url.origin}`);
   }
-  const body: unknown = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    const err = ApiError.safeParse(body);
+  if (res.status < 200 || res.status >= 300) {
+    const err = ApiError.safeParse(res.body);
     const code = err.success ? err.data.error : 'http_error';
     throw new ApiRequestError(
       res.status,
@@ -36,7 +40,7 @@ async function call(apiUrl: string, pathname: string, init: RequestInit): Promis
       err.success ? (err.data.message ?? code) : `HTTP ${res.status}`,
     );
   }
-  return body;
+  return res.body;
 }
 
 export async function pairDevice(apiUrl: string, req: PairDeviceRequest): Promise<PairDeviceResponse> {

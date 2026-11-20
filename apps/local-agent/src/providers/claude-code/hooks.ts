@@ -1,10 +1,19 @@
 import { CLAUDE_CODE_CAPABILITIES, type SessionCapabilities } from '@agentdock/protocol';
 import { createHash } from 'node:crypto';
 import { truncate, type SessionRegistry } from '../../sessions/registry.js';
+import type { ObservedInstructions } from './instructions.js';
 import { summarizeToolInput, summarizeToolOutput, toolKey } from './summarize.js';
+
+/** JSON a hook may print to answer Claude Code. Only Stop is ever answered (M4). */
+export type HookOutput = { decision: 'block'; reason: string };
 
 /** Observed session whose hooks reach us (between-turn instructions + approvals are possible). */
 export const OBSERVED_WITH_HOOKS: SessionCapabilities = CLAUDE_CODE_CAPABILITIES.observed;
+
+/** Observed capabilities given the PC owner's policy (instructions are opt-in on the PC). */
+export function observedCapabilities(instructionsAllowed: boolean): SessionCapabilities {
+  return { ...OBSERVED_WITH_HOOKS, instructBetweenTurns: instructionsAllowed };
+}
 /** Observed via discovery only (no hooks installed): coarse status, nothing else. */
 export const MONITOR_ONLY: SessionCapabilities = {
   monitor: true,
@@ -19,8 +28,9 @@ const s = (v: unknown) => (typeof v === 'string' ? v : undefined);
 
 /**
  * Translates Claude Code hook payloads (see test/fixtures) into session events.
- * Pure bookkeeping: it never answers a hook. In M3 every hook is observe-only, so Claude Code's
- * own permission prompt keeps working exactly as without AgentDock.
+ * The only hook it ever answers is Stop, and only to deliver an instruction the PC owner allowed
+ * (see ObservedInstructions). Permission-related hooks are never answered, so Claude Code's own
+ * permission prompt keeps working exactly as without AgentDock.
  */
 export class ClaudeHookHandler {
   /** Per session: PreToolUse key → tool_use_id, to correlate PermissionRequest. */
@@ -31,9 +41,26 @@ export class ClaudeHookHandler {
   constructor(
     private readonly registry: SessionRegistry,
     private readonly isManaged: (sessionId: string) => boolean = () => false,
+    private readonly opts: {
+      instructions?: ObservedInstructions;
+      instructionsAllowed?: () => boolean;
+    } = {},
   ) {}
 
-  handle(p: Payload): void {
+  private capabilities(): SessionCapabilities {
+    return observedCapabilities(this.opts.instructionsAllowed?.() ?? false);
+  }
+
+  /** Re-announces hook-connected sessions after the PC's policy changed. */
+  refreshCapabilities(): void {
+    for (const t of this.registry.live()) {
+      if (t.mode === 'observed' && t.sources.has('hooks')) {
+        this.registry.announce({ ...t, capabilities: this.capabilities() }, 'hooks');
+      }
+    }
+  }
+
+  handle(p: Payload): HookOutput | undefined {
     const sessionId = s(p['session_id']);
     const event = s(p['hook_event_name']);
     const cwd = s(p['cwd']);
@@ -43,6 +70,7 @@ export class ClaudeHookHandler {
 
     if (event === 'SessionEnd') {
       this.forget(sessionId);
+      this.opts.instructions?.onSessionEnd(sessionId);
       this.registry.end(sessionId, s(p['reason']) ?? 'ended');
       return;
     }
@@ -126,6 +154,8 @@ export class ClaudeHookHandler {
         const last = s(p['last_assistant_message']);
         if (last) this.registry.event(sessionId, 'agent.output', { role: 'assistant', text: truncate(last) });
         this.registry.setStatus(sessionId, 'WaitingForInput');
+        // Deliver a queued instruction (only if the PC owner allowed it — checked when queued).
+        if (this.opts.instructionsAllowed?.()) return this.opts.instructions?.onStop(sessionId);
         break;
       }
 
@@ -161,7 +191,7 @@ export class ClaudeHookHandler {
           mode: 'observed',
           projectPath: cwd,
           status: existing?.status ?? 'Running',
-          capabilities: OBSERVED_WITH_HOOKS,
+          capabilities: this.capabilities(),
           metadata: { hooks: 'connected', ...(source ? { startSource: source } : {}) },
         },
         'hooks',

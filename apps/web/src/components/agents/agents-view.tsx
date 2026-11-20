@@ -1,10 +1,12 @@
 'use client';
 
 import { SessionListResponse, type AgentSessionDto } from '@agentdock/protocol';
-import { Bot, ChevronRight, Laptop } from 'lucide-react';
+import { Bot, ChevronRight, Laptop, Plus } from 'lucide-react';
 import Link from 'next/link';
 import { useCallback, useState } from 'react';
+import { NewSessionDialog } from '@/components/agents/new-session-dialog';
 import { SessionKindBadge, SessionStatusBadge } from '@/components/agents/session-badges';
+import { Button } from '@/components/ui/button';
 import { PageHeader } from '@/components/page';
 import { apiRequest } from '@/lib/api';
 import { timeAgo } from '@/lib/format';
@@ -62,6 +64,7 @@ function SessionCard({ s }: { s: AgentSessionDto }) {
 
 export function AgentsView() {
   const [scope, setScope] = useState<'active' | 'all'>('active');
+  const [creating, setCreating] = useState(false);
   const fetcher = useCallback(
     (signal: AbortSignal) =>
       apiRequest(`/sessions?scope=${scope}`, SessionListResponse, { signal }).then((r) => r.sessions),
@@ -73,7 +76,16 @@ export function AgentsView() {
 
   return (
     <>
-      <PageHeader title="Agents" description="Claude Code sessions on your paired devices." />
+      <PageHeader
+        title="Agents"
+        description="Claude Code sessions on your paired devices."
+        actions={
+          <Button onClick={() => setCreating(true)}>
+            <Plus aria-hidden /> New session
+          </Button>
+        }
+      />
+      <NewSessionDialog open={creating} onOpenChange={setCreating} />
       <div role="tablist" aria-label="Filter" className="mb-4 inline-flex rounded-lg border bg-muted p-1">
         {(['active', 'all'] as const).map((s) => (
           <button

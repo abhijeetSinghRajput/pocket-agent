@@ -10,6 +10,8 @@ export const CHANNELS = {
   userEvents: 'user-events',
   /** payload: auth session id — close browser sockets opened with that login session. */
   authSessionEnded: 'auth-session-ended',
+  /** payload: JSON { deviceId, frame } — send a command.execute frame to that device's connection. */
+  agentCommands: 'agent-commands',
 } as const;
 type Channel = (typeof CHANNELS)[keyof typeof CHANNELS];
 

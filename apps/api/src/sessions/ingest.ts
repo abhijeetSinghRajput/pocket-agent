@@ -12,7 +12,10 @@ export class InvalidAgentEvent extends Error {}
 
 type SessionEvent = Exclude<
   AgentToBackend,
-  { eventType: 'device.connected' | 'device.heartbeat' | 'command.ack' | 'approval.decision.ack' }
+  {
+    eventType:
+      'device.connected' | 'device.heartbeat' | 'device.settings' | 'command.ack' | 'approval.decision.ack';
+  }
 >;
 
 export function isSessionEvent(msg: AgentToBackend): msg is SessionEvent {

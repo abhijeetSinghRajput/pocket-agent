@@ -8,10 +8,12 @@ import Fastify, { type FastifyInstance, type FastifyServerOptions } from 'fastif
 import type { AppContext } from './context.js';
 import type { Env } from './env.js';
 import { agentGateway, type GatewayOptions } from './gateway/agent-gateway.js';
+import { commandExpiryJob } from './jobs/command-expiry.js';
 import { retentionJob } from './jobs/retention.js';
 import { createBus } from './realtime/bus.js';
 import { clientGateway } from './realtime/client-gateway.js';
 import { authRoutes } from './routes/auth.js';
+import { commandRoutes } from './routes/commands.js';
 import { agentRoutes, deviceRoutes } from './routes/devices.js';
 import { healthRoutes, type HealthDeps } from './routes/health.js';
 import { sessionRoutes } from './routes/sessions.js';
@@ -80,6 +82,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     await app.register(agentGateway, services);
     await app.register(clientGateway, services);
     await app.register(retentionJob, services);
+    await app.register(commandRoutes, services);
+    await app.register(commandExpiryJob, services);
   }
 
   app.setNotFoundHandler((_req, reply) => reply.code(404).send({ error: 'not_found' }));

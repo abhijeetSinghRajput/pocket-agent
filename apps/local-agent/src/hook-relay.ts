@@ -4,8 +4,10 @@
 //
 // Rules:
 // - Node built-ins only, so it starts fast (it runs on every tool call).
-// - Always exits 0 and prints nothing: in M3 it never answers a hook, so Claude Code's own
-//   behaviour (including its permission prompt) is unchanged — even if the agent is down.
+// - Always exits 0. It prints something only when the agent returns hook output — which the agent
+//   does only for Stop, to deliver an instruction the PC owner allowed. Permission hooks are never
+//   answered, so Claude Code's own permission prompt is unchanged — and if the agent is down,
+//   nothing is printed at all.
 // - Managed sessions (started by AgentDock) are skipped: they report through the SDK instead.
 import { readFileSync } from 'node:fs';
 import { request } from 'node:http';
@@ -57,8 +59,28 @@ process.stdin.on('end', () => {
       timeout: 3000,
     },
     (res) => {
-      res.resume();
-      res.on('end', done);
+      if (res.statusCode !== 200) {
+        res.resume();
+        res.on('end', done);
+        return;
+      }
+      const out: Buffer[] = [];
+      res.on('data', (c: Buffer) => out.push(c));
+      res.on('end', () => {
+        const text = Buffer.concat(out).toString('utf8');
+        try {
+          const parsed = JSON.parse(text) as unknown;
+          // Only a JSON object is valid hook output; anything else is dropped.
+          if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+            // Exit only after the output is flushed (pipe writes may be asynchronous).
+            process.stdout.write(text, () => done());
+            return;
+          }
+        } catch {
+          /* not JSON: print nothing */
+        }
+        done();
+      });
     },
   );
   req.on('error', done);

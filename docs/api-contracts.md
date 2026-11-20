@@ -59,3 +59,23 @@ session returns `404`.
 | GET | `/activity?limit=50&before=<eventId>` | Same as above across all of the user's sessions. Each event also carries `session {id, projectName, deviceName}`. |
 | GET | `/overview` | `{devices {online,total}, sessions {active,running,waitingForInput,waitingForPermission,disconnected}, recent: AgentEventDto[8]}` |
 | GET | `/ws/client` | WebSocket for live dashboard updates. It needs the session cookie and an allow-listed `Origin` (otherwise `401` / `403`), and only sends server → browser. Close code `4401` means the user signed out. |
+
+## Remote control (M4)
+
+All of these need the session cookie and an allow-listed `Origin`, are limited to 30 per minute, and take a client-generated
+`idempotencyKey` (UUID). Retrying with the same key returns the original command (`200`) instead of creating a second one (`201`).
+If the PC is offline, the command is recorded as `Failed` with `error: "device_offline"`; it is never queued to run later.
+
+| Method | Path | Body | Notes |
+|---|---|---|---|
+| POST | `/sessions/:id/instructions` | `{text ≤20 000, idempotencyKey}` | Needs `instructAnytime` (managed) or `instructBetweenTurns` (observed, PC opt-in). Otherwise `409 not_supported`. `409 session_ended` if the session has ended. |
+| POST | `/sessions/:id/interrupt` | `{idempotencyKey}` | Managed sessions only (`interrupt` capability). Ends the current turn; the session stays open. |
+| POST | `/sessions/:id/stop` | `{idempotencyKey}` | Managed sessions only. Ends the session. |
+| POST | `/devices/:id/sessions` | `{projectPath, text, idempotencyKey}` | Starts a managed session. `projectPath` must be on the PC's allow-list (`400 project_not_allowed`), and the PC checks again. |
+| GET | `/sessions/:id/commands` | | The last 50 commands for the session, newest first |
+| GET | `/commands/:id` | | One command, the caller's own only. `session.start` gains a `sessionId` once the PC reports the new session. |
+
+`CommandDto.status`: `Pending` → `Delivered` → `Accepted` → `Executing` → `Completed` / `Failed`, or `Expired` if it doesn't
+start before `expiresAt`. Time limits: an instruction has 15 minutes, a session start 2 minutes, interrupt and stop 1 minute.
+`DeviceDto` also gained `projects` and `observedInstructions`. Both are reported by the PC and shown in the dashboard,
+but only the PC enforces them.

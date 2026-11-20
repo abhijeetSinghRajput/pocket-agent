@@ -131,6 +131,9 @@ model Device {
   /// Remote approval is opt-in per device (architecture: Approved constraints #3).
   remoteApprovalEnabled Boolean @default(false)
   awayMode        Boolean      @default(false)
+  /// Reported by the PC (device.settings), which also enforces them. Display-only on the server.
+  projects        Json         @default("[]")
+  observedInstructions Boolean @default(false)
   lastHeartbeatAt DateTime?
   revokedAt       DateTime?
   createdAt       DateTime     @default(now())
@@ -140,6 +143,7 @@ model Device {
   sessions  AgentSession[]
   events    AgentEvent[]
   approvals Approval[]
+  commands  Command[]
 
   @@index([userId])
   @@map("devices")
@@ -196,7 +200,9 @@ model AgentEvent {
 
 model Command {
   id             String        @id @default(uuid(7)) @db.Uuid
-  sessionId      String        @db.Uuid
+  deviceId       String        @db.Uuid
+  /// Null for session.start until the PC reports the new session.
+  sessionId      String?       @db.Uuid
   userId         String        @db.Uuid
   commandType    String
   payload        Json
@@ -209,11 +215,14 @@ model Command {
   completedAt    DateTime?
   expiresAt      DateTime
 
-  session AgentSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  user    User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  device  Device        @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  session AgentSession? @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  user    User          @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, idempotencyKey])
   @@index([sessionId, createdAt])
+  @@index([deviceId, status])
+  @@index([status, expiresAt])
   @@map("commands")
 }
 

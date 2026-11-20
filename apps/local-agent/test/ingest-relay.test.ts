@@ -19,7 +19,11 @@ async function start() {
   const home = mkdtempSync(path.join(os.tmpdir(), 'agentdock-ingest-'));
   const hooks: unknown[] = [];
   server = new IngestServer(home, {
-    hook: (p) => hooks.push(p),
+    hook: (p) => {
+      hooks.push(p);
+      return undefined;
+    },
+    reloadPolicy: async () => undefined,
     listSessions: () => [],
     startSession: async () => ({ externalSessionId: 'x' }),
     stopSession: async () => false,
@@ -102,6 +106,26 @@ describe('hook relay', () => {
     expect(r.stdout).toBe(''); // never answers a hook → Claude Code behaves as without AgentDock
     await new Promise((res) => setTimeout(res, 20));
     expect(hooks).toEqual([{ hook_event_name: 'PreToolUse', session_id: 's1' }]);
+  });
+
+  it('prints the hook output the agent returns (Stop → deliver an instruction), and only that', async () => {
+    const home = mkdtempSync(path.join(os.tmpdir(), 'agentdock-answer-'));
+    server = new IngestServer(home, {
+      hook: (p) =>
+        p['hook_event_name'] === 'Stop'
+          ? { decision: 'block', reason: 'New instruction: add tests' }
+          : undefined,
+      listSessions: () => [],
+      startSession: async () => ({ externalSessionId: 'x' }),
+      stopSession: async () => false,
+      reloadPolicy: async () => undefined,
+    });
+    await server.start();
+    const stop = await relay(home, '{"hook_event_name":"Stop"}');
+    expect(stop.code).toBe(0);
+    expect(JSON.parse(stop.stdout)).toEqual({ decision: 'block', reason: 'New instruction: add tests' });
+    const pre = await relay(home, '{"hook_event_name":"PermissionRequest"}');
+    expect(pre.stdout).toBe('');
   });
 
   it('is a silent no-op when the agent is not running', async () => {

@@ -53,6 +53,19 @@ Audit log entries are written for: register, login, failed login, logout, pairin
 | Unbounded data retention | Agent events are pruned after `EVENT_RETENTION_DAYS` (30 by default). Audit logs are kept. | `sessions.int` |
 | Agent killed by losing its console | stdout/stderr `EPIPE` is ignored, so the agent keeps running when its terminal or parent process goes away. | `console-loss` |
 
+## Controls added in M4 (remote instructions)
+
+| Threat | Control | Test |
+|---|---|---|
+| Stolen dashboard login used to run Claude anywhere on the PC | Managed sessions start only in folders on the **PC's** allow-list (`agentdock projects add`), matched by exact path, not prefix. The API checks it and the PC checks again. An empty list means no remote starts. | `commands.int`, `commands` |
+| Steering sessions the user started themselves | Off by default. The PC owner turns it on with `agentdock instructions enable`, and capabilities reflect the setting. The PC refuses even if the backend sends one anyway. | `commands`, `hooks`, E2E `control` |
+| Remote instructions bypassing local permissions | Instructions are just prompts. Claude Code still asks on the PC for every permission, and managed sessions still deny every action that needs approval until M5. The only hook AgentDock answers is **Stop**, never a permission hook. | `hooks`, `ingest-relay` |
+| Duplicate execution (retries, reconnects, replays) | Client idempotency key (unique per user), and the PC executes each `commandId` at most once. Reports may only move a command forward. | `commands.int`, `commands` |
+| Late execution | Every command has an `expiresAt`. The PC drops expired commands, the API marks them `Expired`, and a late report can't revive them. An offline PC means `Failed (device_offline)` immediately; nothing is queued. | `commands.int`, `hooks` |
+| One user or device acting on another's commands | Commands are scoped to the owner's sessions and devices. Reports from any other device are ignored. | `commands.int` |
+| Instruction text in the audit trail | The audit log records kind, target, size and outcome, not the instruction text. | `commands.int` |
+| CLI crash on error exit (Windows) | The CLI uses `node:http(s)` with no connection pool instead of `fetch`, so it always exits cleanly with code 1. | E2E `pairing` |
+
 ## Known issues
 
 - Unacknowledged agent events are held in memory only. If the agent process restarts while offline, those events are lost (the post-connect snapshot still corrects session states).

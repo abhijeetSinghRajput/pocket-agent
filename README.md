@@ -61,6 +61,18 @@ pnpm agentdock sessions        # what the running agent sees; `stop-session <id>
 
 Without hooks, sessions you start yourself still appear, but with status only.
 
+### Control from your phone (you decide on the PC what is allowed)
+
+```bash
+pnpm agentdock projects add C:\path\to\project   # folders where the dashboard may start managed sessions
+pnpm agentdock projects list                     # (and `projects remove <folder>`)
+pnpm agentdock instructions enable               # optional: allow instructions to sessions YOU started
+                                                 # (delivered when Claude finishes its current turn)
+```
+
+Then, in the dashboard: **Agents → New session** starts Claude in an allowed folder. An agent's page lets you
+send instructions, interrupt the current task, or end a managed session. These changes apply to a running agent immediately.
+
 Quality gate (run before closing any milestone):
 
 ```bash

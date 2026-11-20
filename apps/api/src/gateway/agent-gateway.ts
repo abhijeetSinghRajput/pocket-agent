@@ -7,6 +7,8 @@ import { redisKey, type AppContext } from '../context.js';
 import { Prisma, type Device } from '../generated/prisma/client.js';
 import { applyDecisionAck } from '../approvals/service.js';
 import { applyCommandAck, resendPending } from '../commands/service.js';
+import type { PushSender } from '../notifications/push.js';
+import { notifyFromEvents } from '../notifications/triggers.js';
 import { CHANNELS, notifyUser, type Bus } from '../realtime/bus.js';
 import {
   ingestSessionEvent,
@@ -30,7 +32,7 @@ export interface GatewayOptions {
   sweepIntervalMs?: number;
 }
 
-export type GatewayServices = AppContext & GatewayOptions & { bus: Bus };
+export type GatewayServices = AppContext & GatewayOptions & { bus: Bus; push: PushSender };
 
 /**
  * `/ws/agent`: the only way a Local Agent talks to the backend in real time.
@@ -192,6 +194,10 @@ export async function agentGateway(app: FastifyInstance, ctx: GatewayServices): 
             const notifications = await ingestSessionEvent(ctx, device, msg);
             ack(msg.eventId); // only after the event is durably stored
             for (const n of notifications) await notifyUser(ctx.bus, device.userId, n);
+            // Notifications/push never hold up the agent link.
+            void notifyFromEvents(ctx, notifications).catch((err: unknown) =>
+              app.log.warn({ err }, 'notification trigger failed'),
+            );
           } catch (err) {
             if (err instanceof InvalidAgentEvent) return reject(err.message);
             if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {

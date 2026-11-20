@@ -25,6 +25,12 @@ export const EnvSchema = z.object({
   REDIS_KEY_PREFIX: z.string().default('agentdock:'),
   /** Agent events older than this are deleted (audit logs are kept). */
   EVENT_RETENTION_DAYS: z.coerce.number().int().min(1).max(3650).default(30),
+  /**
+   * Firebase service-account JSON file for sending web push (FCM HTTP v1). Optional: without it,
+   * notifications are still recorded and shown in the app, just not pushed. Keep the file outside
+   * the repository; it is a secret.
+   */
+  FCM_SERVICE_ACCOUNT_FILE: z.string().min(1).optional(),
   /** Absolute lifetime of a browser login session. */
   SESSION_TTL_DAYS: z.coerce.number().int().min(1).max(90).default(30),
   /** Defaults to true in production. Only set false for plain-http local development. */

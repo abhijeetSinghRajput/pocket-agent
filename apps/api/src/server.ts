@@ -2,6 +2,7 @@ import { createRequire } from 'node:module';
 import { buildApp } from './app.js';
 import { EnvError, loadEnv } from './env.js';
 import { createPrisma, createRedis } from './infra.js';
+import { createFcmSender } from './notifications/push.js';
 
 const { version } = createRequire(import.meta.url)('../package.json') as { version: string };
 
@@ -39,7 +40,10 @@ async function main(): Promise<void> {
       },
     },
     ctx: { env, prisma, redis, now: () => new Date() },
+    push: createFcmSender(env.FCM_SERVICE_ACCOUNT_FILE, (m) => console.warn(m)),
   });
+  if (!env.FCM_SERVICE_ACCOUNT_FILE)
+    app.log.info('web push not configured (FCM_SERVICE_ACCOUNT_FILE unset); notifications are in-app only');
 
   const shutdown = async (signal: string) => {
     app.log.info({ signal }, 'shutting down');

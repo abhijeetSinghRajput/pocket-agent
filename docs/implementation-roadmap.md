@@ -71,7 +71,7 @@ Proven on Claude Code 2.1.325 and Windows 11 (details in `poc/README.md`):
 
 **Accept:** a real permission request is approved and another denied from a phone; Claude Code acts on each correctly; duplicate and expired decisions are rejected.
 
-## M6 — Notifications + PWA
+## M6 — Notifications + PWA ✅ built (2026-11-20; real push to a device pending owner keys, see `docs/notifications.md`)
 
 - Manifest, icons, service worker, install prompt
 - FCM web push: subscription registration, categories/priority from the plan, quiet hours, deduplication keys, deep links

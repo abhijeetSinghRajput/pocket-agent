@@ -83,6 +83,17 @@ Managed sessions then ask in the dashboard (**Approvals**). Sessions you start y
 Then, in the dashboard: **Agents → New session** starts Claude in an allowed folder. An agent's page lets you
 send instructions, interrupt the current task, or end a managed session. These changes apply to a running agent immediately.
 
+### Notifications and push
+
+Notifications are always recorded and shown in the app (the bell, **Notifications**). To also get web push:
+
+1. Web: fill the `NEXT_PUBLIC_FIREBASE_*` values in `apps/web/.env.local` (see `.env.example`).
+2. API: set `FCM_SERVICE_ACCOUNT_FILE` in `apps/api/.env` to a Firebase service-account key **outside the repo**.
+3. In **Settings → Notifications**, choose _Enable push on this device_, then _Send test notification_.
+
+On iPhone, push works only from the Home Screen app (iOS 16.4+). See [docs/notifications.md](docs/notifications.md)
+for the categories, quiet hours, privacy and platform limits.
+
 Quality gate (run before closing any milestone):
 
 ```bash

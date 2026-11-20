@@ -84,11 +84,25 @@ Audit log entries are written for: register, login, failed login, logout, pairin
 Note: interactive Claude Code sessions, including VS Code, run hooks only in **trusted** folders. In an untrusted folder,
 AgentDock sees nothing from that session, and it falls back safely to plain Claude Code.
 
+## Controls added in M6 (notifications and push)
+
+| Threat | Control | Test |
+|---|---|---|
+| Sensitive data leaking through Google or Apple push servers | Pushes carry only a title and the project and PC names. Commands, tool input and output are never included. | `notifications.int` |
+| Push treated as the source of truth | Approval state is still read from the API. Pushes expire (5 minutes for permission requests). The history is in Postgres. | design, `docs/notifications.md` |
+| Notification spam or duplicates from replays | A unique `dedupeKey` per event, an offline grace period of 2 minutes, and one notification per offline episode. | `notifications.int` |
+| Cross-user leakage | History, settings and push tokens are scoped to the caller. Removing a token works only for its owner. A token re-registered by another account moves to that account, so it never receives both accounts' pushes. | `notifications.int` |
+| CSRF on settings or registration | The Origin allow-list applies to every mutating route, and registration and test sends are rate limited. | `notifications.int` |
+| Stale tokens | Tokens FCM reports as unregistered are deleted on first use. | `notifications.int` |
+| Service-account key exposure | The key is read from `FCM_SERVICE_ACCOUNT_FILE` outside the repository. Only names appear in `.env.example`. | config |
+| Third-party code in the service worker | AgentDock's own `sw.js` handles data-only messages. The Firebase SDK runs only in the page, to obtain a token. Notification clicks open same-origin paths only. | `sw.js` |
+
 ## Known issues
 
 - Unacknowledged agent events are held in memory only. If the agent process restarts while offline, those events are lost (the post-connect snapshot still corrects session states).
 - `Bash` output is forwarded (truncated to 4 KB). A command that prints a secret will show it in the timeline.
 - If Redis is down, rate-limited routes (login, register, pairing) return 500 instead of running unthrottled. This is a deliberate fail-closed choice.
+- Signing out doesn't unregister the browser's push token. Pushes for that account keep arriving on that browser until push is turned off there or another account registers the same browser.
 - There is no "sign out other sessions" or session list UI yet.
 - On macOS and Linux the device secret is stored in a 0600 file rather than the OS keychain.
 - `minimatch` (GHSA-g3hv-75wg-m249, moderate, denial of service): reaches us only through ESLint dev tooling and does not ship. Fix by upgrading once ESLint and typescript-eslint publish releases with patched dependencies.

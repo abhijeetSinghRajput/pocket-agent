@@ -8,6 +8,7 @@ import { loadEnv } from '../src/env.js';
 import { createPrisma, createRedis } from '../src/infra.js';
 import { hashPassword, randomToken, sha256 } from '../src/lib/crypto.js';
 import type { AppContext } from '../src/context.js';
+import type { PushMessage, PushResult, PushSender } from '../src/notifications/push.js';
 
 export const ORIGIN = 'http://localhost:3000';
 
@@ -21,7 +22,14 @@ export interface TestApp {
 
 /** Real app on a random port with an isolated Redis key prefix. */
 export async function startTestApp(
-  opts: { sweepIntervalMs?: number; pingIntervalMs?: number; rateLimits?: boolean } = {},
+  opts: {
+    sweepIntervalMs?: number;
+    pingIntervalMs?: number;
+    rateLimits?: boolean;
+    offlineCheckMs?: number;
+    push?: PushSender;
+    now?: () => Date;
+  } = {},
 ): Promise<TestApp> {
   const env = loadEnv({
     ...process.env,
@@ -32,10 +40,12 @@ export async function startTestApp(
   const prisma = createPrisma(env.DATABASE_URL);
   const redis = createRedis(env.REDIS_URL);
   await redis.connect();
-  const ctx: AppContext & typeof opts = { env, prisma, redis, now: () => new Date(), ...opts };
+  const { push, ...rest } = opts;
+  const ctx: AppContext & typeof rest = { env, prisma, redis, now: () => new Date(), ...rest };
   const app = await buildApp({
     env,
     ctx,
+    ...(push ? { push } : {}),
     disableRateLimits: !opts.rateLimits,
     health: {
       version: 'test',
@@ -175,3 +185,17 @@ export const waitFor = async (check: () => Promise<boolean>, ms = 5000) => {
     await new Promise((r) => setTimeout(r, 50));
   }
 };
+
+/** Records pushes instead of calling FCM. Tokens starting with "dead-" are reported unregistered. */
+export function fakePush() {
+  const sent: Array<{ token: string; message: PushMessage }> = [];
+  const sender: PushSender = {
+    available: true,
+    send: async (token, message): Promise<PushResult> => {
+      if (token.startsWith('dead-')) return 'invalid_token';
+      sent.push({ token, message });
+      return 'ok';
+    },
+  };
+  return { sender, sent };
+}

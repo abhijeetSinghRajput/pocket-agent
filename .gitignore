@@ -18,3 +18,8 @@ test-results/
 next-env.d.ts
 # Playwright signed-in state (contains session cookies)
 **/e2e/.auth/
+
+# Service-account / private keys (never commit; keep outside the repo)
+*firebase-adminsdk*.json
+*service-account*.json
+.agentdock-secrets/

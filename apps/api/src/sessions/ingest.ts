@@ -44,8 +44,16 @@ function impliedStatus(msg: SessionEvent): AgentStatus | null {
   }
 }
 
-const statusChanged = (session: AgentSession, status: AgentStatus): BackendToWeb =>
-  createEvent('agent.status.changed', { status }, { sessionId: session.id, deviceId: session.deviceId });
+const statusChanged = (
+  session: AgentSession,
+  status: AgentStatus,
+  previous: AgentStatus | null,
+): BackendToWeb =>
+  createEvent(
+    'agent.status.changed',
+    { status, previous },
+    { sessionId: session.id, deviceId: session.deviceId },
+  );
 
 /**
  * Applies one session event from a device. Idempotent: an eventId seen before is a no-op, so the
@@ -126,7 +134,7 @@ export async function ingestSessionEvent(
         { sessionId: session.id, deviceId: device.id },
       ),
     ];
-    if (before !== session.status) out.push(statusChanged(session, session.status));
+    if (before !== session.status) out.push(statusChanged(session, session.status, before));
 
     // Remote approval: the PC is holding this request for a decision from AgentDock.
     if (msg.eventType === 'agent.permission.requested' && msg.payload.awaitingRemote) {
@@ -185,10 +193,10 @@ async function applySnapshot(
           where: { id: s.id },
           data: { status: 'Stopped', endedAt: now },
         });
-        out.push(statusChanged(ended, 'Stopped'));
+        out.push(statusChanged(ended, 'Stopped', s.status));
       } else if (status !== s.status) {
         const updated = await tx.agentSession.update({ where: { id: s.id }, data: { status } });
-        out.push(statusChanged(updated, status));
+        out.push(statusChanged(updated, status, s.status));
       }
     }
     return out;

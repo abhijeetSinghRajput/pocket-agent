@@ -10,6 +10,8 @@ import type { Env } from './env.js';
 import { agentGateway, type GatewayOptions } from './gateway/agent-gateway.js';
 import { commandExpiryJob } from './jobs/command-expiry.js';
 import { retentionJob } from './jobs/retention.js';
+import { NO_PUSH, type PushSender } from './notifications/push.js';
+import { offlineNotifierJob } from './notifications/triggers.js';
 import { createBus } from './realtime/bus.js';
 import { clientGateway } from './realtime/client-gateway.js';
 import { approvalRoutes } from './routes/approvals.js';
@@ -17,6 +19,7 @@ import { authRoutes } from './routes/auth.js';
 import { commandRoutes } from './routes/commands.js';
 import { agentRoutes, deviceRoutes } from './routes/devices.js';
 import { healthRoutes, type HealthDeps } from './routes/health.js';
+import { notificationRoutes } from './routes/notifications.js';
 import { sessionRoutes } from './routes/sessions.js';
 
 export interface AppDeps {
@@ -27,7 +30,9 @@ export interface AppDeps {
    * Database/Redis-backed features (auth, devices, agent gateway). Omitted only in unit tests that
    * exercise the HTTP shell (health, CORS, headers) without infrastructure.
    */
-  ctx?: AppContext & GatewayOptions;
+  ctx?: AppContext & GatewayOptions & { offlineCheckMs?: number };
+  /** Web push sender (FCM). Defaults to none: notifications are recorded but not pushed. */
+  push?: PushSender;
   /**
    * Test-only escape hatch so functional tests from one IP aren't throttled. Refused outside
    * NODE_ENV=test; dedicated tests run with limits on.
@@ -47,7 +52,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   await app.register(cors, {
     origin: deps.env.WEB_ORIGINS,
     credentials: true,
-    methods: ['GET', 'POST', 'PATCH', 'DELETE'],
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
   });
   await app.register(cookie);
   app.decorateRequest('user', null);
@@ -73,7 +78,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
         message: `Too many requests. Try again in ${Math.ceil(c.ttl / 1000)}s.`,
       }),
     });
-    const services = { ...ctx, bus: createBus(ctx, app.log) };
+    const services = { ...ctx, bus: createBus(ctx, app.log), push: deps.push ?? NO_PUSH };
     app.addHook('onClose', async () => services.bus.close());
     await app.register(websocket, { options: { maxPayload: MAX_FRAME_BYTES } });
     await app.register(authRoutes, services);
@@ -86,6 +91,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     await app.register(commandRoutes, services);
     await app.register(approvalRoutes, services);
     await app.register(commandExpiryJob, services);
+    await app.register(notificationRoutes, services);
+    await app.register(offlineNotifierJob, services);
   }
 
   app.setNotFoundHandler((_req, reply) => reply.code(404).send({ error: 'not_found' }));

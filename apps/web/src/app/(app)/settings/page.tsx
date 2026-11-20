@@ -4,7 +4,7 @@ import type { ReactNode } from 'react';
 import { AccountSection } from '@/components/account-section';
 import { PageHeader } from '@/components/page';
 import { ThemeSelector } from '@/components/theme';
-import { Badge } from '@/components/ui/badge';
+import { NotificationSettings } from '@/components/notifications/notification-settings';
 
 export const metadata: Metadata = { title: 'Settings' };
 
@@ -48,10 +48,16 @@ export default function SettingsPage() {
             Devices
           </Link>
         </Section>
-        <Section title="Notifications" description="Push categories, quiet hours and history.">
-          <Badge variant="accent">Arrives in M6</Badge>
-        </Section>
       </div>
+      <section className="mt-6 rounded-xl border bg-card px-5 py-5" aria-labelledby="notifications-heading">
+        <h2 id="notifications-heading" className="text-sm font-semibold">
+          Notifications
+        </h2>
+        <p className="mt-1 mb-5 text-sm text-muted-foreground">
+          Push to this browser or installed app, per category, with quiet hours.
+        </p>
+        <NotificationSettings />
+      </section>
     </>
   );
 }

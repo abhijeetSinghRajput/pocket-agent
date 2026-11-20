@@ -33,6 +33,7 @@ test.describe('mobile navigation', () => {
   test('page content is not hidden behind the bottom nav', async ({ page }) => {
     await page.goto('/settings');
     await expect(page.getByRole('heading', { name: 'Notifications' })).toBeVisible();
+    await expect(page.getByTestId('category-agent_started')).toBeVisible(); // settings loaded
     await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
     const navTop = await page.getByTestId('bottom-nav').evaluate((n) => n.getBoundingClientRect().top);
     const lastBottom = await page

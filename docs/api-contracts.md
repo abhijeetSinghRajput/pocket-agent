@@ -93,3 +93,18 @@ Status: an approval stays `Pending` with `decision` set until the PC confirms it
 `Approved` or `Denied`. If the decision arrived too late (already answered on the PC, timed out, or the session ended), it
 becomes `Cancelled` and is never recorded as `Approved`. `Expired` means nobody decided in time. `DeviceDto` gained `awayMode`, and
 `remoteApprovalEnabled` is now reported by the PC.
+
+## Notifications (M6)
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/notifications?limit=&before=` | Newest first, cursor pagination (`nextCursor`), plus the `unread` count. The caller's own notifications only. |
+| POST | `/notifications/read` | `{ids?}`. Without `ids`, it marks everything read. Needs an allow-listed Origin. |
+| GET | `/notification-settings` | `{categories, quietHours, push: {available, subscriptions}}`. `available` is false when the server has no FCM credentials. |
+| PUT | `/notification-settings` | `{categories?: {<category>: bool}, quietHours?: {start, end, timezone} \| null}`. Partial updates are allowed. An unknown time zone returns `400`. |
+| POST | `/push/subscriptions` | `{token, platform: "web", userAgent?}`. This is an upsert by token, and a token re-registered by another account moves to that account. Limit 20 per minute. |
+| POST | `/push/subscriptions/remove` | `{token}`. It removes only the caller's own token. |
+| POST | `/notifications/test` | Sends a test notification to the caller and returns it with its push outcome (`push.sent`, `push.skipped`). Limit 5 per minute. |
+
+`NotificationDto.push.skipped` is one of `push_not_configured`, `quiet_hours`, `no_browser_registered` or `send_failed`, or it
+is `null`. The browser event `notification.created` tells open tabs to refresh. `agent.status.changed` now carries `previous`.

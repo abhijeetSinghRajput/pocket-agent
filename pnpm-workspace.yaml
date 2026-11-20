@@ -5,3 +5,6 @@ allowBuilds:
   '@prisma/engines': true
   esbuild: true
   prisma: true
+  # Optional postinstall steps; firebase works without them.
+  '@firebase/util': false
+  protobufjs: false

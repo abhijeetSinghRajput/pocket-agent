@@ -227,7 +227,10 @@ export const DeviceStatusChanged = defineEvent(
   'device.status.changed',
   z.object({ status: DeviceStatus, lastHeartbeatAt: z.iso.datetime({ offset: true }).nullable() }),
 );
-export const AgentStatusChanged = defineEvent('agent.status.changed', z.object({ status: AgentStatus }));
+export const AgentStatusChanged = defineEvent(
+  'agent.status.changed',
+  z.object({ status: AgentStatus, previous: AgentStatus.nullable().optional() }),
+);
 export const AgentEventCreated = defineEvent(
   'agent.event.created',
   z.object({ agentEventId: z.uuid(), eventType: z.string().max(100) }),

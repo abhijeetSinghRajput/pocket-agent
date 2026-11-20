@@ -11,6 +11,10 @@ const mono = Geist_Mono({ subsets: ['latin'], variable: '--font-geist-mono' });
 export const metadata: Metadata = {
   title: { default: 'AgentDock', template: '%s · AgentDock' },
   description: 'Your agents. Your machines. Your control.',
+  applicationName: 'AgentDock',
+  // Installed to the Home Screen, iOS 16.4+ can receive web push.
+  appleWebApp: { capable: true, title: 'AgentDock', statusBarStyle: 'default' },
+  icons: { icon: '/pwa-icon/192', apple: '/pwa-icon/180' },
 };
 
 export const viewport: Viewport = {

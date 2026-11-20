@@ -1,7 +1,7 @@
 'use client';
 
 import type { UserDto } from '@agentdock/protocol';
-import { Ellipsis, LogOut, X } from 'lucide-react';
+import { Bell, Ellipsis, LogOut, X } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Dialog } from 'radix-ui';
@@ -9,6 +9,7 @@ import { useState, type ReactNode } from 'react';
 import { ThemeToggle } from '@/components/theme';
 import { useLiveState } from '@/lib/live';
 import { useApprovals } from '@/lib/use-approvals';
+import { useNotifications } from '@/lib/use-notifications';
 import { isActive, NAV_ITEMS } from '@/lib/nav';
 import { cn } from '@/lib/utils';
 
@@ -34,6 +35,34 @@ function LiveDot() {
       />
       <span className="sr-only">{label}</span>
     </span>
+  );
+}
+
+function NotificationBell() {
+  const { state } = useNotifications(1);
+  const pathname = usePathname();
+  const n = state.data?.unread ?? 0;
+  const label = n ? `Notifications, ${n} unread` : 'Notifications';
+  return (
+    <Link
+      href="/notifications"
+      aria-label={label}
+      title={label}
+      aria-current={pathname === '/notifications' ? 'page' : undefined}
+      data-testid="notification-bell"
+      className="relative grid size-9 place-items-center rounded-md text-muted-foreground outline-none hover:bg-accent hover:text-accent-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 aria-[current=page]:text-primary"
+    >
+      <Bell className="size-4" aria-hidden />
+      {n > 0 && (
+        <span
+          aria-hidden
+          data-testid="unread-count"
+          className="absolute top-0.5 right-0.5 grid h-4 min-w-4 place-items-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground tabular-nums"
+        >
+          {n > 99 ? '99+' : n}
+        </span>
+      )}
+    </Link>
   );
 }
 
@@ -125,6 +154,7 @@ function Sidebar({ pathname, user, onSignOut }: { pathname: string; user: UserDt
         <Logo />
         <div className="flex items-center">
           <LiveDot />
+          <NotificationBell />
           <ThemeToggle />
         </div>
       </div>
@@ -159,6 +189,7 @@ function MobileTopBar() {
       <Logo />
       <div className="flex items-center">
         <LiveDot />
+        <NotificationBell />
         <ThemeToggle />
       </div>
     </header>

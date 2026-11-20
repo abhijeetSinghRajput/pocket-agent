@@ -78,6 +78,7 @@ model User {
   approvals         Approval[]
   notifications     Notification[]
   notificationPrefs NotificationPreference[]
+  notificationSettings NotificationSettings?
   pushSubscriptions PushSubscription[]
   auditLogs         AuditLog[]
 
@@ -267,6 +268,9 @@ model Notification {
   /// Prevents duplicate notifications for the same underlying event.
   dedupeKey String?
   readAt    DateTime?
+  /// Push outcome, shown in history: browsers it was sent to, or why it was not pushed.
+  pushSent    Int     @default(0)
+  pushSkipped String?
   createdAt DateTime  @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -288,12 +292,25 @@ model NotificationPreference {
   @@map("notification_preferences")
 }
 
+/// Quiet hours (only critical pushes go out; everything is still recorded).
+model NotificationSettings {
+  userId     String  @id @db.Uuid
+  quietStart String?
+  quietEnd   String?
+  timezone   String  @default("UTC")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notification_settings")
+}
+
 model PushSubscription {
   id         String    @id @default(uuid(7)) @db.Uuid
   userId     String    @db.Uuid
   platform   String
   token      String    @unique
   userAgent  String?
+  lastError  String?
   createdAt  DateTime  @default(now())
   lastUsedAt DateTime?
 

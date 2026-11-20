@@ -29,9 +29,12 @@ test('sections show real (empty) data, never mock data', async ({ page }) => {
   await page.goto('/approvals');
   await expect(page.getByTestId('no-approvals')).toContainText('agentdock approvals enable');
   await expect(page.getByTestId('approval-card')).toHaveCount(0);
-  // The one remaining placeholder says which milestone delivers it.
+  await page.goto('/notifications');
+  await expect(page.getByTestId('notification')).toHaveCount(0);
+  // No placeholders remain: every section is backed by the real API.
   await page.goto('/settings');
-  await expect(page.getByText('Arrives in M6')).toBeVisible();
+  await expect(page.getByTestId('notification-settings')).toBeVisible();
+  await expect(page.getByText(/Arrives in M\d/)).toHaveCount(0);
 });
 
 test('overview shows real backend health', async ({ page }) => {

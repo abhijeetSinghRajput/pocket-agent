@@ -18,8 +18,8 @@ page asks `POST /api/ws/tickets` for a single-use ticket that lasts 60 seconds a
 
 | Resource | Plan | Why |
 |---|---|---|
-| `pocket-agent-api` web service | Starter (paid) | It must never sleep, because PCs keep a WebSocket open to it. |
-| `pocket-agent-db` Postgres | Basic 256 MB (paid) | Free Postgres databases are deleted after 30 days. |
+| `pocket-agent-api` web service | **Free** (testing) → Starter for real use | Free instances sleep after 15 minutes without traffic and wake in about a minute. The PC agent's heartbeat usually keeps the instance awake, but that isn't guaranteed. Migrations run at start-up, because free instances have no pre-deploy step. |
+| `pocket-agent-db` Postgres | **Free** (testing) → Basic 256 MB for real use | **Render deletes free databases after 30 days**, including accounts, paired PCs and history. Before you rely on it, upgrade the plan or point `DATABASE_URL` at an external Postgres such as Neon or Supabase. |
 | `pocket-agent-redis` Key Value | Free | It only holds rate-limit counters, pub/sub and WebSocket tickets, so nothing needs to persist. |
 
 Vercel's Hobby plan is enough for the web app. Check current prices on render.com and vercel.com before creating anything.
@@ -33,7 +33,7 @@ Vercel's Hobby plan is enough for the web app. Check current prices on render.co
 4. Go to **pocket-agent-api → Environment → Secret Files → Add**. Name the file `fcm.json` and paste the contents of the Firebase
    service-account JSON. Render mounts it at `/etc/secrets/fcm.json`, which `FCM_SERVICE_ACCOUNT_FILE` already points to.
    Without it, the API still runs, but notifications are in-app only.
-5. Deploys run `prisma migrate deploy` before starting the new version. Check the API at
+5. Each start runs `prisma migrate deploy` first (it only applies new migrations). Check the API at
    `https://pocket-agent-api.onrender.com/health` (your service URL may differ).
 
 ## 2. Web on Vercel

@@ -4,7 +4,6 @@ const ROUTES = [
   { path: '/', heading: 'Overview' },
   { path: '/agents', heading: 'Agents' },
   { path: '/approvals', heading: 'Approvals' },
-  { path: '/activity', heading: 'Activity' },
   { path: '/devices', heading: 'Devices' },
   { path: '/settings', heading: 'Settings' },
 ];
@@ -54,4 +53,19 @@ test('theme toggle switches between light and dark and persists', async ({ page 
   await expect(html).toHaveClass(/dark/);
   await page.reload();
   await expect(html).toHaveClass(/dark/);
+});
+
+test('pressing D toggles the theme, but not while typing', async ({ page }) => {
+  await page.emulateMedia({ colorScheme: 'light' });
+  await page.goto('/agents');
+  const html = page.locator('html');
+  await expect(page.getByRole('heading', { level: 1, name: 'Agents' })).toBeVisible();
+  await expect(html).not.toHaveClass(/dark/);
+  await page.keyboard.press('d');
+  await expect(html).toHaveClass(/dark/);
+  await page.getByLabel('Search sessions').fill('d');
+  await expect(html).toHaveClass(/dark/);
+  await page.locator('body').click({ position: { x: 1, y: 1 } });
+  await page.keyboard.press('d');
+  await expect(html).not.toHaveClass(/dark/);
 });

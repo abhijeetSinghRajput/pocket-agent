@@ -6,7 +6,8 @@
 /* Design tokens (shadcn/ui conventions). Neutral surfaces, one accent, semantic status colours. */
 :root {
   --radius: 0.625rem;
-  --background: oklch(0.99 0 0);
+  /* Page is a muted step darker than cards, so cards read as raised surfaces. */
+  --background: oklch(0.955 0.004 270);
   --foreground: oklch(0.2 0.006 270);
   --card: oklch(1 0 0);
   --card-foreground: var(--foreground);
@@ -14,9 +15,9 @@
   --popover-foreground: var(--foreground);
   --primary: oklch(0.56 0.18 42);
   --primary-foreground: oklch(0.99 0 0);
-  --secondary: oklch(0.965 0.003 270);
+  --secondary: oklch(0.94 0.004 270);
   --secondary-foreground: oklch(0.25 0.006 270);
-  --muted: oklch(0.965 0.003 270);
+  --muted: oklch(0.94 0.004 270);
   --muted-foreground: oklch(0.5 0.01 270);
   --accent: oklch(0.96 0.025 55);
   --accent-foreground: oklch(0.38 0.11 45);
@@ -26,11 +27,11 @@
   --ring: oklch(0.56 0.18 42);
   --success: oklch(0.6 0.14 155);
   --warning: oklch(0.72 0.15 75);
-  --sidebar: oklch(0.975 0.002 270);
+  --sidebar: oklch(0.985 0.002 270);
 }
 
 .dark {
-  --background: oklch(0.16 0.004 270);
+  --background: oklch(0.13 0.004 270);
   --foreground: oklch(0.95 0.003 270);
   --card: oklch(0.195 0.005 270);
   --card-foreground: var(--foreground);
@@ -51,6 +52,44 @@
   --success: oklch(0.72 0.15 155);
   --warning: oklch(0.8 0.14 80);
   --sidebar: oklch(0.18 0.005 270);
+}
+
+/* Outgoing chat bubble colours (solid, brand-tinted). */
+:root {
+  --bubble-out: oklch(0.9 0.065 55);
+  --bubble-out-foreground: oklch(0.22 0.02 45);
+  --bubble-meta: oklch(0.45 0.03 45);
+  --bubble-link: oklch(0.5 0.16 42);
+  --bubble-read: oklch(0.6 0.13 235);
+}
+.dark {
+  --bubble-out: oklch(0.4 0.09 45);
+  --bubble-out-foreground: oklch(0.97 0.01 60);
+  --bubble-meta: oklch(0.82 0.03 60);
+  --bubble-link: oklch(0.88 0.1 65);
+  --bubble-read: oklch(0.78 0.12 230);
+}
+
+/* Syntax colours for highlight.js (GitHub-like), following the theme. */
+:root {
+  --hl-keyword: #cf222e;
+  --hl-string: #0a3069;
+  --hl-title: #8250df;
+  --hl-number: #0550ae;
+  --hl-comment: #6e7781;
+  --hl-builtin: #953800;
+  --hl-add: #116329;
+  --hl-del: #82071e;
+}
+.dark {
+  --hl-keyword: #ff7b72;
+  --hl-string: #a5d6ff;
+  --hl-title: #d2a8ff;
+  --hl-number: #79c0ff;
+  --hl-comment: #8b949e;
+  --hl-builtin: #ffa657;
+  --hl-add: #aff5b4;
+  --hl-del: #ffdcd7;
 }
 
 @theme inline {
@@ -81,6 +120,146 @@
   --color-success: var(--success);
   --color-warning: var(--warning);
   --color-sidebar: var(--sidebar);
+}
+
+@layer components {
+  /* Wavy hairline used by the day separators in a chat. */
+  .wavy-rule {
+    height: 6px;
+    background-color: var(--muted-foreground);
+    opacity: 0.35;
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='6'%3E%3Cpath d='M0 3 Q3 0 6 3 T12 3' fill='none' stroke='black' stroke-width='1.2'/%3E%3C/svg%3E")
+      repeat-x center / 12px 6px;
+  }
+}
+
+@layer components {
+  /* Outgoing chat bubble, messenger style: solid colour, square top-right corner with a tail. */
+  .bubble-out {
+    background: var(--bubble-out);
+    color: var(--bubble-out-foreground);
+    border-radius: 0.6rem 0 0.6rem 0.6rem;
+    box-shadow: 0 1px 0.5px rgb(0 0 0 / 0.13);
+  }
+  .bubble-out::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: -8px;
+    width: 8px;
+    height: 13px;
+    background: var(--bubble-out);
+    clip-path: polygon(0 0, 100% 0, 0 100%);
+  }
+
+  /* Claude-style shimmer on the "working" verb. */
+  .shimmer-text {
+    background: linear-gradient(
+        90deg,
+        var(--primary) 0%,
+        var(--primary) 40%,
+        color-mix(in oklab, var(--primary) 35%, white) 50%,
+        var(--primary) 60%,
+        var(--primary) 100%
+      )
+      0 0 / 250% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    animation: shimmer 2.2s linear infinite;
+  }
+  @keyframes shimmer {
+    from {
+      background-position: 100% 0;
+    }
+    to {
+      background-position: -150% 0;
+    }
+  }
+  /* The working verb: leaves with a fade/blur up (transition), arrives from below (animation). */
+  .verb-swap {
+    display: inline-block;
+    transition:
+      opacity 0.26s ease-in,
+      transform 0.26s ease-in,
+      filter 0.26s ease-in;
+    animation:
+      shimmer 2.2s linear infinite,
+      verb-in 0.32s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  @keyframes verb-in {
+    from {
+      opacity: 0;
+      transform: translateY(5px);
+      filter: blur(2px);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .shimmer-text,
+    .verb-swap {
+      animation: none;
+      transition: none;
+    }
+  }
+
+  .hljs-keyword,
+  .hljs-doctag,
+  .hljs-meta .hljs-keyword,
+  .hljs-template-tag,
+  .hljs-type,
+  .hljs-selector-tag {
+    color: var(--hl-keyword);
+  }
+  .hljs-string,
+  .hljs-regexp,
+  .hljs-meta .hljs-string {
+    color: var(--hl-string);
+  }
+  .hljs-title,
+  .hljs-title.class_,
+  .hljs-title.function_,
+  .hljs-section {
+    color: var(--hl-title);
+  }
+  .hljs-number,
+  .hljs-literal,
+  .hljs-attr,
+  .hljs-attribute,
+  .hljs-variable,
+  .hljs-property,
+  .hljs-selector-attr,
+  .hljs-selector-class,
+  .hljs-selector-id,
+  .hljs-meta,
+  .hljs-symbol,
+  .hljs-name,
+  .hljs-tag {
+    color: var(--hl-number);
+  }
+  .hljs-built_in,
+  .hljs-params,
+  .hljs-subst {
+    color: var(--hl-builtin);
+  }
+  .hljs-comment,
+  .hljs-quote {
+    color: var(--hl-comment);
+    font-style: italic;
+  }
+  .hljs-addition {
+    color: var(--hl-add);
+    background: color-mix(in oklab, var(--success) 15%, transparent);
+  }
+  .hljs-deletion {
+    color: var(--hl-del);
+    background: color-mix(in oklab, var(--destructive) 15%, transparent);
+  }
+  .hljs-emphasis {
+    font-style: italic;
+  }
+  .hljs-strong {
+    font-weight: 600;
+  }
 }
 
 @layer base {

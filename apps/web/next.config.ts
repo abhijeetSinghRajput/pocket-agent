@@ -10,6 +10,8 @@ const apiProxyTarget = process.env.API_PROXY_TARGET?.replace(/\/+$/, '');
 const config: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
+  // The floating dev-tools button sat on top of the chat's Send button.
+  devIndicators: false,
   async rewrites() {
     return apiProxyTarget ? [{ source: '/api/:path*', destination: `${apiProxyTarget}/:path*` }] : [];
   },

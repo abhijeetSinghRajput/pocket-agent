@@ -14,8 +14,8 @@ test.describe('mobile navigation', () => {
 
     await nav.getByRole('button', { name: 'More' }).click();
     const sheet = page.getByRole('dialog', { name: 'More' });
-    await sheet.getByRole('link', { name: 'Devices' }).click();
-    await expect(page).toHaveURL(/\/devices$/);
+    await sheet.getByRole('link', { name: 'Settings' }).click();
+    await expect(page).toHaveURL(/\/settings$/);
     await expect(sheet).toBeHidden();
   });
 

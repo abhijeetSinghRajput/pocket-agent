@@ -4,7 +4,6 @@ import { OverviewResponse } from '@pocket-agent/protocol';
 import { Check } from 'lucide-react';
 import Link from 'next/link';
 import { useCallback } from 'react';
-import { Timeline } from '@/components/agents/timeline';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { apiRequest } from '@/lib/api';
@@ -95,27 +94,6 @@ export function OverviewStats({ state }: { state: PollState<OverviewResponse> })
         testId="agents-permission"
       />
     </div>
-  );
-}
-
-export function RecentActivity({ state }: { state: PollState<OverviewResponse> }) {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Recent activity</CardTitle>
-        <Link
-          href="/activity"
-          className="text-sm font-medium text-primary underline-offset-4 hover:underline"
-        >
-          View all
-        </Link>
-      </CardHeader>
-      {state.status === 'ready' ? (
-        <Timeline events={state.data.recent} showSession />
-      ) : (
-        <div className="h-24 animate-pulse rounded-md bg-muted" aria-busy="true" />
-      )}
-    </Card>
   );
 }
 

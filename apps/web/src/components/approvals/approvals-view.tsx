@@ -1,13 +1,23 @@
 'use client';
 
-import { ShieldCheck } from 'lucide-react';
+import { Laptop, Lock, ShieldCheck } from 'lucide-react';
 import Link from 'next/link';
 import { APPROVAL_STATUS, ApprovalCard } from '@/components/approvals/approval-card';
-import { toolTarget } from '@/components/agents/timeline';
+import { toolTarget } from '@/lib/chat';
 import { PageHeader } from '@/components/page';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { CommandLine } from '@/components/ui/command-line';
 import { timeAgo } from '@/lib/format';
 import { useApprovals } from '@/lib/use-approvals';
+
+function Step({ n }: { n: number }) {
+  return (
+    <span className="grid size-6 shrink-0 place-items-center rounded-full bg-accent text-xs font-semibold text-accent-foreground tabular-nums">
+      {n}
+    </span>
+  );
+}
 
 export function ApprovalsView() {
   const pending = useApprovals('pending');
@@ -36,28 +46,53 @@ export function ApprovalsView() {
       )}
 
       {pending.state.status === 'ready' && open.length === 0 && (
-        <section
-          className="flex flex-col items-center rounded-xl border border-dashed px-6 py-12 text-center"
-          data-testid="no-approvals"
-        >
-          <span className="grid size-11 place-items-center rounded-xl bg-muted text-muted-foreground">
-            <ShieldCheck className="size-5" aria-hidden />
-          </span>
-          <h2 className="mt-4 text-base font-semibold">Nothing waiting</h2>
-          <div className="mt-2 max-w-md space-y-2 text-sm text-pretty text-muted-foreground">
-            <p>
-              Remote approval is off until you enable it on the PC:{' '}
-              <code className="font-mono text-[13px] text-foreground">pocket-agent approvals enable</code>.
-              For sessions you start yourself, requests come here only while{' '}
-              <Link href="/devices" className="font-medium text-foreground underline underline-offset-4">
-                Away mode
-              </Link>{' '}
-              is on.
-            </p>
-            <p>
-              Pocket Agent never changes your Claude Code permission settings, and every decision is audited.
-            </p>
+        <section className="rounded-2xl border bg-card p-5 shadow-xs sm:p-6" data-testid="no-approvals">
+          <div className="flex items-start gap-3">
+            <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-success/12 text-success">
+              <ShieldCheck className="size-5" aria-hidden />
+            </span>
+            <div>
+              <h2 className="text-base font-semibold">No requests waiting</h2>
+              <p className="mt-0.5 text-sm text-pretty text-muted-foreground">
+                When Claude needs permission for something, it appears here and you can allow or deny it from
+                your phone.
+              </p>
+            </div>
           </div>
+
+          <h3 className="mt-6 text-sm font-semibold">To get requests here</h3>
+          <ol className="mt-3 flex flex-col gap-4 text-sm">
+            <li className="flex gap-3">
+              <Step n={1} />
+              <div className="min-w-0 flex-1">
+                <p>Allow it once on your PC:</p>
+                <CommandLine command="pocket-agent approvals enable" className="mt-2" />
+              </div>
+            </li>
+            <li className="flex gap-3">
+              <Step n={2} />
+              <div className="min-w-0 flex-1">
+                <p>
+                  For sessions you start in VS Code or a terminal, turn on <strong>Away mode</strong> for that
+                  PC. Otherwise Claude Code simply asks on the PC.
+                </p>
+                <Button asChild variant="outline" size="sm" className="mt-2">
+                  <Link href="/devices">
+                    <Laptop aria-hidden /> Open Devices
+                  </Link>
+                </Button>
+              </div>
+            </li>
+            <li className="flex gap-3">
+              <Step n={3} />
+              <p className="min-w-0 flex-1">Sessions you start from Pocket Agent always ask here.</p>
+            </li>
+          </ol>
+
+          <p className="mt-6 flex items-start gap-2 border-t pt-4 text-xs text-muted-foreground">
+            <Lock className="mt-px size-3.5 shrink-0" aria-hidden />
+            Pocket Agent never changes your Claude Code permission settings, and every decision is audited.
+          </p>
         </section>
       )}
 

@@ -4,7 +4,7 @@ import { SessionListResponse } from '@pocket-agent/protocol';
 import { expect, test, type Page } from '@playwright/test';
 import { randomUUID } from 'node:crypto';
 import { agentEnv, cli, hookPayloads, relay, startAgent } from './agent';
-import { API, registerViaApi } from './helpers';
+import { API, chatStatus, closeSessionInfo, openSessionInfo, registerViaApi } from './helpers';
 
 test.describe.configure({ mode: 'serial' });
 
@@ -59,13 +59,17 @@ test('a Claude Code session streams into the dashboard live, survives a reconnec
     timeout: 10_000,
   });
 
-  // Details: honest capabilities + live timeline.
+  // The chat: honest capabilities (Session info) + live conversation.
   await card.click();
   await expect(page.getByRole('heading', { level: 1, name: 'checkout-service' })).toBeVisible();
-  const caps = page.getByTestId('capabilities');
+  const caps = await openSessionInfo(page);
   await expect(caps.locator('[data-capability="Live status"]')).toHaveAttribute('data-state', 'yes');
   await expect(caps.locator('[data-capability="Send instructions"]')).toContainText('Turned off on this PC');
   await expect(caps.locator('[data-capability="Stop / interrupt"]')).toHaveAttribute('data-state', 'no');
+  await closeSessionInfo(page);
+  // The message box stays but is disabled, and says why.
+  await expect(page.getByLabel('Send an instruction')).toBeDisabled();
+  await expect(page.getByTestId('delivery-hint')).toContainText('pocket-agent instructions enable');
   const timeline = page.getByTestId('timeline');
   await expect(timeline).toContainText('Permission requested: Bash');
   await expect(timeline).toContainText('echo pocket-agent-poc');
@@ -73,14 +77,21 @@ test('a Claude Code session streams into the dashboard live, survives a reconnec
   relay(env, hooks['PostToolUse']!);
   relay(env, hooks['Stop']!);
   await expect(timeline).toContainText('Answered on the PC', { timeout: 10_000 });
-  await expect(timeline).toContainText('Bash finished');
+  await expect(timeline.locator('[data-tool-state="done"]')).toContainText('Bash');
   await expect(timeline).toContainText('The command ran and printed');
-  await expect(page.getByTestId('session-status')).toHaveAttribute('data-status', 'WaitingForInput');
+  // The conversation scrolls inside the chat; the page itself never grows a scrollbar.
+  const size = page.viewportSize()!;
+  await page.setViewportSize({ width: 400, height: 420 });
+  expect(
+    await page.evaluate(() => document.documentElement.scrollHeight - window.innerHeight),
+  ).toBeLessThanOrEqual(0);
+  await page.setViewportSize(size);
+  await expect(chatStatus(page)).toHaveAttribute('data-status', 'WaitingForInput');
 
   // The PC drops → the session shows the PC is offline.
   agent.kill();
   await agent.exited;
-  await expect(page.getByTestId('session-status')).toHaveAttribute('data-status', 'Disconnected', {
+  await expect(chatStatus(page)).toHaveAttribute('data-status', 'Disconnected', {
     timeout: 15_000,
   });
 
@@ -88,24 +99,20 @@ test('a Claude Code session streams into the dashboard live, survives a reconnec
   agent = startAgent(env);
   await expect.poll(() => agent.output()).toContain('Connected to');
   relay(env, hooks['UserPromptSubmit']!);
-  await expect(page.getByTestId('session-status')).toHaveAttribute('data-status', 'Running', {
+  await expect(chatStatus(page)).toHaveAttribute('data-status', 'Running', {
     timeout: 15_000,
   });
   expect(await sessionsFor(page, sid)).toHaveLength(1);
 
   // Session ends → leaves the Active list.
   relay(env, hooks['SessionEnd']!);
-  await expect(page.getByTestId('session-status')).toHaveAttribute('data-status', 'Stopped', {
+  await expect(chatStatus(page)).toHaveAttribute('data-status', 'Stopped', {
     timeout: 10_000,
   });
   await page.goto('/agents');
   await expect(page.getByText('No active sessions')).toBeVisible();
   await page.getByRole('tab', { name: 'All' }).click();
   await expect(page.getByTestId('session-card').filter({ hasText: 'checkout-service' })).toBeVisible();
-
-  // Activity feed links back to the session.
-  await page.goto('/activity');
-  await expect(page.getByTestId('timeline')).toContainText('checkout-service · E2E PC');
 
   agent.kill();
   await agent.exited;
@@ -149,7 +156,7 @@ test('sessions found without hooks are shown as status-only, never as controllab
   await expect(card).toBeVisible({ timeout: 20_000 });
   await expect(card.getByTestId('session-kind')).toHaveText('VS Code · status only');
   await card.click();
-  const caps = page.getByTestId('capabilities');
+  const caps = await openSessionInfo(page);
   for (const c of ['Approve permissions remotely', 'Send instructions', 'Stop / interrupt']) {
     await expect(caps.locator(`[data-capability="${c}"]`)).toHaveAttribute('data-state', 'no');
   }

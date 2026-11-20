@@ -7,11 +7,12 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Dialog } from 'radix-ui';
 import { useState, type ReactNode } from 'react';
+import { ApprovalPrompt } from '@/components/approvals/approval-prompt';
 import { ThemeToggle } from '@/components/theme';
 import { useLiveState } from '@/lib/live';
 import { useApprovals } from '@/lib/use-approvals';
 import { useNotifications } from '@/lib/use-notifications';
-import { isActive, NAV_ITEMS } from '@/lib/nav';
+import { isActive, NAV_ITEMS, openChatId } from '@/lib/nav';
 import { cn } from '@/lib/utils';
 
 function LiveDot() {
@@ -157,7 +158,7 @@ function Sidebar({ pathname, user, onSignOut }: { pathname: string; user: UserDt
                 active && 'bg-accent text-accent-foreground',
               )}
             >
-              <Icon className="size-4" aria-hidden />
+              <Icon className={cn('size-[18px]', active ? 'text-primary' : 'text-foreground')} aria-hidden />
               {label}
               {href === '/approvals' && <PendingBadge />}
             </Link>
@@ -171,7 +172,7 @@ function Sidebar({ pathname, user, onSignOut }: { pathname: string; user: UserDt
 
 function MobileTopBar() {
   return (
-    <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b bg-background/85 px-4 backdrop-blur-md lg:hidden">
+    <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b bg-card/90 px-4 backdrop-blur-md lg:hidden">
       <Logo />
       <div className="flex items-center">
         <LiveDot />
@@ -206,7 +207,7 @@ function BottomNav({
     <nav
       aria-label="Main"
       data-testid="bottom-nav"
-      className="fixed inset-x-0 bottom-0 z-30 flex border-t bg-background/90 pb-[env(safe-area-inset-bottom)] backdrop-blur-md lg:hidden"
+      className="fixed inset-x-0 bottom-0 z-30 flex border-t bg-card/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-md lg:hidden"
     >
       {primary.map(({ href, label, icon: Icon }) => {
         const active = isActive(pathname, href);
@@ -218,7 +219,7 @@ function BottomNav({
             className={itemClass(active)}
           >
             <span className="relative">
-              <Icon className="size-5" aria-hidden />
+              <Icon className={cn('size-5', active ? 'text-primary' : 'text-foreground')} aria-hidden />
               {href === '/approvals' && <PendingDot />}
             </span>
             {label}
@@ -257,7 +258,10 @@ function BottomNav({
                         active && 'bg-accent text-accent-foreground',
                       )}
                     >
-                      <Icon className="size-5 text-muted-foreground" aria-hidden />
+                      <Icon
+                        className={cn('size-5', active ? 'text-primary' : 'text-foreground')}
+                        aria-hidden
+                      />
                       {label}
                     </Link>
                   </li>
@@ -298,16 +302,27 @@ export function AppShell({
   onSignOut: () => void;
 }) {
   const pathname = usePathname();
+  // Agents is a messenger: edge to edge, and an open chat takes the whole phone screen.
+  const chats = isActive(pathname, '/agents');
+  const chatOpen = !!openChatId(pathname);
   return (
     <div className="flex min-h-dvh">
       <Sidebar pathname={pathname} user={user} onSignOut={onSignOut} />
       <div className="flex min-w-0 flex-1 flex-col">
-        <MobileTopBar />
-        <main className="mx-auto w-full max-w-5xl flex-1 px-4 pt-6 pb-[calc(5.5rem+env(safe-area-inset-bottom))] sm:px-6 lg:px-8 lg:pt-10 lg:pb-12">
+        {!chatOpen && <MobileTopBar />}
+        <main
+          className={cn(
+            'w-full min-w-0 flex-1',
+            chats
+              ? cn('min-w-0', !chatOpen && 'pb-[calc(4rem+env(safe-area-inset-bottom))] lg:pb-0')
+              : 'mx-auto max-w-5xl px-4 pt-6 pb-[calc(5.5rem+env(safe-area-inset-bottom))] sm:px-6 lg:px-8 lg:pt-10 lg:pb-12',
+          )}
+        >
           {children}
         </main>
       </div>
-      <BottomNav pathname={pathname} user={user} onSignOut={onSignOut} />
+      {!chatOpen && <BottomNav pathname={pathname} user={user} onSignOut={onSignOut} />}
+      <ApprovalPrompt />
     </div>
   );
 }

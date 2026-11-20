@@ -1,22 +1,141 @@
 'use client';
 
-import { SessionResponse } from '@pocket-agent/protocol';
-import { ArrowLeft, FolderOpen, Laptop } from 'lucide-react';
+import { SessionResponse, type AgentSessionDto } from '@pocket-agent/protocol';
+import { ArrowLeft, FolderOpen, Info, Laptop, X } from 'lucide-react';
 import Link from 'next/link';
-import { useCallback } from 'react';
+import { Dialog } from 'radix-ui';
+import { useCallback, useMemo, useState } from 'react';
 import { duration } from '@/components/agents/agents-view';
 import { CapabilityList } from '@/components/agents/capabilities';
-import { SessionKindBadge, SessionStatusBadge, sessionKind } from '@/components/agents/session-badges';
-import { RemoteControl } from '@/components/agents/remote-control';
+import { ChatMessages } from '@/components/agents/chat-messages';
+import { Composer, SessionControls, useCommands } from '@/components/agents/remote-control';
+import {
+  SessionAvatar,
+  SessionKindBadge,
+  SessionStatusBadge,
+  sessionKind,
+} from '@/components/agents/session-badges';
 import { SessionApprovals } from '@/components/approvals/session-approvals';
-import { Timeline } from '@/components/agents/timeline';
 import { Button } from '@/components/ui/button';
-import { Card, CardTitle } from '@/components/ui/card';
 import { apiRequest, NOT_FOUND_MESSAGE } from '@/lib/api';
+import { buildChat } from '@/lib/chat';
 import { formatDate, timeAgo } from '@/lib/format';
 import { useLiveRefresh } from '@/lib/live';
 import { useEventFeed } from '@/lib/use-event-feed';
 import { usePoll } from '@/lib/use-poll';
+import { cn } from '@/lib/utils';
+
+/** What the header says under the name, like a messenger's "online" / "typing…". */
+function presence(s: AgentSessionDto): { text: string; live: boolean } {
+  if (s.endedAt) return { text: `ended ${timeAgo(s.endedAt)}`, live: false };
+  switch (s.status) {
+    case 'Starting':
+      return { text: 'starting…', live: true };
+    case 'Running':
+      return { text: 'working…', live: true };
+    case 'WaitingForPermission':
+      return { text: 'needs permission', live: true };
+    case 'WaitingForInput':
+      return { text: 'waiting for you', live: false };
+    case 'Disconnected':
+      return { text: `PC offline · last seen ${timeAgo(s.lastActivityAt)}`, live: false };
+    default:
+      return { text: `active ${timeAgo(s.lastActivityAt)}`, live: false };
+  }
+}
+
+function typingKind(s: AgentSessionDto): 'working' | 'starting' | null {
+  if (s.endedAt) return null;
+  if (s.status === 'Running') return 'working';
+  if (s.status === 'Starting') return 'starting';
+  return null;
+}
+
+function SessionInfo({
+  session: s,
+  open,
+  onOpenChange,
+  onChange,
+}: {
+  session: AgentSessionDto;
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  onChange: () => void;
+}) {
+  return (
+    <Dialog.Root open={open} onOpenChange={onOpenChange}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 z-40 bg-black/40 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=closed]:animate-out data-[state=closed]:fade-out-0" />
+        <Dialog.Content
+          data-testid="session-info"
+          className="fixed inset-y-0 right-0 z-50 flex w-full flex-col overflow-y-auto border-l bg-popover pb-[env(safe-area-inset-bottom)] text-popover-foreground shadow-xl outline-none sm:max-w-md data-[state=open]:animate-in data-[state=open]:slide-in-from-right data-[state=open]:duration-300 data-[state=closed]:animate-out data-[state=closed]:slide-out-to-right data-[state=closed]:duration-200"
+        >
+          <div className="flex h-14 shrink-0 items-center gap-2 border-b px-2 pt-[env(safe-area-inset-top)]">
+            <Dialog.Close
+              aria-label="Close"
+              className="grid size-10 place-items-center rounded-md text-muted-foreground outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50"
+            >
+              <X className="size-5" />
+            </Dialog.Close>
+            <Dialog.Title className="text-base font-semibold">Session info</Dialog.Title>
+          </div>
+          <Dialog.Description className="sr-only">
+            Details and what you can do in this session.
+          </Dialog.Description>
+
+          <div className="flex flex-col items-center gap-2 border-b px-5 py-6 text-center">
+            <SessionAvatar session={s} size="lg" />
+            <p className="mt-1 text-lg font-semibold break-all">{s.projectName}</p>
+            <div className="flex flex-wrap justify-center gap-1.5">
+              <SessionStatusBadge status={s.status} />
+              <SessionKindBadge session={s} withLabel />
+            </div>
+            {s.currentTask && (
+              <p className="mt-1 text-sm text-pretty text-muted-foreground">{s.currentTask}</p>
+            )}
+          </div>
+
+          <dl className="flex flex-col gap-3 border-b px-5 py-4 text-sm">
+            <div className="flex min-w-0 items-start gap-3">
+              <FolderOpen className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden />
+              <dt className="sr-only">Project path</dt>
+              <dd className="min-w-0 font-mono text-[12.5px] break-all">{s.projectPath}</dd>
+            </div>
+            <div className="flex items-center gap-3">
+              <Laptop className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+              <dt className="sr-only">Device</dt>
+              <dd>{s.deviceName}</dd>
+            </div>
+            <div className="flex justify-between gap-3 text-muted-foreground">
+              <dt>Started</dt>
+              <dd className="text-foreground">
+                {formatDate(s.startedAt)} · {duration(s.startedAt, s.endedAt)}
+              </dd>
+            </div>
+            <div className="flex justify-between gap-3 text-muted-foreground">
+              <dt>Last activity</dt>
+              <dd className="text-foreground">{timeAgo(s.lastActivityAt)}</dd>
+            </div>
+          </dl>
+
+          <section className="flex flex-col gap-3 px-5 py-4">
+            <div>
+              <h2 className="text-sm font-semibold">What you can do here</h2>
+              <p className="mt-1 text-xs text-muted-foreground">{sessionKind(s).hint}</p>
+            </div>
+            <CapabilityList session={s} />
+          </section>
+
+          {s.capabilities.interrupt && !s.endedAt && (
+            <section className="border-t px-5 py-4">
+              <SessionControls session={s} onDone={onChange} />
+            </section>
+          )}
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
+  );
+}
 
 export function AgentDetail({ id }: { id: string }) {
   const fetcher = useCallback(
@@ -26,6 +145,8 @@ export function AgentDetail({ id }: { id: string }) {
   );
   const { state, refresh } = usePoll(fetcher, 30_000);
   const feed = useEventFeed(`/sessions/${id}/events`);
+  const commands = useCommands(id);
+  const [infoOpen, setInfoOpen] = useState(false);
   useLiveRefresh(
     () => {
       void refresh();
@@ -33,116 +154,136 @@ export function AgentDetail({ id }: { id: string }) {
     },
     (e) => e.sessionId === id || e.eventType === 'device.status.changed',
   );
+  const items = useMemo(
+    () => buildChat(feed.events, commands.state.data ?? []),
+    [feed.events, commands.state.data],
+  );
 
   if (state.status === 'loading') {
     return (
-      <div className="space-y-4" aria-busy="true">
-        <div className="h-8 w-64 animate-pulse rounded bg-muted" />
-        <div className="h-40 animate-pulse rounded-xl bg-muted" />
+      <div className="flex h-dvh flex-col" aria-busy="true">
+        <div className="flex h-16 items-center gap-3 border-b px-4">
+          <div className="size-10 animate-pulse rounded-full bg-muted" />
+          <div className="h-4 w-40 animate-pulse rounded bg-muted" />
+        </div>
+        <div className="mx-auto w-full max-w-3xl flex-1 space-y-4 p-6">
+          <div className="ml-auto h-12 w-2/3 animate-pulse rounded-2xl bg-muted" />
+          <div className="h-24 w-3/4 animate-pulse rounded-2xl bg-muted" />
+        </div>
       </div>
     );
   }
   if (state.status === 'error') {
     const notFound = state.error === NOT_FOUND_MESSAGE;
     return (
-      <div className="py-16 text-center">
-        <h1 className="text-xl font-semibold">
-          {notFound ? 'Session not found' : 'Could not load this session'}
-        </h1>
-        <p className="mt-2 text-sm text-muted-foreground">{state.error}</p>
-        <Button asChild variant="outline" className="mt-6">
-          <Link href="/agents">Back to agents</Link>
-        </Button>
+      <div className="grid h-dvh place-items-center px-4 text-center">
+        <div>
+          <h1 className="text-xl font-semibold">
+            {notFound ? 'Session not found' : 'Could not load this session'}
+          </h1>
+          <p className="mt-2 text-sm text-muted-foreground">{state.error}</p>
+          <Button asChild variant="outline" className="mt-6">
+            <Link href="/agents">Back to agents</Link>
+          </Button>
+        </div>
       </div>
     );
   }
 
   const s = state.data;
+  const p = presence(s);
+  const changed = () => {
+    void refresh();
+    void feed.refreshHead();
+    void commands.refresh();
+  };
+
   return (
-    <>
-      <Link
-        href="/agents"
-        className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
+    <section
+      className="flex h-dvh flex-col overflow-hidden bg-background"
+      aria-label={`Conversation with ${s.projectName}`}
+    >
+      <header
+        data-testid="chat-header"
+        className="z-10 flex shrink-0 items-center gap-1 border-b bg-card/90 px-1.5 pt-[env(safe-area-inset-top)] backdrop-blur-md sm:gap-2 sm:px-3"
       >
-        <ArrowLeft className="size-4" aria-hidden /> Agents
-      </Link>
-
-      <header className="mb-6">
-        <div className="flex flex-wrap items-center gap-2">
-          <h1 className="text-2xl font-semibold tracking-tight break-all">{s.projectName}</h1>
-          <SessionStatusBadge status={s.status} />
-          <SessionKindBadge session={s} />
-        </div>
-        {s.currentTask && <p className="mt-2 text-sm text-pretty">{s.currentTask}</p>}
-        <dl className="mt-3 flex flex-col gap-1.5 text-xs text-muted-foreground sm:flex-row sm:flex-wrap sm:gap-x-4">
-          <div className="flex min-w-0 items-center gap-1.5">
-            <FolderOpen className="size-3.5 shrink-0" aria-hidden />
-            <dt className="sr-only">Project path</dt>
-            <dd className="truncate font-mono">{s.projectPath}</dd>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <Laptop className="size-3.5 shrink-0" aria-hidden />
-            <dt className="sr-only">Device</dt>
-            <dd>{s.deviceName}</dd>
-          </div>
-          <div>
-            <dt className="inline">Started </dt>
-            <dd className="inline">
-              {formatDate(s.startedAt)} · {duration(s.startedAt, s.endedAt)}
-            </dd>
-          </div>
-          <div>
-            <dt className="inline">Last activity </dt>
-            <dd className="inline">{timeAgo(s.lastActivityAt)}</dd>
-          </div>
-        </dl>
-      </header>
-
-      <div className="grid gap-4 lg:grid-cols-[1fr_300px]">
-        <SessionApprovals sessionId={s.id} />
-        <div className="lg:col-start-1">
-          <RemoteControl
-            session={s}
-            onChange={() => {
-              void refresh();
-              void feed.refreshHead();
-            }}
-          />
-        </div>
-        <Card className="lg:col-start-1">
-          <CardTitle>Activity</CardTitle>
-          {feed.status === 'loading' ? (
-            <div className="h-32 animate-pulse rounded-md bg-muted" aria-busy="true" />
-          ) : feed.status === 'error' ? (
-            <p role="alert" className="text-sm text-destructive">
-              {feed.error}
+        <Link
+          href="/agents"
+          aria-label="Back to agents"
+          className="grid size-10 shrink-0 place-items-center rounded-full text-muted-foreground outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50 lg:hidden"
+        >
+          <ArrowLeft className="size-5" aria-hidden />
+        </Link>
+        <div className="flex h-16 min-w-0 flex-1 items-center gap-3 pl-1 lg:pl-2">
+          <SessionAvatar session={s} size="sm" />
+          <div className="min-w-0 flex-1">
+            <h1 className="truncate text-[15px] leading-tight font-semibold">{s.projectName}</h1>
+            <p className="mt-0.5 flex min-w-0 items-center gap-1.5 text-xs">
+              <span className={cn('truncate', p.live ? 'font-medium text-primary' : 'text-muted-foreground')}>
+                {p.text}
+              </span>
+              <span aria-hidden className="text-muted-foreground">
+                ·
+              </span>
+              <span className="truncate text-muted-foreground">{s.deviceName}</span>
             </p>
-          ) : (
-            <>
-              <Timeline events={feed.events} />
-              {feed.hasMore && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="self-center"
-                  disabled={feed.loadingMore}
-                  onClick={() => void feed.loadMore()}
-                >
-                  {feed.loadingMore ? 'Loading…' : 'Load older activity'}
-                </Button>
-              )}
-            </>
-          )}
-        </Card>
-
-        <Card className="h-fit lg:col-start-2 lg:row-span-2 lg:row-start-1">
-          <div>
-            <CardTitle>What you can do here</CardTitle>
-            <p className="mt-1.5 text-xs text-muted-foreground">{sessionKind(s).hint}</p>
           </div>
-          <CapabilityList session={s} />
-        </Card>
+          <div className="hidden shrink-0 items-center gap-1.5 sm:flex">
+            <SessionKindBadge session={s} />
+          </div>
+          <span className="hidden shrink-0 sm:inline-flex">
+            <SessionStatusBadge status={s.status} />
+          </span>
+        </div>
+        <button
+          type="button"
+          onClick={() => setInfoOpen(true)}
+          aria-label="Session info"
+          title="Session info"
+          className="grid size-10 shrink-0 place-items-center rounded-full text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50"
+        >
+          <Info className="size-5" aria-hidden />
+        </button>
+      </header>
+      <SessionInfo session={s} open={infoOpen} onOpenChange={setInfoOpen} onChange={changed} />
+
+      {feed.status === 'loading' ? (
+        <div className="mx-auto w-full max-w-3xl flex-1 space-y-4 p-6" aria-busy="true">
+          <div className="ml-auto h-12 w-2/3 animate-pulse rounded-2xl bg-muted" />
+          <div className="h-24 w-3/4 animate-pulse rounded-2xl bg-muted" />
+        </div>
+      ) : feed.status === 'error' ? (
+        <p role="alert" className="flex-1 p-6 text-center text-sm text-destructive">
+          {feed.error}
+        </p>
+      ) : (
+        <ChatMessages
+          items={items}
+          typing={typingKind(s)}
+          header={
+            feed.hasMore && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="self-center rounded-full"
+                disabled={feed.loadingMore}
+                onClick={() => void feed.loadMore()}
+              >
+                {feed.loadingMore ? 'Loading…' : 'Load older messages'}
+              </Button>
+            )
+          }
+        />
+      )}
+
+      <div className="shrink-0 border-t bg-background/95 px-3 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur-md sm:px-6">
+        <div className="mx-auto flex max-w-3xl flex-col gap-3">
+          <div className="max-h-[45dvh] overflow-y-auto empty:hidden">
+            <SessionApprovals sessionId={s.id} />
+          </div>
+          <Composer session={s} onSent={changed} onInfo={() => setInfoOpen(true)} />
+        </div>
       </div>
-    </>
+    </section>
   );
 }

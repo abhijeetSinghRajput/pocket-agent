@@ -9,6 +9,7 @@ import {
 import { CheckCircle2, RefreshCw } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { CommandLine } from '@/components/ui/command-line';
 import { CopyButton } from '@/components/ui/copy-button';
 import { Modal } from '@/components/ui/dialog';
 import { agentApiUrl, AGENT_NPM_PACKAGE, apiRequest } from '@/lib/api';
@@ -20,15 +21,6 @@ type Step =
   | { kind: 'expired' }
   | { kind: 'paired'; device: DeviceDto }
   | { kind: 'error'; message: string };
-
-function CommandLine({ command }: { command: string }) {
-  return (
-    <div className="flex items-center gap-1 rounded-lg border bg-muted/60 py-1 pr-1 pl-3">
-      <code className="min-w-0 flex-1 py-1.5 font-mono text-[13px] break-all">{command}</code>
-      <CopyButton value={command} label="Copy command" />
-    </div>
-  );
-}
 
 export function AddDeviceDialog({
   open,

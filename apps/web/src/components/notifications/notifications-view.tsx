@@ -48,12 +48,14 @@ function Row({ n, onOpen }: { n: NotificationDto; onOpen: (n: NotificationDto) =
       />
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          <p className={cn('text-sm break-words', unread ? 'font-semibold' : 'font-medium')}>{n.title}</p>
+          <p className={cn('text-sm [overflow-wrap:anywhere]', unread ? 'font-semibold' : 'font-medium')}>
+            {n.title}
+          </p>
           <Badge variant={n.priority === 'critical' ? 'warning' : 'neutral'}>
             {CATEGORY_LABEL[n.category] ?? n.category}
           </Badge>
         </div>
-        <p className="mt-0.5 text-sm text-pretty break-words text-muted-foreground">{n.body}</p>
+        <p className="mt-0.5 text-sm text-pretty [overflow-wrap:anywhere] text-muted-foreground">{n.body}</p>
         <p className="mt-1 text-xs text-muted-foreground">
           <time dateTime={n.createdAt} title={formatDate(n.createdAt)}>
             {timeAgo(n.createdAt)}

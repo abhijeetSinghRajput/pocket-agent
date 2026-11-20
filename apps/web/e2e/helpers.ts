@@ -19,3 +19,18 @@ export async function registerViaApi(request: APIRequestContext, name = 'E2E Use
   expect(res.status(), await res.text()).toBe(201);
   return { email, password: PASSWORD, name };
 }
+
+/** The open chat's live status badge (the session list next to it on desktop has its own). */
+export const chatStatus = (page: import('@playwright/test').Page) =>
+  page.getByTestId('chat-header').getByTestId('session-status');
+
+/** Opens the chat's "Session info" panel and returns its capability list. */
+export async function openSessionInfo(page: import('@playwright/test').Page) {
+  await page.getByTestId('chat-header').getByRole('button', { name: 'Session info' }).click();
+  return page.getByTestId('session-info').getByTestId('capabilities');
+}
+
+export async function closeSessionInfo(page: import('@playwright/test').Page) {
+  await page.keyboard.press('Escape');
+  await page.getByTestId('session-info').waitFor({ state: 'detached' });
+}

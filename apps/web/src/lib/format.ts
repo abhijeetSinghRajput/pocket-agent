@@ -16,6 +16,45 @@ export function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
+const startOfDay = (t: number) => {
+  const d = new Date(t);
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+};
+
+/** Whole calendar days between `iso` and `now` (0 = today, 1 = yesterday). */
+export function daysAgo(iso: string, now: number = Date.now()): number {
+  return Math.round((startOfDay(now) - startOfDay(Date.parse(iso))) / 86_400_000);
+}
+
+/** "3:04 PM" — the time on a chat message. */
+export function clockTime(iso: string): string {
+  return new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+}
+
+/** Chat list stamp, like a messenger: time today, "Yesterday", weekday this week, else the date. */
+export function chatListTime(iso: string, now: number = Date.now()): string {
+  const d = daysAgo(iso, now);
+  if (d <= 0) return clockTime(iso);
+  if (d === 1) return 'Yesterday';
+  if (d < 7) return new Date(iso).toLocaleDateString(undefined, { weekday: 'long' });
+  return new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: '2-digit' });
+}
+
+/** Day separator in a conversation: "Today", "Yesterday", "Fri, Nov 20". */
+export function dayLabel(iso: string, now: number = Date.now()): string {
+  const d = daysAgo(iso, now);
+  if (d <= 0) return 'Today';
+  if (d === 1) return 'Yesterday';
+  const sameYear = new Date(iso).getFullYear() === new Date(now).getFullYear();
+  return new Date(iso).toLocaleDateString(undefined, {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    ...(sameYear ? {} : { year: 'numeric' }),
+  });
+}
+
 /** "09:41" countdown */
 export function mmss(ms: number): string {
   const s = Math.max(0, Math.ceil(ms / 1000));

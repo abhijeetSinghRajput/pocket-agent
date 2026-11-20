@@ -1,14 +1,15 @@
 'use client';
 
 import { ApprovalResponse, type ApprovalDto } from '@pocket-agent/protocol';
-import { Check, ShieldAlert, X } from 'lucide-react';
+import { Check, Clock, ShieldAlert, X } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { toolTarget } from '@/components/agents/timeline';
-import { Badge } from '@/components/ui/badge';
+import { toolTarget } from '@/lib/chat';
 import { Button } from '@/components/ui/button';
+import { shellTokens } from '@/components/ui/command-line';
 import { apiRequest } from '@/lib/api';
 import { mmss, timeAgo } from '@/lib/format';
+import { cn } from '@/lib/utils';
 
 export const APPROVAL_STATUS: Record<
   ApprovalDto['status'],
@@ -20,6 +21,25 @@ export const APPROVAL_STATUS: Record<
   Expired: { label: 'Expired', tone: 'neutral' },
   Cancelled: { label: 'Answered elsewhere', tone: 'neutral' },
 };
+
+/** What the request is, in plain words. */
+function describeRequest(tool: string): { verb: string; label: string; shell: boolean } {
+  switch (tool) {
+    case 'Bash':
+    case 'PowerShell':
+      return { verb: 'run a command', label: 'Command', shell: true };
+    case 'Write':
+      return { verb: 'create or overwrite a file', label: 'File', shell: false };
+    case 'Edit':
+    case 'MultiEdit':
+    case 'NotebookEdit':
+      return { verb: 'edit a file', label: 'File', shell: false };
+    case 'WebFetch':
+      return { verb: 'open a web page', label: 'URL', shell: false };
+    default:
+      return { verb: `use ${tool}`, label: 'Details', shell: false };
+  }
+}
 
 function useCountdown(expiresAt: string) {
   const [now, setNow] = useState(() => Date.now());
@@ -56,64 +76,90 @@ export function ApprovalCard({ approval, onDecided }: { approval: ApprovalDto; o
     }
   }
 
+  const what = describeRequest(approval.toolName);
+  const shown = target || approval.input;
   return (
     <article
-      className="flex flex-col gap-3 rounded-xl border border-warning/40 bg-card p-4 shadow-xs"
+      className="flex flex-col overflow-hidden rounded-2xl border bg-card shadow-sm"
       data-testid="approval-card"
       data-request-id={approval.requestId}
     >
-      <header className="flex items-start gap-3">
-        <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-warning/15 text-warning">
+      <header className="flex items-start gap-3 border-b bg-warning/8 px-4 py-3">
+        <span className="grid size-9 shrink-0 place-items-center rounded-full bg-warning/20 text-warning">
           <ShieldAlert className="size-4.5" aria-hidden />
         </span>
         <div className="min-w-0 flex-1">
-          <h3 className="text-sm font-semibold">Claude wants to use {approval.toolName}</h3>
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            <Link href={`/agents/${approval.sessionId}`} className="underline-offset-4 hover:underline">
+          <h3 className="text-[15px] leading-snug font-semibold">Claude wants to {what.verb}</h3>
+          <p className="mt-0.5 truncate text-xs text-muted-foreground">
+            <Link
+              href={`/agents/${approval.sessionId}`}
+              className="font-medium text-foreground underline-offset-4 hover:underline"
+            >
               {approval.projectName}
             </Link>{' '}
             · {approval.deviceName} · {timeAgo(approval.createdAt)}
           </p>
         </div>
-        <Badge variant={expired ? 'neutral' : 'warning'} className="shrink-0 tabular-nums" aria-live="off">
+        <span
+          className={cn(
+            'flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium tabular-nums',
+            expired ? 'bg-muted text-muted-foreground' : 'bg-warning/15 text-warning',
+          )}
+          aria-live="off"
+          title="Time left to decide"
+        >
+          <Clock className="size-3" aria-hidden />
           {expired ? 'Expired' : mmss(left)}
-        </Badge>
+        </span>
       </header>
 
       {/* Exactly what will run — the decision applies to this, unchanged. */}
-      <pre className="max-h-48 overflow-auto rounded-md bg-muted/70 px-3 py-2 font-mono text-[12.5px] break-all whitespace-pre-wrap">
-        {target || approval.input}
-      </pre>
+      <div className="flex flex-col gap-1.5 px-4 py-3">
+        <p className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
+          {what.label} · {approval.toolName}
+        </p>
+        <pre className="max-h-56 overflow-auto rounded-lg border bg-muted/40 px-3 py-2.5 font-mono text-[13px] leading-relaxed whitespace-pre-wrap [overflow-wrap:anywhere]">
+          {what.shell
+            ? shellTokens(shown).map((t, i) => (
+                <span key={i} className={t.cls}>
+                  {t.text}
+                </span>
+              ))
+            : shown}
+        </pre>
+        <p className="text-xs text-muted-foreground">
+          {approval.sessionMode === 'managed'
+            ? 'If nobody decides in time, it is denied.'
+            : 'If nobody decides in time, Claude Code asks on your PC instead.'}
+        </p>
+      </div>
 
-      {sent ? (
-        <p className="text-sm text-muted-foreground" role="status">
-          {sent === 'allow' ? 'Allowed' : 'Denied'} — waiting for your PC to confirm…
-        </p>
-      ) : (
-        <div className="grid grid-cols-2 gap-2">
-          <Button
-            variant="outline"
-            className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-            disabled={!!busy || expired}
-            onClick={() => void decide('deny')}
-          >
-            <X aria-hidden /> {busy === 'deny' ? 'Denying…' : 'Deny'}
-          </Button>
-          <Button disabled={!!busy || expired} onClick={() => void decide('allow')}>
-            <Check aria-hidden /> {busy === 'allow' ? 'Allowing…' : 'Allow'}
-          </Button>
-        </div>
-      )}
-      {error && (
-        <p role="alert" className="text-sm text-destructive">
-          {error}
-        </p>
-      )}
-      <p className="text-xs text-muted-foreground">
-        {approval.sessionMode === 'managed'
-          ? 'If nobody decides in time, the action is denied.'
-          : 'If nobody decides in time, Claude Code asks on your PC instead.'}
-      </p>
+      <div className="border-t bg-muted/30 px-4 py-3">
+        {sent ? (
+          <p className="text-sm text-muted-foreground" role="status">
+            {sent === 'allow' ? 'Allowed' : 'Denied'} — waiting for your PC to confirm…
+          </p>
+        ) : (
+          <div className="grid grid-cols-2 gap-2">
+            <Button
+              variant="outline"
+              className="h-11 bg-card text-destructive hover:bg-destructive/10 hover:text-destructive"
+              disabled={!!busy || expired}
+              onClick={() => void decide('deny')}
+            >
+              <X aria-hidden /> {busy === 'deny' ? 'Denying…' : 'Deny'}
+            </Button>
+            <Button className="h-11" disabled={!!busy || expired} onClick={() => void decide('allow')}>
+              <Check aria-hidden /> {busy === 'allow' ? 'Allowing…' : 'Allow'}
+            </Button>
+          </div>
+        )}
+        {error && (
+          <p role="alert" className="mt-2 text-sm text-destructive">
+            {error}
+          </p>
+        )}
+      </div>
     </article>
   );
 }

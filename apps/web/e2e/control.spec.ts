@@ -4,7 +4,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { agentEnv, cli, hookPayloads, RELAY, startAgent } from './agent';
-import { API, registerViaApi } from './helpers';
+import { API, chatStatus, closeSessionInfo, openSessionInfo, registerViaApi } from './helpers';
 
 test.describe.configure({ mode: 'serial' });
 
@@ -42,9 +42,9 @@ test('an instruction from the dashboard reaches a session the user started, at t
 
   await page.goto('/agents');
   await page.getByTestId('session-card').filter({ hasText: 'billing' }).click();
-  await expect(
-    page.getByTestId('capabilities').locator('[data-capability="Send instructions"]'),
-  ).toHaveAttribute('data-state', 'yes');
+  const caps = await openSessionInfo(page);
+  await expect(caps.locator('[data-capability="Send instructions"]')).toHaveAttribute('data-state', 'yes');
+  await closeSessionInfo(page);
   await expect(page.getByTestId('delivery-hint')).toContainText('when Claude finishes its current turn');
 
   // Send from the "phone".
@@ -60,7 +60,7 @@ test('an instruction from the dashboard reaches a session the user started, at t
   expect(answer.reason).toContain('Also update the changelog');
   await expect(row).toHaveAttribute('data-status', 'Executing');
   await expect(row).toContainText('Claude is working on it');
-  await expect(page.getByTestId('session-status')).toHaveAttribute('data-status', 'Running');
+  await expect(chatStatus(page)).toHaveAttribute('data-status', 'Running');
 
   // Next Stop: that turn is done, nothing more to deliver.
   expect(hook(env, h['Stop']!)).toBe('');
@@ -70,7 +70,7 @@ test('an instruction from the dashboard reaches a session the user started, at t
   // PC goes offline → a new instruction fails immediately and says why.
   agent.kill();
   await agent.exited;
-  await expect(page.getByTestId('session-status')).toHaveAttribute('data-status', 'Disconnected', {
+  await expect(chatStatus(page)).toHaveAttribute('data-status', 'Disconnected', {
     timeout: 15_000,
   });
   await page.getByLabel('Send an instruction').fill('Are you there?');
@@ -93,10 +93,13 @@ test('without the PC owner’s consent, sessions they started cannot be instruct
 
   await page.goto('/agents');
   await page.getByTestId('session-card').filter({ hasText: 'payroll' }).click();
-  const instruct = page.getByTestId('capabilities').locator('[data-capability="Send instructions"]');
+  const instruct = (await openSessionInfo(page)).locator('[data-capability="Send instructions"]');
   await expect(instruct).toHaveAttribute('data-state', 'no');
   await expect(instruct).toContainText('pocket-agent instructions enable');
-  await expect(page.getByTestId('composer')).toHaveCount(0);
+  await closeSessionInfo(page);
+  await expect(page.getByLabel('Send an instruction')).toBeDisabled();
+  await expect(page.getByTestId('delivery-hint')).toContainText('pocket-agent instructions enable');
+  await expect(page.getByTestId('chat-header')).toBeVisible();
   // The Stop hook never answers either.
   expect(hook(env, h['Stop']!)).toBe('');
 

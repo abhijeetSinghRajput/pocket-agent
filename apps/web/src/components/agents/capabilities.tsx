@@ -25,19 +25,27 @@ export function capabilityRows(s: AgentSessionDto): Row[] {
         state: 'yes',
         detail: 'Any time. Runs right away, or after the current task.',
       }
-    : c.instructBetweenTurns
+    : c.instructAnytime
       ? {
           label: 'Send instructions',
           state: 'yes',
-          detail: 'Delivered when Claude finishes its current turn. It can’t wake an idle session.',
+          detail:
+            'Any time. If Claude is idle, your PC resumes this session and runs it at once; if it is busy, it runs when the turn ends.',
         }
-      : hooksConnected
+      : c.instructBetweenTurns
         ? {
             label: 'Send instructions',
-            state: 'no',
-            detail: 'Turned off on this PC. To allow it, run `pocket-agent instructions enable` on the PC.',
+            state: 'yes',
+            detail:
+              'Delivered when Claude finishes its current turn. To run it at once when Claude is idle, run `pocket-agent instructions wake enable` on the PC.',
           }
-        : { label: 'Send instructions', state: 'no', detail: hooksWhy };
+        : hooksConnected
+          ? {
+              label: 'Send instructions',
+              state: 'no',
+              detail: 'Turned off on this PC. To allow it, run `pocket-agent instructions enable` on the PC.',
+            }
+          : { label: 'Send instructions', state: 'no', detail: hooksWhy };
 
   return [
     {

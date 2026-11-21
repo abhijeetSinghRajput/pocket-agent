@@ -28,16 +28,27 @@ self.addEventListener('push', (event) => {
     actions = [];
   }
   event.waitUntil(
-    self.registration.showNotification(title, {
-      body: typeof d.body === 'string' ? d.body : '',
-      tag: typeof d.tag === 'string' ? d.tag : undefined,
-      icon: '/icons/icon-192.png',
-      requireInteraction: d.priority === 'critical',
-      actions: actions.map((a) => ({ action: a.id, title: a.title })),
-      data: { link, actions },
-    }),
+    appOnScreen().then((open) =>
+      // The app on screen already shows it (the chat, or the prompt that opens by itself).
+      open
+        ? undefined
+        : self.registration.showNotification(title, {
+            body: typeof d.body === 'string' ? d.body : '',
+            tag: typeof d.tag === 'string' ? d.tag : undefined,
+            icon: '/icons/icon-192.png',
+            requireInteraction: d.priority === 'critical',
+            actions: actions.map((a) => ({ action: a.id, title: a.title })),
+            data: { link, actions },
+          }),
+    ),
   );
 });
+
+/** True while a window of the app is visible to the user (not minimised, not a background tab, screen on). */
+async function appOnScreen() {
+  const tabs = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+  return tabs.some((c) => c.visibilityState === 'visible');
+}
 
 /** Sends the decision a button stands for, with the signed-in browser's session. */
 async function decide(a) {

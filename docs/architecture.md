@@ -107,6 +107,8 @@ Agent tray). Otherwise the hook returns immediately with no decision, and the lo
 - Calls the API with an httpOnly session cookie. Subscribes to a browser WebSocket channel for live updates.
 - PWA: manifest plus a service worker for FCM web push. iOS only delivers web push to *installed* PWAs
   (16.4+), so installability ships with notifications, not after them.
+- A push is shown only when no window of the app is on screen. While the app is visible, the chat or the prompt
+  that opens by itself already shows it, so the service worker drops the push (the Alerts list still has it).
 
 ### apps/api — Fastify
 Modules:

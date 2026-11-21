@@ -6,7 +6,7 @@
 //   cd npm && npm pack            # inspect the tarball
 //   cd npm && npm publish --access public
 import { build } from 'esbuild';
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -20,7 +20,9 @@ const name =
 const pkg = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'));
 const SDK = '@anthropic-ai/claude-agent-sdk';
 
-await rm(out, { recursive: true, force: true });
+// Empty the folder rather than delete it: a terminal open inside it would lock it (EBUSY on Windows).
+await mkdir(out, { recursive: true });
+for (const entry of await readdir(out)) await rm(path.join(out, entry), { recursive: true, force: true });
 await mkdir(path.join(out, 'dist'), { recursive: true });
 
 await build({

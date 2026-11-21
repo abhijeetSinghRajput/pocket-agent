@@ -99,7 +99,7 @@ export function ApprovalCard({ approval, onDecided }: { approval: ApprovalDto; o
   const questions = asking ? parseQuestions(approval.input) : [];
   return (
     <article
-      className="flex flex-col overflow-hidden rounded-2xl border bg-card shadow-sm"
+      className="flex flex-col overflow-hidden rounded-2xl bg-card"
       data-testid="approval-card"
       data-request-id={approval.requestId}
     >

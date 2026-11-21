@@ -19,7 +19,7 @@ function Section({
   children: ReactNode;
 }) {
   return (
-    <section className="flex flex-col gap-3 py-5 first:pt-0 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
+    <section className="flex flex-col gap-2.5 py-3.5 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
       <div className="min-w-0">
         <h2 className="text-sm font-semibold">{title}</h2>
         <p className="mt-1 text-sm text-muted-foreground">{description}</p>
@@ -34,14 +34,17 @@ export default function ProfilePage() {
   return (
     <>
       <PageHeader title="Profile" />
-      <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-3">
         <ProfileHeader />
         <InboxLink />
         <section aria-labelledby="settings-heading">
-          <h2 id="settings-heading" className="mb-2 px-1 text-sm font-semibold text-muted-foreground">
+          <h2
+            id="settings-heading"
+            className="mt-2 mb-1.5 px-1 text-xs font-semibold tracking-wide text-muted-foreground uppercase"
+          >
             Settings
           </h2>
-          <div className="divide-y rounded-2xl border bg-card px-5 py-5">
+          <div className="divide-y rounded-xl bg-card px-4">
             <Section
               title="Theme"
               description="Choose how Pocket Agent looks on this device. Press D to switch."
@@ -61,11 +64,11 @@ export default function ProfilePage() {
             </Section>
           </div>
         </section>
-        <section className="rounded-2xl border bg-card px-5 py-5" aria-labelledby="notifications-heading">
+        <section className="rounded-xl bg-card px-4 py-3.5" aria-labelledby="notifications-heading">
           <h2 id="notifications-heading" className="text-sm font-semibold">
             Notifications
           </h2>
-          <p className="mt-1 mb-5 text-sm text-muted-foreground">
+          <p className="mt-1 mb-3 text-sm text-muted-foreground">
             Push to this browser or installed app, per category, with quiet hours.
           </p>
           <NotificationSettings />

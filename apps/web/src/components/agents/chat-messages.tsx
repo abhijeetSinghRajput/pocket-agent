@@ -215,7 +215,7 @@ function QuestionCard({ item }: { item: Of<'question'> }) {
   const st = QUESTION_STATE[item.state];
   return (
     <Step dot="bg-primary" data-testid="question-card" data-state={item.state}>
-      <div className="rounded-xl border bg-card px-3.5 py-3 shadow-xs">
+      <div className="rounded-xl bg-card px-3.5 py-3">
         <div className="flex items-center gap-2">
           <MessageCircleQuestion className="size-4 shrink-0 text-primary" aria-hidden />
           <p className="text-[13px] font-semibold">

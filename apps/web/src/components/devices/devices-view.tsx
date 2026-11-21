@@ -267,7 +267,7 @@ export function DevicesView() {
       )}
 
       {state.status === 'ready' && devices.length > 0 && (
-        <ul className="divide-y rounded-xl border bg-card" aria-label="Devices">
+        <ul className="divide-y rounded-xl bg-card" aria-label="Devices">
           {sorted.map((d) => (
             <DeviceRow key={d.id} device={d} onRevoke={setRevoking} />
           ))}

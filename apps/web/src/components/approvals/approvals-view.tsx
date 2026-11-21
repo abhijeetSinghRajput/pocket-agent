@@ -46,7 +46,7 @@ export function ApprovalsView() {
       )}
 
       {pending.state.status === 'ready' && open.length === 0 && (
-        <section className="rounded-2xl border bg-card p-5 shadow-xs sm:p-6" data-testid="no-approvals">
+        <section className="rounded-2xl bg-card p-4 sm:p-5" data-testid="no-approvals">
           <div className="flex items-start gap-3">
             <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-success/12 text-success">
               <ShieldCheck className="size-5" aria-hidden />
@@ -107,7 +107,7 @@ export function ApprovalsView() {
       {recent.length > 0 && (
         <section className="mt-8">
           <h2 className="mb-2 text-sm font-semibold">Recent</h2>
-          <ul className="divide-y rounded-xl border bg-card" data-testid="approval-history">
+          <ul className="divide-y rounded-xl bg-card" data-testid="approval-history">
             {recent.slice(0, 20).map((a) => {
               const s = APPROVAL_STATUS[a.status];
               const label = a.status === 'Pending' && a.decision ? 'Sent to PC' : s.label;

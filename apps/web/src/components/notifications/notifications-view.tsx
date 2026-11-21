@@ -157,7 +157,7 @@ export function NotificationsView() {
         </section>
       )}
       {items.length > 0 && (
-        <ul className="divide-y overflow-hidden rounded-xl border bg-card">
+        <ul className="divide-y overflow-hidden rounded-xl bg-card">
           {items.map((n) => (
             <Row key={n.id} n={n} onOpen={open} />
           ))}

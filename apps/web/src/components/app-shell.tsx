@@ -1,14 +1,16 @@
 'use client';
 
 import type { UserDto } from '@pocket-agent/protocol';
-import { Bell } from 'lucide-react';
+import { Moon, Sun } from 'lucide-react';
+import { BellIcon } from '@/components/nav-icons';
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import type { ReactNode } from 'react';
+import { useRef, type ReactNode } from 'react';
 import { ApprovalPrompt } from '@/components/approvals/approval-prompt';
-import { PROFILE_ROUTES, ProfileLink } from '@/components/user-avatar';
-import { ThemeToggle } from '@/components/theme';
+import { PROFILE_ROUTES, ProfileLink, ProfileRow } from '@/components/user-avatar';
+import { ThemeToggle, useMounted, useSmoothTheme } from '@/components/theme';
+import { followStyle, useFollow } from '@/components/ui/segmented';
 import { useLiveState } from '@/lib/live';
 import { useApprovals } from '@/lib/use-approvals';
 import { useNotifications } from '@/lib/use-notifications';
@@ -54,7 +56,7 @@ function NotificationBell() {
       data-testid="notification-bell"
       className="relative grid size-9 place-items-center rounded-md text-muted-foreground outline-none hover:bg-accent hover:text-accent-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 aria-[current=page]:text-primary"
     >
-      <Bell className="size-4" aria-hidden />
+      <BellIcon className="size-[18px]" aria-hidden />
       {n > 0 && (
         <span
           aria-hidden
@@ -114,7 +116,30 @@ export function Logo() {
   );
 }
 
+/** Theme switch as a row of the menu (same shape as the links above it). */
+function ThemeRow() {
+  const { resolvedTheme, setTheme } = useSmoothTheme();
+  const mounted = useMounted();
+  const dark = mounted && resolvedTheme === 'dark';
+  const Icon = dark ? Sun : Moon;
+  return (
+    <button
+      type="button"
+      onClick={() => setTheme(dark ? 'light' : 'dark')}
+      aria-label={dark ? 'Switch to light theme' : 'Switch to dark theme'}
+      data-testid="theme-toggle"
+      className="mt-auto flex h-9 items-center gap-3 rounded-md px-3 text-sm font-medium text-muted-foreground outline-none hover:bg-accent hover:text-accent-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50"
+    >
+      <Icon className="size-[18px] text-foreground" aria-hidden />
+      {dark ? 'Light theme' : 'Dark theme'}
+      <kbd className="ml-auto rounded border px-1.5 font-mono text-[11px] text-muted-foreground">D</kbd>
+    </button>
+  );
+}
+
 function Sidebar({ pathname, user }: { pathname: string; user: UserDto }) {
+  const nav = useRef<HTMLElement>(null);
+  const { rect, moving } = useFollow(nav, '[aria-current="page"]', pathname);
   return (
     <aside className="sticky top-0 hidden h-dvh w-60 shrink-0 flex-col border-r bg-sidebar lg:flex">
       <div className="flex h-14 items-center justify-between px-4">
@@ -124,7 +149,13 @@ function Sidebar({ pathname, user }: { pathname: string; user: UserDto }) {
           <NotificationBell />
         </div>
       </div>
-      <nav aria-label="Main" className="flex flex-1 flex-col gap-0.5 px-3 py-2">
+      <nav ref={nav} aria-label="Main" className="relative flex flex-1 flex-col gap-0.5 px-3 py-2">
+        {/* The selection slides from one item to the next. */}
+        <span
+          aria-hidden
+          className="pointer-events-none absolute top-0 left-0 rounded-md bg-accent"
+          style={followStyle(rect, moving)}
+        />
         {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
           const active = isActive(pathname, href);
           return (
@@ -133,8 +164,8 @@ function Sidebar({ pathname, user }: { pathname: string; user: UserDto }) {
               href={href}
               aria-current={active ? 'page' : undefined}
               className={cn(
-                'flex h-9 items-center gap-3 rounded-md px-3 text-sm font-medium text-muted-foreground transition-colors outline-none hover:bg-accent hover:text-accent-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50',
-                active && 'bg-accent text-accent-foreground',
+                'relative flex h-9 items-center gap-3 rounded-md px-3 text-sm font-medium text-muted-foreground outline-none hover:text-accent-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50',
+                active ? 'text-accent-foreground' : 'hover:bg-accent/50',
               )}
             >
               <Icon className={cn('size-[18px]', active ? 'text-primary' : 'text-foreground')} aria-hidden />
@@ -143,14 +174,10 @@ function Sidebar({ pathname, user }: { pathname: string; user: UserDto }) {
             </Link>
           );
         })}
+        <ThemeRow />
       </nav>
-      <div className="flex items-center justify-between border-t p-3">
-        <ThemeToggle />
-        <ProfileLink
-          user={user}
-          active={PROFILE_ROUTES.some((h) => isActive(pathname, h))}
-          className="size-10"
-        />
+      <div className="border-t p-2">
+        <ProfileRow user={user} active={PROFILE_ROUTES.some((h) => isActive(pathname, h))} />
       </div>
     </aside>
   );
@@ -162,10 +189,26 @@ function MobileTopBar() {
       <Logo />
       <div className="flex items-center">
         <LiveDot />
-        <NotificationBell />
         <ThemeToggle />
       </div>
     </header>
+  );
+}
+
+/** The bell as a bottom-nav item (phones). */
+const BELL = { href: '/notifications', label: 'Alerts', icon: BellIcon } as const;
+
+function UnreadDot() {
+  const n = useNotifications(1).state.data?.unread ?? 0;
+  if (!n) return null;
+  return (
+    <span
+      aria-hidden
+      className="absolute -top-1 -right-2 grid h-4 min-w-4 place-items-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground tabular-nums"
+      data-testid="unread-count-mobile"
+    >
+      {n > 99 ? '99+' : n}
+    </span>
   );
 }
 
@@ -176,25 +219,56 @@ function BottomNav({ pathname, user }: { pathname: string; user: UserDto }) {
       active && 'text-primary',
     );
   const profileActive = PROFILE_ROUTES.some((h) => isActive(pathname, h));
+  const unread = useNotifications(1).state.data?.unread ?? 0;
+  const nav = useRef<HTMLElement>(null);
+  const { rect, moving } = useFollow(nav, '[aria-current="page"]', pathname);
+  const BAR = 36;
 
   return (
     <nav
+      ref={nav}
       aria-label="Main"
       data-testid="bottom-nav"
       className="fixed inset-x-0 bottom-0 z-30 flex border-t bg-card/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-md lg:hidden"
     >
-      {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
+      {/* Flat against the top edge, rounded underneath; slides to the current section. */}
+      <span
+        aria-hidden
+        data-testid="nav-indicator"
+        className="pointer-events-none absolute top-0 left-0 h-[3px] rounded-b-full bg-primary"
+        style={{
+          width: BAR,
+          opacity: rect ? 1 : 0,
+          transform: `translateX(${rect ? rect.x + rect.w / 2 - BAR / 2 : 0}px)`,
+          transition: moving ? 'transform 320ms var(--ease-move), opacity 160ms' : 'none',
+        }}
+      />
+      {/* Notifications sit in the middle of the bar on phones. */}
+      {[...NAV_ITEMS.slice(0, 2), BELL, ...NAV_ITEMS.slice(2)].map(({ href, label, icon: Icon }) => {
         const active = isActive(pathname, href);
         return (
           <Link
             key={href}
             href={href}
             aria-current={active ? 'page' : undefined}
+            {...(href === BELL.href
+              ? {
+                  'data-testid': 'notification-bell',
+                  'aria-label': unread ? `Alerts, ${unread} unread` : 'Alerts',
+                }
+              : {})}
             className={itemClass(active)}
           >
             <span className="relative">
-              <Icon className={cn('size-5', active ? 'text-primary' : 'text-foreground')} aria-hidden />
+              <Icon
+                className={cn(
+                  'size-5 transition-transform duration-300 ease-(--ease-out)',
+                  active ? 'scale-110 text-primary' : 'text-foreground',
+                )}
+                aria-hidden
+              />
               {href === '/approvals' && <PendingDot />}
+              {href === BELL.href && <UnreadDot />}
             </span>
             {label}
           </Link>

@@ -41,7 +41,7 @@ test('a Claude Code session streams into the dashboard live, survives a reconnec
   const hooks = hookPayloads(sid, String.raw`C:\work\checkout-service`);
 
   await page.goto('/agents');
-  await expect(page.getByText('No active sessions')).toBeVisible();
+  await expect(page.getByText('No active chats')).toBeVisible();
 
   // Claude Code starts and receives a prompt → the card appears without reloading.
   await expect.poll(() => agent.output()).toContain('Connected to');
@@ -110,7 +110,7 @@ test('a Claude Code session streams into the dashboard live, survives a reconnec
     timeout: 10_000,
   });
   await page.goto('/agents');
-  await expect(page.getByText('No active sessions')).toBeVisible();
+  await expect(page.getByText('No active chats')).toBeVisible();
   await page.getByRole('tab', { name: 'All' }).click();
   await expect(page.getByTestId('session-card').filter({ hasText: 'checkout-service' })).toBeVisible();
 

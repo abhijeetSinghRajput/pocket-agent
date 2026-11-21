@@ -28,6 +28,8 @@ export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   viewportFit: 'cover',
+  // The keyboard resizes the page (where supported), so fixed headers stay in view.
+  interactiveWidget: 'resizes-content',
   themeColor: [
     { media: '(prefers-color-scheme: light)', color: '#fcfcfc' },
     { media: '(prefers-color-scheme: dark)', color: '#16161a' },

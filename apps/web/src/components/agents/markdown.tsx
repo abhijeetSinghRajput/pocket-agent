@@ -58,7 +58,7 @@ const components: Components = {
   ),
   hr: () => <hr className="my-3" />,
   table: ({ children }) => (
-    <div className="my-2 overflow-x-auto rounded-md border bg-card shadow-xs">
+    <div className="my-2 overflow-x-auto rounded-md bg-card">
       <table className="w-full border-collapse text-[13px]">{children}</table>
     </div>
   ),
@@ -128,7 +128,7 @@ const CodeBlock = memo(function CodeBlock({ code, lang }: { code: string; lang?:
   }, [code, lang]);
 
   return (
-    <div className="my-2 overflow-hidden rounded-lg border bg-card shadow-xs">
+    <div className="my-2 overflow-hidden rounded-lg bg-card">
       <div className="flex h-8 items-center justify-between border-b bg-muted/60 pr-0.5 pl-3">
         <span className="font-mono text-[11px] text-muted-foreground">{lang ?? 'code'}</span>
         <CopyButton value={code} label="Copy code" className="size-7" />

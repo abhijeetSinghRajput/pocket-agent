@@ -45,7 +45,8 @@ test('an instruction from the dashboard reaches a session the user started, at t
   const caps = await openSessionInfo(page);
   await expect(caps.locator('[data-capability="Send instructions"]')).toHaveAttribute('data-state', 'yes');
   await closeSessionInfo(page);
-  await expect(page.getByTestId('delivery-hint')).toContainText('when Claude finishes its current turn');
+  await expect(page.getByTestId('delivery-hint')).toContainText('at its next step');
+  await expect(page.getByTestId('end-session')).toBeVisible(); // the PC allowed control of this session
 
   // Send from the "phone".
   await page.getByLabel('Send an instruction').fill('Also update the changelog');
@@ -66,6 +67,15 @@ test('an instruction from the dashboard reaches a session the user started, at t
   expect(hook(env, h['Stop']!)).toBe('');
   await expect(row).toHaveAttribute('data-status', 'Completed');
   await expect(page.getByTestId('timeline')).toContainText('Also update the changelog');
+
+  // A new turn on the PC, stopped from the "phone": Claude stops at its next tool step.
+  hook(env, h['UserPromptSubmit']!);
+  await expect(chatStatus(page)).toHaveAttribute('data-status', 'Running');
+  await page.getByRole('button', { name: 'Interrupt' }).click();
+  const stopped = JSON.parse(hook(env, h['PreToolUse']!)) as { continue: boolean };
+  expect(stopped.continue).toBe(false);
+  await expect(chatStatus(page)).toHaveAttribute('data-status', 'WaitingForInput');
+  await expect(page.getByTestId('timeline')).toContainText(/interrupted/i);
 
   // PC goes offline → a new instruction fails immediately and says why.
   agent.kill();

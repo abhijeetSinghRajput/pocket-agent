@@ -7,17 +7,9 @@ import { toolTarget } from '@/lib/chat';
 import { PageHeader } from '@/components/page';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { CommandLine } from '@/components/ui/command-line';
+import { TerminalGuide } from '@/components/ui/terminal-guide';
 import { timeAgo } from '@/lib/format';
 import { useApprovals } from '@/lib/use-approvals';
-
-function Step({ n }: { n: number }) {
-  return (
-    <span className="grid size-6 shrink-0 place-items-center rounded-full bg-accent text-xs font-semibold text-accent-foreground tabular-nums">
-      {n}
-    </span>
-  );
-}
 
 export function ApprovalsView() {
   const pending = useApprovals('pending');
@@ -46,58 +38,46 @@ export function ApprovalsView() {
       )}
 
       {pending.state.status === 'ready' && open.length === 0 && (
-        <section className="rounded-2xl bg-card p-4 sm:p-5" data-testid="no-approvals">
-          <div className="flex items-start gap-3">
+        <section
+          className="stagger flex flex-col gap-4 rounded-2xl bg-card p-4 sm:p-5"
+          data-testid="no-approvals"
+        >
+          <div className="flex items-center gap-3">
             <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-success/12 text-success">
               <ShieldCheck className="size-5" aria-hidden />
             </span>
             <div>
               <h2 className="text-base font-semibold">No requests waiting</h2>
-              <p className="mt-0.5 text-sm text-pretty text-muted-foreground">
-                When Claude needs permission for something, it appears here and you can allow or deny it from
-                your phone.
-              </p>
+              <p className="text-sm text-muted-foreground">Claude’s permission requests show up here.</p>
             </div>
           </div>
 
-          <h3 className="mt-6 text-sm font-semibold">To get requests here</h3>
-          <ol className="mt-3 flex flex-col gap-4 text-sm">
-            <li className="flex gap-3">
-              <Step n={1} />
-              <div className="min-w-0 flex-1">
-                <p>Allow it once on your PC:</p>
-                <CommandLine command="pocket-agent approvals enable" className="mt-2" />
-              </div>
-            </li>
-            <li className="flex gap-3">
-              <Step n={2} />
-              <div className="min-w-0 flex-1">
-                <p>
-                  For sessions you start in VS Code or a terminal, turn on <strong>Away mode</strong> for that
-                  PC. Otherwise Claude Code simply asks on the PC.
-                </p>
-                <Button asChild variant="outline" size="sm" className="mt-2">
-                  <Link href="/devices">
-                    <Laptop aria-hidden /> Open Devices
-                  </Link>
-                </Button>
-              </div>
-            </li>
-            <li className="flex gap-3">
-              <Step n={3} />
-              <p className="min-w-0 flex-1">Sessions you start from Pocket Agent always ask here.</p>
-            </li>
-          </ol>
+          <div className="flex flex-col gap-2">
+            <p className="text-sm font-medium">1. Allow it once on your PC</p>
+            <TerminalGuide steps={[{ command: 'pocket-agent approvals enable', output: 'Enabled.' }]} />
+          </div>
 
-          <p className="mt-6 flex items-start gap-2 border-t pt-4 text-xs text-muted-foreground">
-            <Lock className="mt-px size-3.5 shrink-0" aria-hidden />
-            Pocket Agent never changes your Claude Code permission settings, and every decision is audited.
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm">
+              <span className="font-medium">2. Turn on Away mode</span>{' '}
+              <span className="text-muted-foreground">for sessions you start in your editor.</span>
+            </p>
+            <Button asChild variant="outline" size="sm">
+              <Link href="/devices">
+                <Laptop aria-hidden /> Devices
+              </Link>
+            </Button>
+          </div>
+
+          <p className="flex items-center gap-2 text-xs text-muted-foreground">
+            <Lock className="size-3.5 shrink-0" aria-hidden />
+            Your Claude Code permission settings are never changed.
           </p>
         </section>
       )}
 
       {open.length > 0 && (
-        <div className="grid gap-3 md:grid-cols-2" aria-label="Pending approvals">
+        <div className="stagger grid gap-3 md:grid-cols-2" aria-label="Pending approvals" data-enter-new="">
           {open.map((a) => (
             <ApprovalCard key={a.id} approval={a} onDecided={refreshAll} />
           ))}
@@ -107,7 +87,7 @@ export function ApprovalsView() {
       {recent.length > 0 && (
         <section className="mt-8">
           <h2 className="mb-2 text-sm font-semibold">Recent</h2>
-          <ul className="divide-y rounded-xl bg-card" data-testid="approval-history">
+          <ul className="stagger divide-y rounded-xl bg-card" data-testid="approval-history">
             {recent.slice(0, 20).map((a) => {
               const s = APPROVAL_STATUS[a.status];
               const label = a.status === 'Pending' && a.decision ? 'Sent to PC' : s.label;

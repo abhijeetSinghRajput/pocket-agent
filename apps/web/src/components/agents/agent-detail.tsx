@@ -1,14 +1,14 @@
 'use client';
 
 import { SessionResponse, type AgentSessionDto } from '@pocket-agent/protocol';
-import { ArrowLeft, FolderOpen, Info, Laptop, X } from 'lucide-react';
+import { ArrowLeft, FolderOpen, Laptop, X } from 'lucide-react';
 import Link from 'next/link';
 import { Dialog } from 'radix-ui';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState, useEffect } from 'react';
 import { duration } from '@/components/agents/agents-view';
 import { CapabilityList } from '@/components/agents/capabilities';
 import { ChatMessages } from '@/components/agents/chat-messages';
-import { Composer, SessionControls, useCommands } from '@/components/agents/remote-control';
+import { Composer, EndSessionButton, SessionControls, useCommands } from '@/components/agents/remote-control';
 import {
   SessionAvatar,
   SessionKindBadge,
@@ -18,6 +18,7 @@ import {
 import { SessionApprovals } from '@/components/approvals/session-approvals';
 import { Button } from '@/components/ui/button';
 import { apiRequest, NOT_FOUND_MESSAGE } from '@/lib/api';
+import { useBackToClose } from '@/components/ui/dialog';
 import { buildChat } from '@/lib/chat';
 import { formatDate, timeAgo } from '@/lib/format';
 import { useLiveRefresh } from '@/lib/live';
@@ -62,6 +63,7 @@ function SessionInfo({
   onOpenChange: (o: boolean) => void;
   onChange: () => void;
 }) {
+  useBackToClose(open, () => onOpenChange(false));
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
@@ -137,7 +139,32 @@ function SessionInfo({
   );
 }
 
+/**
+ * Keeps the chat exactly as tall as what is visible. When the on-screen keyboard opens, browsers
+ * that only shrink the visual viewport would otherwise scroll the page and push the header away.
+ */
+function useVisibleHeight() {
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv || !window.matchMedia('(pointer: coarse)').matches) return;
+    const root = document.documentElement;
+    const fit = () => {
+      root.style.setProperty('--chat-height', `${Math.round(vv.height)}px`);
+      if (vv.offsetTop || window.scrollY) window.scrollTo(0, 0);
+    };
+    fit();
+    vv.addEventListener('resize', fit);
+    vv.addEventListener('scroll', fit);
+    return () => {
+      vv.removeEventListener('resize', fit);
+      vv.removeEventListener('scroll', fit);
+      root.style.removeProperty('--chat-height');
+    };
+  }, []);
+}
+
 export function AgentDetail({ id }: { id: string }) {
+  useVisibleHeight();
   const fetcher = useCallback(
     (signal: AbortSignal) =>
       apiRequest(`/sessions/${id}`, SessionResponse, { signal }).then((r) => r.session),
@@ -200,7 +227,7 @@ export function AgentDetail({ id }: { id: string }) {
 
   return (
     <section
-      className="flex h-dvh flex-col overflow-hidden bg-background"
+      className="flex h-[var(--chat-height,100dvh)] flex-col overflow-hidden bg-background"
       aria-label={`Conversation with ${s.projectName}`}
     >
       <header
@@ -214,7 +241,15 @@ export function AgentDetail({ id }: { id: string }) {
         >
           <ArrowLeft className="size-5" aria-hidden />
         </Link>
-        <div className="flex h-16 min-w-0 flex-1 items-center gap-3 pl-1 lg:pl-2">
+        <div className="relative flex h-16 min-w-0 flex-1 items-center gap-3 pl-1 lg:pl-2">
+          {/* The whole identity block opens the session's details. */}
+          <button
+            type="button"
+            onClick={() => setInfoOpen(true)}
+            aria-label="Session info"
+            title="Session info"
+            className="absolute inset-0 z-10 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+          />
           <SessionAvatar session={s} size="sm" />
           <div className="min-w-0 flex-1">
             <h1 className="truncate text-[15px] leading-tight font-semibold">{s.projectName}</h1>
@@ -237,15 +272,7 @@ export function AgentDetail({ id }: { id: string }) {
             <SessionStatusBadge status={s.status} />
           </span>
         </div>
-        <button
-          type="button"
-          onClick={() => setInfoOpen(true)}
-          aria-label="Session info"
-          title="Session info"
-          className="grid size-10 shrink-0 place-items-center rounded-full text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50"
-        >
-          <Info className="size-5" aria-hidden />
-        </button>
+        <EndSessionButton session={s} onDone={changed} />
       </header>
       <SessionInfo session={s} open={infoOpen} onOpenChange={setInfoOpen} onChange={changed} />
 

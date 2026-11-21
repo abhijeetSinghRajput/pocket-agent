@@ -9,9 +9,9 @@ import {
 import { CheckCircle2, RefreshCw } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { CommandLine } from '@/components/ui/command-line';
 import { CopyButton } from '@/components/ui/copy-button';
 import { Modal } from '@/components/ui/dialog';
+import { TerminalGuide } from '@/components/ui/terminal-guide';
 import { agentApiUrl, AGENT_NPM_PACKAGE, apiRequest } from '@/lib/api';
 import { mmss } from '@/lib/format';
 
@@ -89,11 +89,7 @@ export function AddDeviceDialog({
       open={open}
       onOpenChange={onOpenChange}
       title={step.kind === 'paired' ? 'Device paired' : 'Pair a device'}
-      description={
-        step.kind === 'paired'
-          ? undefined
-          : 'Run the Pocket Agent Local Agent on the PC you want to connect and enter this one-time code.'
-      }
+      description={step.kind === 'paired' ? undefined : 'Connect a PC with this one-time code.'}
     >
       {step.kind === 'creating' && (
         <div className="space-y-3" aria-busy="true">
@@ -115,37 +111,40 @@ export function AddDeviceDialog({
 
       {step.kind === 'code' && (
         <div className="flex flex-col gap-5">
-          <div className="flex flex-col items-center gap-2 rounded-xl border bg-muted/40 px-4 py-5">
-            <div className="flex items-center gap-1">
-              <span
-                data-testid="pairing-code"
-                className="font-mono text-3xl font-semibold tracking-[0.18em] tabular-nums"
+          {/* The one line to run, whole: copying it is all it takes. */}
+          <div className="flex flex-col gap-2">
+            <p className="text-sm font-medium">Run this in a terminal on your PC:</p>
+            <div className="flex items-start gap-1 rounded-xl bg-muted py-2.5 pr-1.5 pl-3.5">
+              <code
+                className="min-w-0 flex-1 py-1 font-mono text-[13.5px] leading-relaxed [overflow-wrap:anywhere]"
+                data-testid="pairing-command"
               >
-                {step.code}
-              </span>
-              <CopyButton value={step.code} label="Copy code" />
+                pocket-agent setup{' '}
+                <span data-testid="pairing-code" className="font-semibold text-primary">
+                  {step.code}
+                </span>{' '}
+                --api {api}
+              </code>
+              <CopyButton value={`pocket-agent setup ${step.code} --api ${api}`} label="Copy command" />
             </div>
             <p className="text-xs text-muted-foreground tabular-nums" aria-live="polite">
               Single use · expires in {mmss(Math.min(step.expiresAt - now, PAIRING_CODE_TTL_MS))}
             </p>
           </div>
 
-          <ol className="flex flex-col gap-4 text-sm">
-            <li className="flex flex-col gap-2">
-              <span>
-                <span className="font-medium">1.</span> On your PC, install the Pocket Agent app (needs
-                Node.js 24+):
-              </span>
-              <CommandLine command={`npm install -g ${AGENT_NPM_PACKAGE}`} />
-            </li>
-            <li className="flex flex-col gap-2">
-              <span>
-                <span className="font-medium">2.</span> Connect this PC. It also starts automatically when you
-                sign in to Windows:
-              </span>
-              <CommandLine command={`pocket-agent setup ${step.code} --api ${api}`} />
-            </li>
-          </ol>
+          <div className="flex flex-col gap-2">
+            <p className="text-sm font-medium">First time on this PC? Install it, then connect:</p>
+            <TerminalGuide
+              steps={[
+                { command: `npm install -g ${AGENT_NPM_PACKAGE}` },
+                {
+                  command: `pocket-agent setup ${step.code} --api ${api}`,
+                  output: 'Done. Open the dashboard: this PC should show as Online.',
+                },
+              ]}
+            />
+            <p className="text-xs text-muted-foreground">Needs Node.js 24+.</p>
+          </div>
 
           <p className="flex items-center gap-2 text-sm text-muted-foreground" aria-live="polite">
             <span
@@ -153,11 +152,6 @@ export function AddDeviceDialog({
               aria-hidden
             />
             Waiting for your PC…
-          </p>
-          <p className="text-xs text-muted-foreground">
-            Already installed? Just run step 2. To connect only for now: add{' '}
-            <code className="font-mono">--no-autostart</code>. Remote approval stays off until you run{' '}
-            <code className="font-mono">pocket-agent approvals enable</code> on the PC.
           </p>
         </div>
       )}

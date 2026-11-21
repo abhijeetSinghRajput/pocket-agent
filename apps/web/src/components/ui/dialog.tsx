@@ -2,8 +2,44 @@
 
 import { X } from 'lucide-react';
 import { Dialog as D } from 'radix-ui';
-import type { ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import { cn } from '@/lib/utils';
+
+/**
+ * On a phone, Back closes what is open (a dialog, a sheet) instead of leaving the page. While open,
+ * the overlay owns one history entry: Back pops it and closes; closing any other way removes it.
+ */
+export function useBackToClose(open: boolean, close: () => void) {
+  const closeRef = useRef(close);
+  useEffect(() => {
+    closeRef.current = close;
+  });
+  useEffect(() => {
+    if (!open || !window.matchMedia('(pointer: coarse)').matches) return;
+    const id = `overlay-${Date.now()}-${Math.random()}`;
+    let pushed = false;
+    let popped = false;
+    // Deferred, so an open that is undone at once (React's dev double-run) leaves history alone.
+    const t = setTimeout(() => {
+      // Keep the router's own state in the entry: only our marker is added.
+      window.history.pushState({ ...(window.history.state as object | null), pocketAgentOverlay: id }, '');
+      pushed = true;
+    }, 0);
+    const onPop = () => {
+      if (!pushed) return;
+      popped = true;
+      closeRef.current();
+    };
+    window.addEventListener('popstate', onPop);
+    return () => {
+      clearTimeout(t);
+      window.removeEventListener('popstate', onPop);
+      const top = (window.history.state as { pocketAgentOverlay?: string } | null)?.pocketAgentOverlay;
+      // Closed with its button or a tap outside: take our entry off again.
+      if (pushed && !popped && top === id) window.history.back();
+    };
+  }, [open]);
+}
 
 /** Centered dialog on desktop, bottom sheet on phones (easier to reach with a thumb). */
 export function Modal({
@@ -21,6 +57,7 @@ export function Modal({
   children: ReactNode;
   role?: 'dialog' | 'alertdialog';
 }) {
+  useBackToClose(open, () => onOpenChange(false));
   return (
     <D.Root open={open} onOpenChange={onOpenChange}>
       <D.Portal>

@@ -1,14 +1,14 @@
 'use client';
 
 import { NotificationPage, type NotificationDto } from '@pocket-agent/protocol';
-import { Bell, BellOff } from 'lucide-react';
+import { BellOff, ChevronDown } from 'lucide-react';
 import Link from 'next/link';
 import { useState } from 'react';
 import { PageHeader } from '@/components/page';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { apiRequest } from '@/lib/api';
-import { formatDate, timeAgo } from '@/lib/format';
+import { formatDate, recentSections, timeAgo } from '@/lib/format';
 import { markRead, useNotifications } from '@/lib/use-notifications';
 import { cn } from '@/lib/utils';
 
@@ -95,6 +95,33 @@ export function NotificationsView() {
     ...older.filter((o) => !first?.notifications.some((f) => f.id === o.id)),
   ];
 
+  // Today, Yesterday, Last 7 days; anything earlier only after "Show more".
+  const [showEarlier, setShowEarlier] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const { sections, earlier } = recentSections(items);
+  const shown: Array<{ label: string; items: NotificationDto[] }> = [
+    ...sections,
+    ...(showEarlier && earlier.length ? [{ label: 'Earlier', items: earlier }] : []),
+  ];
+  const hidden = showEarlier ? 0 : earlier.length;
+
+  async function showMore() {
+    // First what is already here but folded away; after that, older pages from the server.
+    if (hidden > 0) return setShowEarlier(true);
+    if (!next) return;
+    setLoading(true);
+    try {
+      const page = await apiRequest(`/notifications?limit=30&before=${next}`, NotificationPage);
+      setOlder((o) => [...o, ...page.notifications]);
+      setCursor(page.nextCursor);
+      setShowEarlier(true);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
   const open = (n: NotificationDto) => {
     if (!n.readAt) void markRead([n.id]).then(refresh, () => undefined);
   };
@@ -103,7 +130,6 @@ export function NotificationsView() {
     <>
       <PageHeader
         title="Notifications"
-        description="Everything Pocket Agent told you about. Push is only a hint; this history is the record."
         actions={
           first && first.unread > 0 ? (
             <Button
@@ -146,39 +172,40 @@ export function NotificationsView() {
             <BellOff className="size-5" aria-hidden />
           </span>
           <h2 className="mt-4 text-base font-semibold">No notifications yet</h2>
-          <p className="mt-2 max-w-md text-sm text-pretty text-muted-foreground">
-            You’ll hear about permission requests, failures, finished turns and offline PCs. Choose what and
-            when in{' '}
+          <p className="mt-1 text-sm text-muted-foreground">
+            Permission requests, failures and finished turns show up here. Choose which in{' '}
             <Link href="/profile" className="font-medium text-foreground underline underline-offset-4">
-              Settings
+              your profile
             </Link>
             .
           </p>
         </section>
       )}
-      {items.length > 0 && (
-        <ul className="divide-y overflow-hidden rounded-xl bg-card">
-          {items.map((n) => (
-            <Row key={n.id} n={n} onOpen={open} />
-          ))}
-        </ul>
-      )}
-      {next && (
+      <div className="stagger flex flex-col gap-5">
+        {shown.map((section) => (
+          <section key={section.label} aria-label={section.label} data-testid="notification-section">
+            <h2 className="mb-1.5 px-1 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+              {section.label}
+            </h2>
+            <ul className="-mx-4 divide-y sm:mx-0 sm:overflow-hidden sm:rounded-xl sm:bg-card">
+              {section.items.map((n) => (
+                <Row key={n.id} n={n} onOpen={open} />
+              ))}
+            </ul>
+          </section>
+        ))}
+      </div>
+      {/* Older than a week stays folded away until asked for. */}
+      {(hidden > 0 || next) && (
         <div className="mt-4 flex justify-center">
           <Button
             variant="ghost"
             size="sm"
-            onClick={async () => {
-              try {
-                const page = await apiRequest(`/notifications?limit=30&before=${next}`, NotificationPage);
-                setOlder((o) => [...o, ...page.notifications]);
-                setCursor(page.nextCursor);
-              } catch (err) {
-                setError((err as Error).message);
-              }
-            }}
+            disabled={loading}
+            data-testid="show-more"
+            onClick={() => void showMore()}
           >
-            <Bell aria-hidden /> Load older
+            <ChevronDown aria-hidden /> {loading ? 'Loading…' : 'Show more'}
           </Button>
         </div>
       )}

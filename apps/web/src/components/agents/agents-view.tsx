@@ -1,13 +1,15 @@
 'use client';
 
 import { SessionListResponse, type AgentSessionDto } from '@pocket-agent/protocol';
-import { Bot, MessagesSquare, Plus, Search, X } from 'lucide-react';
+import { MessagesSquare, Plus, Search, X } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useCallback, useMemo, useState } from 'react';
 import { NewSessionDialog } from '@/components/agents/new-session-dialog';
 import { SessionAvatar, SessionKindBadge, SessionStatusBadge } from '@/components/agents/session-badges';
 import { Button } from '@/components/ui/button';
+import { Segmented } from '@/components/ui/segmented';
+import { TerminalGuide } from '@/components/ui/terminal-guide';
 import { apiRequest } from '@/lib/api';
 import { chatListTime } from '@/lib/format';
 import { useLiveRefresh } from '@/lib/live';
@@ -91,6 +93,11 @@ function SessionRow({ s, active, waiting }: { s: AgentSessionDto; active: boolea
 }
 
 /** Every session as a chat, newest activity first — the left pane on desktop, the whole screen on phones. */
+const SCOPES = [
+  { value: 'active', label: 'Active' },
+  { value: 'all', label: 'All' },
+] as const;
+
 export function AgentsView({ activeId = null }: { activeId?: string | null }) {
   const [scope, setScope] = useState<'active' | 'all'>('active');
   const [creating, setCreating] = useState(false);
@@ -132,7 +139,8 @@ export function AgentsView({ activeId = null }: { activeId?: string | null }) {
     >
       <div className="px-4 pt-5 pb-2 lg:pt-6">
         <div className="flex items-center justify-between gap-3">
-          <Title className="text-2xl font-semibold tracking-tight">Chats</Title>
+          <Title className="sr-only">Chats</Title>
+          <Segmented as="tab" label="Filter" options={SCOPES} value={scope} onChange={setScope} />
           <Button size="sm" onClick={() => setCreating(true)}>
             <Plus aria-hidden /> New chat
           </Button>
@@ -166,23 +174,6 @@ export function AgentsView({ activeId = null }: { activeId?: string | null }) {
             </button>
           )}
         </div>
-
-        <div role="tablist" aria-label="Filter" className="mt-3 flex gap-2">
-          {(['active', 'all'] as const).map((s) => (
-            <button
-              key={s}
-              role="tab"
-              aria-selected={scope === s}
-              onClick={() => setScope(s)}
-              className={cn(
-                'h-8 rounded-full border px-4 text-sm font-medium text-muted-foreground outline-none transition-colors hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50',
-                scope === s && 'border-primary/30 bg-accent text-accent-foreground',
-              )}
-            >
-              {s === 'active' ? 'Active' : 'All'}
-            </button>
-          ))}
-        </div>
       </div>
 
       <div className="min-h-0 flex-1 px-1.5 pb-4 lg:overflow-y-auto">
@@ -208,33 +199,23 @@ export function AgentsView({ activeId = null }: { activeId?: string | null }) {
           </p>
         )}
         {state.status === 'ready' && !state.data?.length && (
-          <section className="mx-3 mt-2 flex flex-col items-center rounded-xl border border-dashed px-6 py-12 text-center">
-            <span className="grid size-11 place-items-center rounded-full bg-muted text-muted-foreground">
-              <Bot className="size-5" aria-hidden />
-            </span>
-            <h2 className="mt-4 text-base font-semibold">
-              {scope === 'active' ? 'No active sessions' : 'No sessions yet'}
-            </h2>
-            <div className="mt-2 max-w-md space-y-2 text-sm text-pretty text-muted-foreground">
-              <p>
-                With the Local Agent running, Claude Code sessions on your PC appear here automatically. For
-                full detail from sessions you start in VS Code or a terminal, install the hooks once:{' '}
-                <code className="font-mono text-[13px] text-foreground">pocket-agent hooks install</code>
-              </p>
-              <p>
-                No PC paired yet?{' '}
+          <section className="stagger mx-2.5 mt-2 flex flex-col gap-3" data-testid="no-sessions">
+            <div className="px-1">
+              <h2 className="text-base font-semibold">
+                {scope === 'active' ? 'No active chats' : 'No chats yet'}
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                Claude Code sessions on your PC show up here.{' '}
                 <Link href="/devices" className="font-medium text-primary underline-offset-4 hover:underline">
                   Pair a PC
                 </Link>{' '}
-                and run the Local Agent on it.
-              </p>
-              <p>
-                Or start a managed session:{' '}
-                <code className="font-mono text-[13px] text-foreground">
-                  pocket-agent run &quot;your task&quot; --cwd path
-                </code>
+                first.
               </p>
             </div>
+            <p className="px-1 text-sm font-medium">To see sessions you start in your editor, run once:</p>
+            <TerminalGuide
+              steps={[{ command: 'pocket-agent hooks install', output: 'Installed Pocket Agent hooks' }]}
+            />
           </section>
         )}
         {state.status === 'ready' && !!state.data?.length && !sessions.length && (
@@ -243,7 +224,7 @@ export function AgentsView({ activeId = null }: { activeId?: string | null }) {
           </p>
         )}
         {sessions.length > 0 && (
-          <ul className="content-in flex flex-col" aria-label="Sessions list" data-enter-new="">
+          <ul className="stagger flex flex-col" aria-label="Sessions list" data-enter-new="">
             {sessions.map((s) => (
               <SessionRow
                 key={s.id}
@@ -266,10 +247,7 @@ export function NoChatSelected() {
       <Image src="/icons/logo-64.png" alt="" width={64} height={64} className="size-16 opacity-90" />
       <div>
         <h2 className="text-xl font-semibold tracking-tight">Pocket Agent</h2>
-        <p className="mt-2 max-w-sm text-sm text-pretty text-muted-foreground">
-          Pick a session on the left to open its conversation — see what Claude is doing, answer permission
-          requests and send instructions.
-        </p>
+        <p className="mt-2 max-w-sm text-sm text-pretty text-muted-foreground">Pick a chat on the left.</p>
       </div>
       <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
         <MessagesSquare className="size-3.5" aria-hidden /> Live from your paired PCs

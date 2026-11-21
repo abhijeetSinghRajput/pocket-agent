@@ -11,6 +11,7 @@ const cmd = (over: Partial<CommandDto>): CommandDto => ({
   commandType: 'instruction',
   text: 'Run tests',
   projectPath: null,
+  attachments: [],
   status: 'Pending',
   error: null,
   createdAt: new Date().toISOString(),

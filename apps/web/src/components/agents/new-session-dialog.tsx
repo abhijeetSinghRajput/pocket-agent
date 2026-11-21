@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/dialog';
+import { TerminalGuide } from '@/components/ui/terminal-guide';
 import { apiRequest } from '@/lib/api';
 import { commandError } from '@/lib/commands';
 
@@ -90,26 +91,30 @@ export function NewSessionDialog({
     <Modal
       open={open}
       onOpenChange={onOpenChange}
-      title="New managed session"
-      description="Claude Code starts on your PC in a project folder you allowed there."
+      title="New chat"
+      description="Claude Code starts on your PC, in the project you pick."
     >
       {devices === null && !error && (
         <div className="h-40 animate-pulse rounded-lg bg-muted" aria-busy="true" />
       )}
 
       {devices !== null && usable.length === 0 && (
-        <div className="space-y-3 text-sm" data-testid="no-projects">
-          <p className="text-muted-foreground">
+        <div className="flex flex-col gap-2.5 text-sm" data-testid="no-projects">
+          <p className="font-medium">
             {devices.some((d) => d.status === 'Online')
-              ? 'None of your online PCs allow starting sessions yet. On the PC, allow a project folder:'
-              : 'None of your PCs are online. Start the agent on your PC, and allow a project folder:'}
+              ? 'Allow a project folder on your PC first:'
+              : 'Your PC is offline. Start Pocket Agent on it, then allow a project folder:'}
           </p>
-          <code className="block rounded-md bg-muted px-3 py-2 font-mono text-[13px] break-all">
-            pocket-agent projects add C:\path\to\project
-          </code>
+          <TerminalGuide
+            steps={[
+              {
+                command: String.raw`pocket-agent projects add C:\work\my-app`,
+                output: String.raw`Allowed: C:\work\my-app`,
+              },
+            ]}
+          />
           <p className="text-xs text-muted-foreground">
-            Only folders on that list can be used. This is enforced on the PC, so nobody can start Claude
-            anywhere else from the dashboard.
+            Use your own folder. Only allowed folders can be opened.
           </p>
         </div>
       )}
@@ -172,10 +177,7 @@ export function NewSessionDialog({
               placeholder="e.g. Run the test suite and summarise failures"
               className="min-h-24 w-full resize-y rounded-md border bg-background px-3 py-2 text-base shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/40 sm:text-sm"
             />
-            <p className="text-xs text-muted-foreground">
-              Actions that need permission are denied until remote approval arrives (M5). Your Claude Code
-              settings apply.
-            </p>
+            <p className="text-xs text-muted-foreground">Anything that needs permission asks you here.</p>
           </div>
           {error && (
             <p role="alert" className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">

@@ -6,7 +6,6 @@ import {
   type NotificationCategory,
   type NotificationSettingsDto as Settings,
 } from '@pocket-agent/protocol';
-import Link from 'next/link';
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -27,15 +26,15 @@ const noopSubscribe = () => () => undefined;
 const LABELS: Record<NotificationCategory, { title: string; hint: string }> = {
   permission_required: {
     title: 'Permission requests',
-    hint: 'Claude is waiting for your Allow/Deny. Pushed even in quiet hours.',
+    hint: 'Also during quiet hours.',
   },
-  agent_failed: { title: 'Agent failures', hint: 'A turn ended with an error.' },
-  device_disconnected: { title: 'PC offline', hint: 'A paired PC stopped responding for 2+ minutes.' },
+  agent_failed: { title: 'Failures', hint: 'A turn ended with an error.' },
+  device_disconnected: { title: 'PC offline', hint: 'No response for 2 minutes.' },
   task_completed: {
     title: 'Finished turns',
-    hint: 'Managed sessions, or any session while its PC is in Away mode.',
+    hint: 'Chats started here, or any chat in Away mode.',
   },
-  agent_started: { title: 'Session started', hint: 'Every new session. Off by default.' },
+  agent_started: { title: 'Chat started', hint: 'Every new chat.' },
 };
 
 function Switch({
@@ -77,12 +76,10 @@ function Switch({
 }
 
 const SUPPORT_TEXT: Record<Exclude<PushSupport['kind'], 'supported'>, string> = {
-  not_configured:
-    'Push isn’t set up for this Pocket Agent deployment. Notifications still appear in the app.',
-  insecure: 'Push needs HTTPS (or localhost). Open Pocket Agent over HTTPS to enable it on this device.',
-  ios_install_required:
-    'On iPhone and iPad (iOS 16.4+), push only works for the installed app: tap Share → Add to Home Screen, open Pocket Agent from the Home Screen, then enable push there.',
-  unsupported: 'This browser doesn’t support web push. Notifications still appear in the app.',
+  not_configured: 'Push isn’t set up on this server.',
+  insecure: 'Push needs HTTPS.',
+  ios_install_required: 'On iPhone/iPad: Share → Add to Home Screen, then enable push in that app.',
+  unsupported: 'This browser doesn’t support push.',
 };
 
 function PushThisDevice({ serverAvailable, onChanged }: { serverAvailable: boolean; onChanged: () => void }) {
@@ -109,7 +106,7 @@ function PushThisDevice({ serverAvailable, onChanged }: { serverAvailable: boole
     support.kind !== 'supported'
       ? SUPPORT_TEXT[support.kind]
       : !serverAvailable
-        ? 'The Pocket Agent server can’t send push yet (FCM_SERVICE_ACCOUNT_FILE isn’t set). Notifications still appear in the app.'
+        ? 'This server can’t send push yet.'
         : null;
 
   const run = async (fn: () => Promise<void>, ok: string, next: boolean) => {
@@ -151,35 +148,6 @@ function PushThisDevice({ serverAvailable, onChanged }: { serverAvailable: boole
               Enable push on this device
             </Button>
           ))}
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={busy}
-          data-testid="send-test"
-          onClick={() =>
-            run(
-              async () => {
-                const r = (await apiRequest('/notifications/test', null, { method: 'POST' })) as {
-                  notification: { push: { sent: number; skipped: string | null } } | null;
-                };
-                const p = r.notification?.push;
-                if (p && p.sent === 0 && p.skipped && p.skipped !== 'push_not_configured') {
-                  throw new Error(
-                    p.skipped === 'quiet_hours'
-                      ? 'Recorded, but not pushed: it’s quiet hours.'
-                      : p.skipped === 'no_browser_registered'
-                        ? 'Recorded, but no browser has push enabled.'
-                        : 'Recorded, but push delivery failed.',
-                  );
-                }
-              },
-              'Test sent. It’s in your notification history; a push should arrive within a few seconds.',
-              enabled,
-            )
-          }
-        >
-          Send test notification
-        </Button>
       </div>
       {message && (
         <p
@@ -243,12 +211,7 @@ export function NotificationSettings() {
   return (
     <div className="flex flex-col gap-6" data-testid="notification-settings">
       <div>
-        <h3 className="text-sm font-medium">This device</h3>
-        <p className="mt-1 mb-3 text-sm text-muted-foreground">
-          Push is a hint: delivery isn’t guaranteed and can be delayed by the browser or OS. Approvals and
-          history always reflect the real state when you open Pocket Agent.{' '}
-          {settings.push.subscriptions > 0 && `${settings.push.subscriptions} browser(s) registered.`}
-        </p>
+        <h3 className="mb-2 text-sm font-medium">Push on this device</h3>
         <PushThisDevice
           serverAvailable={settings.push.available}
           onChanged={() => void refresh().then(() => setOverride(null))}
@@ -257,9 +220,9 @@ export function NotificationSettings() {
 
       <div>
         <h3 className="text-sm font-medium">What to notify</h3>
-        <ul className="mt-2 divide-y rounded-lg border">
+        <ul className="mt-1 divide-y">
           {(Object.keys(NOTIFICATION_CATEGORIES) as NotificationCategory[]).map((c) => (
-            <li key={c} className="flex items-center justify-between gap-4 px-3 py-3">
+            <li key={c} className="flex items-center justify-between gap-4 py-2.5">
               <div className="min-w-0">
                 <p className="text-sm font-medium">{LABELS[c].title}</p>
                 <p className="text-xs text-pretty text-muted-foreground">{LABELS[c].hint}</p>
@@ -280,13 +243,7 @@ export function NotificationSettings() {
         <div className="flex items-center justify-between gap-4">
           <div>
             <h3 className="text-sm font-medium">Quiet hours</h3>
-            <p className="text-xs text-muted-foreground">
-              No pushes except permission requests. Still recorded in{' '}
-              <Link href="/notifications" className="underline underline-offset-4">
-                history
-              </Link>
-              .
-            </p>
+            <p className="text-xs text-muted-foreground">No pushes, except permission requests.</p>
           </div>
           <Switch
             on={settings.quietHours !== null}

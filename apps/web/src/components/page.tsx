@@ -12,8 +12,9 @@ export function PageHeader({
   actions?: ReactNode;
 }) {
   return (
-    <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-      <div className="min-w-0">
+    // The title and its actions share one row, on phones too.
+    <div className="mb-6 flex items-start justify-between gap-3">
+      <div className="min-w-0 flex-1">
         <h1 className="text-2xl font-semibold tracking-tight text-balance">{title}</h1>
         {description && <p className="mt-1 text-sm text-pretty text-muted-foreground">{description}</p>}
       </div>

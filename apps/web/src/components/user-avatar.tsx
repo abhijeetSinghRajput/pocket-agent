@@ -2,6 +2,7 @@
 
 import type { UserDto } from '@pocket-agent/protocol';
 import Link from 'next/link';
+import { useState } from 'react';
 import { cn } from '@/lib/utils';
 
 function initials(name: string): string {
@@ -12,7 +13,10 @@ function initials(name: string): string {
 
 /** The signed-in user's picture (or initials). */
 export function UserAvatar({ user, className }: { user: UserDto; className?: string }) {
-  const url = (user as UserDto & { avatarUrl?: string | null }).avatarUrl;
+  // The picture Google gave us (its own letter avatar when the account has no photo). If it is
+  // missing or doesn't load, our initials.
+  const [failed, setFailed] = useState<string | null>(null);
+  const url = user.avatarUrl && user.avatarUrl !== failed ? user.avatarUrl : null;
   return (
     <span
       aria-hidden
@@ -23,7 +27,13 @@ export function UserAvatar({ user, className }: { user: UserDto; className?: str
     >
       {url ? (
         // eslint-disable-next-line @next/next/no-img-element -- remote profile photo, no optimisation needed
-        <img src={url} alt="" referrerPolicy="no-referrer" className="size-full object-cover" />
+        <img
+          src={url}
+          alt=""
+          referrerPolicy="no-referrer"
+          onError={() => setFailed(url)}
+          className="size-full object-cover"
+        />
       ) : (
         initials(user.name)
       )}
@@ -32,7 +42,7 @@ export function UserAvatar({ user, className }: { user: UserDto; className?: str
 }
 
 /** Pages that belong to the profile (settings live inside it). */
-export const PROFILE_ROUTES = ['/profile', '/notifications'];
+export const PROFILE_ROUTES = ['/profile'];
 
 /** The avatar, no label: opens the profile page. */
 export function ProfileLink({
@@ -52,12 +62,34 @@ export function ProfileLink({
       aria-current={active ? 'page' : undefined}
       data-testid="profile-link"
       className={cn(
-        'grid place-items-center rounded-full ring-offset-2 ring-offset-card outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50',
-        active && 'ring-2 ring-primary',
+        'grid place-items-center rounded-full outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50',
         className,
       )}
     >
+      {/* The ring sits on the picture itself: no gap between them. */}
+      <UserAvatar user={user} className={active ? 'ring-2 ring-foreground' : undefined} />
+    </Link>
+  );
+}
+
+/** Sidebar: the whole row is the profile link (picture, name, email). */
+export function ProfileRow({ user, active }: { user: UserDto; active: boolean }) {
+  return (
+    <Link
+      href="/profile"
+      aria-label={`Profile: ${user.name}`}
+      aria-current={active ? 'page' : undefined}
+      data-testid="profile-link"
+      className={cn(
+        'flex items-center gap-2.5 rounded-lg p-2 outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50',
+        active && 'bg-accent',
+      )}
+    >
       <UserAvatar user={user} />
+      <span className="min-w-0">
+        <span className="block truncate text-sm leading-tight font-medium">{user.name}</span>
+        <span className="block truncate text-xs text-muted-foreground">{user.email}</span>
+      </span>
     </Link>
   );
 }

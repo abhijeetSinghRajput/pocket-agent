@@ -4,7 +4,6 @@ import { RefreshCw } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { fetchHealth, type HealthResult } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
@@ -65,65 +64,56 @@ export function ApiStatus() {
       <Badge variant="danger">Unreachable</Badge>
     );
 
-  return (
-    <Card data-testid="api-status" aria-busy={checking}>
-      <CardHeader>
-        <div className="min-w-0">
-          <CardTitle>Backend</CardTitle>
-          <CardDescription className="mt-1.5">
-            Live status of the Pocket Agent API and its dependencies.
-          </CardDescription>
-        </div>
-        {badge}
-      </CardHeader>
+  const tiles =
+    result && result.kind !== 'unreachable'
+      ? [
+          { name: 'Database', dep: result.health.checks.database },
+          { name: 'Redis', dep: result.health.checks.redis },
+        ]
+      : [];
 
-      {result === null && (
-        <div className="space-y-2" aria-hidden>
-          <div className="h-9 animate-pulse rounded-md bg-muted" />
-          <div className="h-9 animate-pulse rounded-md bg-muted" />
-        </div>
-      )}
+  return (
+    <section className="rounded-xl bg-card p-4" data-testid="api-status" aria-busy={checking}>
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">Backend</h2>
+        {badge}
+      </div>
+
+      {result === null && <div className="mt-3 h-[58px] animate-pulse rounded-lg bg-muted" aria-hidden />}
 
       {result?.kind === 'unreachable' && (
-        <p role="alert" className="rounded-md bg-destructive/10 px-3 py-2.5 text-sm text-destructive">
-          {result.error}. Check that the API is running and NEXT_PUBLIC_API_URL is correct.
+        <p role="alert" className="mt-3 text-sm text-destructive">
+          {result.error}
         </p>
       )}
 
       {result && result.kind !== 'unreachable' && (
-        <dl className="divide-y rounded-lg border text-sm">
-          {(
-            [
-              ['Database', result.health.checks.database],
-              ['Redis', result.health.checks.redis],
-            ] as const
-          ).map(([name, dep]) => (
-            <div key={name} className="flex items-center justify-between gap-3 px-3 py-2.5">
-              <dt className="flex items-center gap-2">
+        <dl className="mt-3 grid grid-cols-3 gap-2 text-sm">
+          {tiles.map(({ name, dep }) => (
+            <div key={name} className="min-w-0 rounded-lg bg-muted px-3 py-2.5">
+              <dt className="flex items-center gap-1.5 text-xs text-muted-foreground">
                 <Dot tone={dep.status === 'up' ? 'success' : 'danger'} />
-                {name}
+                <span className="truncate">{name}</span>
               </dt>
-              <dd className="truncate font-mono text-xs text-muted-foreground">
+              <dd className="mt-1 truncate font-mono text-[13px]">
                 {dep.status === 'up' ? `${dep.latencyMs ?? 0} ms` : (dep.error ?? 'down')}
               </dd>
             </div>
           ))}
-          <div className="flex items-center justify-between gap-3 px-3 py-2.5">
-            <dt className="flex items-center gap-2">
+          <div className="min-w-0 rounded-lg bg-muted px-3 py-2.5">
+            <dt className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <Dot tone="muted" />
-              API version
+              <span className="truncate">API version</span>
             </dt>
-            <dd className="font-mono text-xs text-muted-foreground">{result.health.version}</dd>
+            <dd className="mt-1 truncate font-mono text-[13px]">{result.health.version}</dd>
           </div>
         </dl>
       )}
 
-      <div>
-        <Button variant="outline" size="sm" onClick={() => void refresh()} disabled={checking}>
-          <RefreshCw className={cn(checking && 'animate-spin')} aria-hidden />
-          {checking ? 'Checking' : 'Check now'}
-        </Button>
-      </div>
-    </Card>
+      <Button variant="outline" className="mt-3 w-full" onClick={() => void refresh()} disabled={checking}>
+        <RefreshCw className={cn(checking && 'animate-spin')} aria-hidden />
+        {checking ? 'Checking' : 'Check now'}
+      </Button>
+    </section>
   );
 }

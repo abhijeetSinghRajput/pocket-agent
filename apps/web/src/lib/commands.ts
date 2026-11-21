@@ -30,6 +30,11 @@ const ERRORS: Record<string, string> = {
   project_not_allowed: 'That folder is not on your PC’s project list.',
   not_a_managed_session: 'Only sessions started by Pocket Agent can be controlled this way.',
   interrupted: 'Interrupted before it finished.',
+  attachment_download_failed: 'Your PC could not download the attached file, so the message was not run.',
+  attachments_not_supported: 'Update Pocket Agent on your PC to send it files.',
+  model_not_available: 'That model is not available on your PC.',
+  process_not_found:
+    'Pocket Agent could not find this session’s process on your PC. Close it in your editor instead.',
   session_ended: 'The session ended before this ran.',
   session_stopped: 'The session was stopped before this ran.',
   session_completed: 'The session ended before this ran.',

@@ -1,7 +1,10 @@
 import type { AgentEventDto, CommandDto } from '@pocket-agent/protocol';
 import { describe, expect, it } from 'vitest';
+import { answerText } from '@/components/approvals/approval-card';
+import { typeOver } from '@/components/agents/chat-messages';
+import { resetLabel } from '@/components/claude-usage';
 import { buildChat } from '@/lib/chat';
-import { chatListTime, dayLabel, daysAgo } from '@/lib/format';
+import { chatListTime, dayLabel, daysAgo, recentSections } from '@/lib/format';
 import { openChatId } from '@/lib/nav';
 
 let n = 0;
@@ -17,6 +20,7 @@ function cmd(sec: number, over: Partial<CommandDto>): CommandDto {
     commandType: 'instruction',
     text: null,
     projectPath: null,
+    attachments: [],
     status: 'Accepted',
     error: null,
     createdAt: at(sec),
@@ -161,6 +165,58 @@ describe('buildChat', () => {
     expect(old).toEqual([expect.objectContaining({ kind: 'question', state: 'failed', questions: [] })]);
   });
 
+  it('shows thinking time as its own step, other system notes as notices', () => {
+    const items = buildChat([
+      ev(1, 'agent.output', { role: 'system', text: 'Thought for 2s' }),
+      ev(2, 'agent.output', { role: 'system', text: 'Thought for 1m 24s' }),
+      ev(3, 'agent.output', { role: 'system', text: 'Subagent Explore started' }),
+    ]);
+    expect(items.map((i) => i.kind)).toEqual(['thought', 'thought', 'notice']);
+  });
+
+  it('shows Claude’s question once: as the question, not also as a permission request', () => {
+    const input = JSON.stringify({
+      questions: [{ question: 'Rock or Paper?', options: [{ label: 'Rock' }] }],
+    });
+    const items = buildChat([
+      ev(1, 'agent.tool.started', { toolUseId: 'q1', toolName: 'AskUserQuestion', input }),
+      ev(2, 'agent.permission.requested', {
+        toolUseId: 'q1',
+        requestId: 'q1',
+        toolName: 'AskUserQuestion',
+        input,
+      }),
+      ev(3, 'agent.permission.resolved', { requestId: 'q1', outcome: 'remote' }),
+    ]);
+    expect(items.map((i) => i.kind)).toEqual(['question']);
+  });
+
+  it('shows files with the message they were sent with', () => {
+    const shot = {
+      id: '0190a7a0-0000-7000-8000-000000000001',
+      name: 'shot.png',
+      mime: 'image/png',
+      size: 10,
+    };
+    const pasted = { ...shot, id: '0190a7a0-0000-7000-8000-000000000002', name: 'attachment-1.png' };
+    const items = buildChat(
+      [
+        // Typed in the editor with a pasted image: the PC uploads it a moment later.
+        ev(1, 'agent.output', { role: 'user', text: 'what is wrong here?' }),
+        ev(3, 'agent.output', { role: 'user', text: '', attachments: [pasted] }),
+        // Sent from the app with a photo.
+        ev(20, 'agent.output', { role: 'user', text: 'and this one' }),
+      ],
+      [cmd(19, { text: 'and this one', attachments: [shot] as never })],
+    );
+    expect(items.map((i) => i.kind)).toEqual(['user', 'user']);
+    expect(items[0]).toMatchObject({
+      text: 'what is wrong here?',
+      attachments: [{ name: 'attachment-1.png' }],
+    });
+    expect(items[1]).toMatchObject({ text: 'and this one', attachments: [{ name: 'shot.png' }] });
+  });
+
   it('drops empty assistant messages', () => {
     expect(buildChat([ev(1, 'agent.output', { role: 'assistant', text: '  ' })])).toEqual([]);
   });
@@ -188,5 +244,82 @@ describe('openChatId', () => {
     expect(openChatId('/agents')).toBeNull();
     expect(openChatId('/agents/abc/x')).toBeNull();
     expect(openChatId('/approvals')).toBeNull();
+  });
+});
+
+describe('answering Claude’s question', () => {
+  const q = {
+    question: 'Which sizes?',
+    header: '',
+    multiSelect: true,
+    options: [
+      { label: 'S', description: '' },
+      { label: 'M', description: '' },
+      { label: 'L', description: '' },
+    ],
+  };
+  it('sends the chosen labels in Claude’s order, with the user’s own words last', () => {
+    expect(answerText(q, { labels: ['L', 'S'], other: '' })).toBe('S, L');
+    expect(answerText(q, { labels: ['M'], other: ' XXL ' })).toBe('M, XXL');
+    expect(answerText(q, { labels: [], other: 'none of these' })).toBe('none of these');
+  });
+  it('is empty until something is picked (so it can’t be sent)', () => {
+    expect(answerText(q, undefined)).toBe('');
+    expect(answerText(q, { labels: [], other: '   ' })).toBe('');
+  });
+});
+
+describe('Claude usage', () => {
+  const now = new Date(2026, 10, 21, 10, 0);
+  it('says when a limit resets, only if that is still ahead', () => {
+    expect(resetLabel(new Date(2026, 10, 21, 13, 30).toISOString(), now)).toMatch(/^Resets at 1:30/);
+    expect(resetLabel(new Date(2026, 10, 27, 1, 30).toISOString(), now)).toMatch(/^Resets .*27.* at 1:30/);
+    expect(resetLabel(new Date(2026, 10, 21, 9, 0).toISOString(), now)).toBeNull();
+    expect(resetLabel(null, now)).toBeNull();
+  });
+});
+
+describe('the working verb is typed over the last one', () => {
+  const frames = (from: string, to: string) =>
+    Array.from({ length: Math.max(from.length, to.length) }, (_, i) => typeOver(from, to, i + 1));
+  it('replaces letters from the left, then deletes what is left of a longer word', () => {
+    expect(frames('Herding', 'Cook')).toEqual([
+      'Cerding',
+      'Cording',
+      'Cooding',
+      'Cooking',
+      'Cookin',
+      'Cooki',
+      'Cook',
+    ]);
+  });
+  it('types on past the end of a shorter word', () => {
+    expect(frames('Cook', 'Forming')).toEqual(['Fook', 'Fook', 'Fork', 'Form', 'Formi', 'Formin', 'Forming']);
+  });
+});
+
+describe('notification sections', () => {
+  const now = new Date(2026, 10, 21, 15, 0).getTime();
+  const at = (y: number, m: number, d: number, h = 12) => ({ createdAt: new Date(y, m, d, h).toISOString() });
+  it('groups by Today, Yesterday and Last 7 days, and keeps the rest apart', () => {
+    const items = [
+      at(2026, 10, 21, 9),
+      at(2026, 10, 20, 23),
+      at(2026, 10, 17),
+      at(2026, 10, 15),
+      at(2026, 10, 10),
+    ];
+    const { sections, earlier } = recentSections(items, now);
+    expect(sections.map((s) => [s.label, s.items.length])).toEqual([
+      ['Today', 1],
+      ['Yesterday', 1],
+      ['Last 7 days', 2],
+    ]);
+    expect(earlier).toHaveLength(1);
+  });
+  it('leaves out empty sections', () => {
+    const { sections, earlier } = recentSections([at(2026, 10, 19)], now);
+    expect(sections.map((s) => s.label)).toEqual(['Last 7 days']);
+    expect(earlier).toEqual([]);
   });
 });

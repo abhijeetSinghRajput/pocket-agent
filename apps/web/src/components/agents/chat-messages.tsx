@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { ClaudeSpinner } from '@/components/agents/claude-spinner';
+import { SentAttachments } from '@/components/agents/attachments';
 import { Markdown } from '@/components/agents/markdown';
 import type { AskedQuestion, ChatItem } from '@/lib/chat';
 import { commandError, STATUS_LABEL } from '@/lib/commands';
@@ -45,7 +46,7 @@ function UserMessage({ item }: { item: Of<'user'> }) {
   const status = c ? STATUS_LABEL[c.status] : null;
   return (
     <li
-      className="flex min-w-0 flex-col gap-1"
+      className="flex min-w-0 flex-col items-end gap-1"
       {...(c ? { 'data-testid': 'command-row', 'data-status': c.status } : {})}
     >
       {/* As in Claude Code: the time above, the prompt in a quiet box. */}
@@ -62,7 +63,8 @@ function UserMessage({ item }: { item: Of<'user'> }) {
           </span>
         )}
       </span>
-      <div className="user-prompt rounded-lg border px-3 py-2">
+      <div className="user-prompt max-w-[88%] rounded-2xl rounded-tr-md px-3.5 py-2 sm:max-w-[80%]">
+        {item.attachments && <SentAttachments files={item.attachments} />}
         <p
           className={cn(
             'text-[14px] leading-[1.5] [overflow-wrap:anywhere] whitespace-pre-wrap',
@@ -75,7 +77,7 @@ function UserMessage({ item }: { item: Of<'user'> }) {
           <button
             type="button"
             onClick={() => setOpen(!open)}
-            className="mt-1 text-[13px] font-medium text-primary hover:underline"
+            className="mt-1 text-[13px] font-semibold underline underline-offset-2"
           >
             {open ? 'Show less' : 'Read more'}
           </button>
@@ -165,7 +167,7 @@ function ToolStep({ item }: { item: Of<'tool'> }) {
           aria-expanded={more ? open : undefined}
           aria-label={more ? (open ? 'Show less' : 'Show more') : undefined}
           onClick={() => setOpen(!open)}
-          className="mt-1 block w-full overflow-hidden rounded-md border bg-card text-left font-mono text-[12px] leading-[1.55] outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40"
+          className="mt-1 block w-full overflow-hidden rounded-md bg-card text-left font-mono text-[12px] leading-[1.55] outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40"
         >
           {shell && target && (
             <span className="flex gap-3 px-2.5 py-1.5">
@@ -311,7 +313,7 @@ export function AskedQuestions({
 function PermissionRow({ item }: { item: Of<'permission'> }) {
   return (
     <Step dot="bg-warning">
-      <div className="rounded-xl border border-warning/35 bg-card px-3 py-2.5 shadow-xs">
+      <div className="rounded-xl bg-card px-3 py-2.5">
         <p className="flex items-center gap-2 text-[13px] font-medium">
           <ShieldAlert className="size-4 shrink-0 text-warning" aria-hidden />
           Permission requested: {item.toolName}
@@ -391,45 +393,56 @@ function elapsed(ms: number): string {
  * "✻ Churning… (12s)" — a breathing star, a rotating verb and shimmering text while Claude works.
  * All the ticking lives in this tiny component, so the conversation itself never re-renders for it.
  */
+/** One step of typing `to` over `from`: `i` letters are already the new word. */
+export function typeOver(from: string, to: string, i: number): string {
+  // First the new letters replace the old ones from the left…
+  if (i <= to.length) return to.slice(0, i) + from.slice(i);
+  // …then what is left of a longer old word is deleted from the end.
+  return to + from.slice(to.length, Math.max(to.length, from.length - (i - to.length)));
+}
+
+const TYPE_STEP_MS = 55;
+
 export function TypingIndicator({ kind, since }: { kind: 'working' | 'starting'; since: string | null }) {
-  const [verb, setVerb] = useState(() => VERBS[Math.floor(Math.random() * VERBS.length)]!);
   const [start] = useState(() => (since ? Math.min(Date.parse(since), Date.now()) : Date.now()));
   const [now, setNow] = useState(() => Date.now());
-  const [leaving, setLeaving] = useState(false);
+  // What is on screen: mid-change it is part new word, part old.
+  const [shown, setShown] = useState(() => VERBS[Math.floor(Math.random() * VERBS.length)]!);
+  /** The verb being shown or typed towards. */
+  const current = useRef(shown);
 
   useEffect(() => {
     const clock = window.setInterval(() => setNow(Date.now()), 1000);
-    // Swap the verb in two steps: the old one fades/blurs out, then the new one comes in.
-    let swap: number | undefined;
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    let typing: number | undefined;
+    // Every few seconds the next verb is typed over the current one, like a typewriter.
     const words = window.setInterval(() => {
-      setLeaving(true);
-      swap = window.setTimeout(() => {
-        setVerb((v) => {
-          let next = v;
-          while (next === v) next = VERBS[Math.floor(Math.random() * VERBS.length)]!;
-          return next;
-        });
-        setLeaving(false);
-      }, 260);
+      const from = current.current;
+      let to = from;
+      while (to === from) to = VERBS[Math.floor(Math.random() * VERBS.length)]!;
+      current.current = to;
+      if (reduce) return setShown(to);
+      let i = 0;
+      const steps = Math.max(to.length, from.length);
+      window.clearInterval(typing);
+      typing = window.setInterval(() => {
+        i += 1;
+        setShown(typeOver(from, to, i));
+        if (i >= steps) window.clearInterval(typing);
+      }, TYPE_STEP_MS);
     }, 3500);
     return () => {
       window.clearInterval(clock);
       window.clearInterval(words);
-      window.clearTimeout(swap);
+      window.clearInterval(typing);
     };
   }, []);
 
-  const word = kind === 'starting' ? 'Starting' : verb;
+  const word = kind === 'starting' ? 'Starting' : shown;
   return (
     <div className="flex items-center gap-2 py-1 text-sm" role="status" data-testid="typing-indicator">
       <ClaudeSpinner className="text-base text-primary" />
-      <span
-        key={word}
-        className={cn(
-          'shimmer-text verb-swap font-medium',
-          leaving && 'translate-y-[-3px] opacity-0 blur-[2px]',
-        )}
-      >
+      <span className="shimmer-text font-medium" aria-hidden>
         {word}…
       </span>
       <span className="text-xs text-muted-foreground tabular-nums">({elapsed(now - start)})</span>
@@ -458,6 +471,13 @@ function renderItems(items: ChatItem[]): ReactNode[] {
         break;
       case 'tool':
         out.push(<ToolStep key={item.key} item={item} />);
+        break;
+      case 'thought':
+        out.push(
+          <Step key={item.key} dot="bg-muted-foreground/30" data-testid="thought">
+            <p className="text-[13.5px] leading-[1.6] text-muted-foreground">{item.text}</p>
+          </Step>,
+        );
         break;
       case 'question':
         out.push(<QuestionCard key={item.key} item={item} />);

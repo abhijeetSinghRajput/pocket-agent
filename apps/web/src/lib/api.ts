@@ -28,7 +28,7 @@ const FRIENDLY: Record<string, string> = {
 export async function apiRequest<S extends z.ZodType>(
   path: string,
   schema: S | null,
-  init: { method?: 'GET' | 'POST' | 'PUT'; body?: unknown; signal?: AbortSignal } = {},
+  init: { method?: 'GET' | 'POST' | 'PUT' | 'DELETE'; body?: unknown; signal?: AbortSignal } = {},
 ): Promise<z.infer<S>> {
   let res: Response;
   try {

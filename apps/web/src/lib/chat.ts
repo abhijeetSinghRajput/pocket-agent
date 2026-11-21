@@ -1,4 +1,5 @@
 import type { AgentEventDto, CommandDto } from '@pocket-agent/protocol';
+import { AttachmentRefs, type AttachmentRef } from '@pocket-agent/protocol';
 
 type P = Record<string, unknown>;
 const str = (v: unknown) => (typeof v === 'string' ? v : '');
@@ -75,6 +76,8 @@ export type ChatItem =
       text: string;
       /** Set when the message was sent from Pocket Agent (carries its delivery status). */
       command?: CommandDto;
+      /** Photos/PDFs sent with it (from the app, or attached in the editor). */
+      attachments?: AttachmentRef[];
     }
   | { kind: 'assistant'; key: string; at: string; text: string }
   | {
@@ -107,7 +110,12 @@ export type ChatItem =
       outcome: string | null;
     }
   | { kind: 'control'; key: string; at: string; command: CommandDto }
+  /** "Thought for 2s": how long Claude thought before its next step (never the thinking itself). */
+  | { kind: 'thought'; key: string; at: string; text: string }
   | { kind: 'notice'; key: string; at: string; text: string; tone: 'muted' | 'danger' };
+
+/** The PC reports thinking time as a system note with exactly this shape. */
+const THOUGHT = /^Thought for (\d+m )?\d+s$/;
 
 const byTime = (a: { at: string }, b: { at: string }) => Date.parse(a.at) - Date.parse(b.at);
 
@@ -143,11 +151,27 @@ export function buildChat(events: AgentEventDto[], commands: CommandDto[] = []):
       case 'agent.output': {
         const text = str(p['text']);
         if (p['role'] === 'user') {
-          const item = { kind: 'user' as const, key: e.id, at, text };
+          const files = AttachmentRefs.safeParse(p['attachments']);
+          const attachments = files.success && files.data.length ? files.data : undefined;
+          // The PC uploads files attached in the editor a moment after the prompt: they belong to it.
+          const previous = userItems.at(-1);
+          if (!text && attachments && previous && Date.parse(at) - Date.parse(previous.at) < 10 * 60_000) {
+            previous.attachments = [...(previous.attachments ?? []), ...attachments];
+            break;
+          }
+          const item: Extract<ChatItem, { kind: 'user' }> = {
+            kind: 'user',
+            key: e.id,
+            at,
+            text,
+            ...(attachments ? { attachments } : {}),
+          };
           userItems.push(item);
           items.push(item);
         } else if (p['role'] === 'assistant') {
           if (text.trim()) items.push({ kind: 'assistant', key: e.id, at, text });
+        } else if (THOUGHT.test(text)) {
+          items.push({ kind: 'thought', key: e.id, at, text });
         } else if (text) {
           items.push({ kind: 'notice', key: e.id, at, text, tone: 'muted' });
         }
@@ -198,7 +222,8 @@ export function buildChat(events: AgentEventDto[], commands: CommandDto[] = []):
           outcome: null as string | null,
         };
         permissions.set(str(p['requestId']) || e.id, item);
-        items.push(item);
+        // Claude's question is shown as the question itself (and answered there), not as a permission.
+        if (item.toolName !== 'AskUserQuestion') items.push(item);
         break;
       }
       case 'agent.permission.resolved': {
@@ -255,8 +280,16 @@ export function buildChat(events: AgentEventDto[], commands: CommandDto[] = []):
     if (echo) {
       claimed.add(echo);
       echo.command = c;
+      if (c.attachments.length) echo.attachments = c.attachments;
     } else {
-      extra.push({ kind: 'user', key: `cmd-${c.id}`, at: c.createdAt, text, command: c });
+      extra.push({
+        kind: 'user',
+        key: `cmd-${c.id}`,
+        at: c.createdAt,
+        text,
+        command: c,
+        ...(c.attachments.length ? { attachments: c.attachments } : {}),
+      });
     }
   }
 

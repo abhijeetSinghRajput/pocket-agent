@@ -30,14 +30,14 @@ export function capabilityRows(s: AgentSessionDto): Row[] {
           label: 'Send instructions',
           state: 'yes',
           detail:
-            'Any time. If Claude is idle, your PC resumes this session and runs it at once; if it is busy, it runs when the turn ends.',
+            'Any time. If Claude is idle, your PC resumes this session and runs it at once; if it is busy, Claude takes it as soon as it can (its next step, or the end of the turn).',
         }
       : c.instructBetweenTurns
         ? {
             label: 'Send instructions',
             state: 'yes',
             detail:
-              'Delivered when Claude finishes its current turn. To run it at once when Claude is idle, run `pocket-agent instructions wake enable` on the PC.',
+              'While Claude works, it reads your message at its next step (or when the turn ends). To run it at once when Claude is idle, run `pocket-agent instructions wake enable` on the PC.',
           }
         : hooksConnected
           ? {
@@ -61,8 +61,12 @@ export function capabilityRows(s: AgentSessionDto): Row[] {
       label: 'Stop / interrupt',
       state: c.interrupt ? 'yes' : 'no',
       detail: c.interrupt
-        ? 'Interrupt the current task or end the session.'
-        : 'Not possible for sessions you start yourself; start a managed session instead.',
+        ? managed
+          ? 'Interrupt the current task or end the session.'
+          : 'Stop the current turn (Claude stops at its next step), or end the session: that closes its Claude Code process on the PC.'
+        : hooksConnected
+          ? 'Turned off on this PC. Run `pocket-agent instructions enable` on the PC to allow stopping from here.'
+          : 'Not possible until this session reports through hooks.',
     },
     {
       label: 'Approve permissions remotely',

@@ -60,3 +60,32 @@ export function mmss(ms: number): string {
   const s = Math.max(0, Math.ceil(ms / 1000));
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
+
+export interface DatedSection<T> {
+  label: 'Today' | 'Yesterday' | 'Last 7 days';
+  items: T[];
+}
+
+/**
+ * Splits a newest-first list into Today, Yesterday and Last 7 days (empty sections are left out),
+ * plus everything earlier than that.
+ */
+export function recentSections<T extends { createdAt: string }>(
+  items: T[],
+  now: number = Date.now(),
+): { sections: DatedSection<T>[]; earlier: T[] } {
+  const today: T[] = [];
+  const yesterday: T[] = [];
+  const week: T[] = [];
+  const earlier: T[] = [];
+  for (const item of items) {
+    const d = daysAgo(item.createdAt, now);
+    (d <= 0 ? today : d === 1 ? yesterday : d < 7 ? week : earlier).push(item);
+  }
+  const all: DatedSection<T>[] = [
+    { label: 'Today', items: today },
+    { label: 'Yesterday', items: yesterday },
+    { label: 'Last 7 days', items: week },
+  ];
+  return { sections: all.filter((x) => x.items.length > 0), earlier };
+}

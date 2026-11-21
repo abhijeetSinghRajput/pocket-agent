@@ -4,7 +4,7 @@ import { Monitor, Moon, Sun } from 'lucide-react';
 import { ThemeProvider as NextThemes, useTheme } from 'next-themes';
 import { useCallback, useEffect, useSyncExternalStore, type ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
-import { cn } from '@/lib/utils';
+import { Segmented } from '@/components/ui/segmented';
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   return (
@@ -76,7 +76,7 @@ function ThemeHotkey() {
 }
 
 /** True only after hydration, so theme-dependent UI never mismatches the server render. */
-function useMounted(): boolean {
+export function useMounted(): boolean {
   return useSyncExternalStore(
     () => () => undefined,
     () => true,
@@ -113,26 +113,11 @@ export function ThemeSelector() {
   const { theme, setTheme } = useSmoothTheme();
   const mounted = useMounted();
   return (
-    <div role="radiogroup" aria-label="Theme" className="inline-flex rounded-lg border bg-muted p-1">
-      {OPTIONS.map(({ value, label, icon: Icon }) => {
-        const selected = mounted && theme === value;
-        return (
-          <button
-            key={value}
-            type="button"
-            role="radio"
-            aria-checked={selected}
-            onClick={() => setTheme(value)}
-            className={cn(
-              'inline-flex h-9 items-center gap-2 rounded-md px-3 text-sm font-medium text-muted-foreground transition-colors outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 sm:h-8',
-              selected && 'bg-background text-foreground shadow-xs',
-            )}
-          >
-            <Icon className="size-4" aria-hidden />
-            {label}
-          </button>
-        );
-      })}
-    </div>
+    <Segmented
+      label="Theme"
+      options={OPTIONS}
+      value={mounted ? ((theme as Theme | undefined) ?? null) : null}
+      onChange={setTheme}
+    />
   );
 }

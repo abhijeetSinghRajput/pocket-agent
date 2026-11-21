@@ -30,15 +30,17 @@ function AwayMode({ device }: { device: DeviceDto }) {
   const [error, setError] = useState<string | null>(null);
   if (!device.remoteApprovalEnabled) {
     return (
-      <p className="mt-2 text-xs text-muted-foreground" data-testid="remote-approval-off">
-        Remote approval is off on this PC. To answer its permission requests here, run{' '}
-        <code className="font-mono">pocket-agent approvals enable</code> on it.
+      <p className="text-sm text-muted-foreground" data-testid="remote-approval-off">
+        Remote approval is off. On this PC, run{' '}
+        <code className="rounded bg-muted px-1 font-mono text-[12.5px] text-foreground">
+          pocket-agent approvals enable
+        </code>
       </p>
     );
   }
   return (
-    <div className="mt-2 flex flex-col gap-1">
-      <label className="flex w-fit cursor-pointer items-center gap-2 text-sm">
+    <div className="flex flex-col gap-0.5">
+      <label className="flex cursor-pointer flex-row-reverse items-center justify-between gap-3 text-sm">
         <button
           type="button"
           role="switch"
@@ -78,8 +80,8 @@ function AwayMode({ device }: { device: DeviceDto }) {
       </label>
       <p className="text-xs text-muted-foreground">
         {on
-          ? 'Permission requests of sessions you started on this PC come here first. Unanswered within 5 min: asked on the PC.'
-          : 'Off: Claude Code asks on the PC as usual. Managed sessions always ask here.'}
+          ? 'Permission requests come here first. After 5 minutes the PC asks.'
+          : 'Claude Code asks on the PC.'}
       </p>
       {error && (
         <p role="alert" className="text-xs text-destructive">
@@ -93,43 +95,50 @@ function AwayMode({ device }: { device: DeviceDto }) {
 function DeviceRow({ device, onRevoke }: { device: DeviceDto; onRevoke: (d: DeviceDto) => void }) {
   const { icon: Icon, label } = PLATFORM[device.platform];
   const revoked = device.status === 'Revoked';
+  const seen = revoked
+    ? `Revoked ${timeAgo(device.revokedAt)}`
+    : device.status === 'Online'
+      ? 'Connected now'
+      : `Last seen ${timeAgo(device.lastHeartbeatAt)}`;
   return (
     <li
       data-testid="device-row"
       data-device-name={device.name}
-      className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:gap-4"
+      className={cn('overflow-hidden rounded-xl bg-card', revoked && 'opacity-60')}
     >
-      <div className="flex min-w-0 flex-1 items-start gap-3">
-        <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground">
+      <div className="flex items-center gap-3 p-4">
+        <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-muted text-muted-foreground">
           <Icon className="size-5" aria-hidden />
         </span>
         <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <span className="truncate font-medium">{device.name}</span>
-            <DeviceStatusBadge status={device.status} />
-          </div>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {label} · Agent {device.agentVersion} ·{' '}
-            {revoked
-              ? `Revoked ${timeAgo(device.revokedAt)}`
-              : device.status === 'Online'
-                ? 'Connected now'
-                : `Last seen ${timeAgo(device.lastHeartbeatAt)}`}
+          <p className="truncate font-medium">{device.name}</p>
+          <p className="truncate text-sm text-muted-foreground">
+            {label} · Agent {device.agentVersion}
           </p>
-          <p className="mt-0.5 text-xs text-muted-foreground">Paired {formatDate(device.createdAt)}</p>
-          {/* Remounts when the server value changes (e.g. switched from another tab). */}
-          {!revoked && <AwayMode key={String(device.awayMode)} device={device} />}
+        </div>
+        <div className="flex shrink-0 flex-col items-end gap-1">
+          <DeviceStatusBadge status={device.status} />
+          <span className="text-xs text-muted-foreground">{seen}</span>
         </div>
       </div>
       {!revoked && (
-        <Button
-          variant="outline"
-          size="sm"
-          className="self-start text-destructive hover:bg-destructive/10 hover:text-destructive sm:self-center"
-          onClick={() => onRevoke(device)}
-        >
-          Revoke
-        </Button>
+        <>
+          {/* Remounts when the server value changes (e.g. switched from another tab). */}
+          <div className="border-t px-4 py-3">
+            <AwayMode key={String(device.awayMode)} device={device} />
+          </div>
+          <div className="flex items-center justify-between gap-3 border-t px-4 py-2">
+            <span className="text-xs text-muted-foreground">Paired {formatDate(device.createdAt)}</span>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="-mr-2 text-destructive hover:bg-destructive/10 hover:text-destructive"
+              onClick={() => onRevoke(device)}
+            >
+              Revoke
+            </Button>
+          </div>
+        </>
       )}
     </li>
   );
@@ -267,7 +276,7 @@ export function DevicesView() {
       )}
 
       {state.status === 'ready' && devices.length > 0 && (
-        <ul className="divide-y rounded-xl bg-card" aria-label="Devices">
+        <ul className="stagger flex flex-col gap-3" aria-label="Devices">
           {sorted.map((d) => (
             <DeviceRow key={d.id} device={d} onRevoke={setRevoking} />
           ))}

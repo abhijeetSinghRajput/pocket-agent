@@ -3,7 +3,7 @@ import { expect, test } from '@playwright/test';
 test.describe('mobile navigation', () => {
   test.skip(({ isMobile }) => !isMobile, 'mobile only');
 
-  test('bottom nav reaches every section; settings are on the profile page', async ({ page }) => {
+  test('bottom nav reaches every section; the avatar opens the profile', async ({ page }) => {
     await page.goto('/');
     const nav = page.getByTestId('bottom-nav');
     await expect(nav).toBeVisible();
@@ -15,7 +15,7 @@ test.describe('mobile navigation', () => {
     await nav.getByRole('link', { name: 'Profile' }).click();
     await expect(page).toHaveURL(/\/profile$/);
     await expect(page.getByRole('heading', { level: 1, name: 'Profile' })).toBeVisible();
-    await expect(page.getByTestId('notification-settings')).toBeVisible();
+    await expect(page.getByTestId('claude-usage')).toBeVisible();
     await expect(nav.getByRole('link', { name: 'Profile' })).toHaveAttribute('aria-current', 'page');
   });
 
@@ -26,13 +26,13 @@ test.describe('mobile navigation', () => {
       .getByTestId('bottom-nav')
       .locator('a, button')
       .evaluateAll((els) => els.map((e) => e.getBoundingClientRect().height));
-    expect(heights.length).toBe(4); // Chats, Approvals, Devices, profile
+    expect(heights.length).toBe(5); // Chats, Approvals, Alerts, Devices, profile
     for (const h of heights) expect(h).toBeGreaterThanOrEqual(44);
   });
 
   test('page content is not hidden behind the bottom nav', async ({ page }) => {
     await page.goto('/profile');
-    await expect(page.getByTestId('category-agent_started')).toBeVisible(); // settings loaded
+    await expect(page.getByTestId('api-status')).toBeVisible(); // the page loaded
     await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
     const navTop = await page.getByTestId('bottom-nav').evaluate((n) => n.getBoundingClientRect().top);
     const lastBottom = await page

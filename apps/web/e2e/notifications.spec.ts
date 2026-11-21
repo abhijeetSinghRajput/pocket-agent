@@ -15,10 +15,10 @@ test('a new notification shows up live in the bell, the history, and can be mark
   await freshUser(page);
   await page.goto('/');
   const bell = page.getByTestId('notification-bell').filter({ visible: true });
-  await expect(bell).toHaveAccessibleName('Notifications');
+  await expect(bell).toHaveAccessibleName(/^(Notifications|Alerts)$/); // sidebar / phone bottom bar
 
   expect((await sendTest(page)).status()).toBe(200);
-  await expect(bell).toHaveAccessibleName('Notifications, 1 unread');
+  await expect(bell).toHaveAccessibleName(/^(Notifications|Alerts), 1 unread$/);
 
   await bell.click();
   await expect(page).toHaveURL(/\/notifications$/);
@@ -29,7 +29,7 @@ test('a new notification shows up live in the bell, the history, and can be mark
 
   await page.getByTestId('mark-all-read').click();
   await expect(row).not.toHaveAttribute('data-unread');
-  await expect(bell).toHaveAccessibleName('Notifications');
+  await expect(bell).toHaveAccessibleName(/^(Notifications|Alerts)$/); // sidebar / phone bottom bar
 });
 
 test('empty history explains what will appear', async ({ page }) => {

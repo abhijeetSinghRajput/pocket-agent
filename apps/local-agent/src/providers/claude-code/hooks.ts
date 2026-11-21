@@ -5,6 +5,7 @@ import type { ApprovalBroker } from '../../approvals.js';
 import type { ObservedInstructions } from './instructions.js';
 import type { IdleWake } from './wake.js';
 import { summarizeToolInput, summarizeToolOutput, toolKey } from './summarize.js';
+import { TranscriptTail } from './transcript.js';
 
 /** JSON a hook may print to answer Claude Code: Stop (deliver an instruction) or PermissionRequest (remote decision). */
 export type HookOutput =
@@ -61,6 +62,8 @@ export class ClaudeHookHandler {
   private readonly toolIds = new Map<string, Map<string, string>>();
   /** Per session: permission requests not yet resolved (requestId → toolUseId). */
   private readonly pendingPermissions = new Map<string, Map<string, string>>();
+  /** What Claude says between tool calls, read from the session's transcript. */
+  readonly transcripts = new TranscriptTail();
 
   constructor(
     private readonly registry: SessionRegistry,
@@ -109,13 +112,18 @@ export class ClaudeHookHandler {
         this.registry.event(sessionId, 'agent.permission.resolved', { requestId: id, outcome: 'cancelled' });
         this.opts.approvals?.cancel(id);
       }
+      this.flushText(sessionId);
       this.forget(sessionId);
+      this.transcripts.forget(sessionId);
       this.opts.instructions?.onSessionEnd(sessionId);
       this.opts.wake?.onSessionEnd(sessionId);
       this.registry.end(sessionId, s(p['reason']) ?? 'ended');
       return;
     }
     this.ensureAnnounced(sessionId, cwd, event === 'SessionStart' ? s(p['source']) : undefined);
+    this.transcripts.attach(sessionId, s(p['transcript_path']));
+    // Claude's words since the last hook come first, in the order the editor shows them.
+    this.flushText(sessionId);
 
     const toolName = s(p['tool_name']) ?? 'unknown';
     switch (event) {
@@ -210,8 +218,11 @@ export class ClaudeHookHandler {
 
       case 'Stop': {
         this.resolvePending(sessionId);
+        // Usually already read from the transcript; reported here only if it wasn't.
         const last = s(p['last_assistant_message']);
-        if (last) this.registry.event(sessionId, 'agent.output', { role: 'assistant', text: truncate(last) });
+        if (last && this.transcripts.claim(sessionId, last)) {
+          this.registry.event(sessionId, 'agent.output', { role: 'assistant', text: truncate(last) });
+        }
         this.registry.setStatus(sessionId, 'WaitingForInput');
         // Deliver a queued instruction (only if the PC owner allowed it — checked when queued).
         if (this.opts.instructionsAllowed?.()) return this.opts.instructions?.onStop(sessionId);
@@ -236,6 +247,12 @@ export class ClaudeHookHandler {
 
       default:
       // Other hook events aren't needed for monitoring.
+    }
+  }
+
+  private flushText(sessionId: string): void {
+    for (const text of this.transcripts.read(sessionId)) {
+      this.registry.event(sessionId, 'agent.output', { role: 'assistant', text: truncate(text) });
     }
   }
 

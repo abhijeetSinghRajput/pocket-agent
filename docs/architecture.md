@@ -178,6 +178,23 @@ history, and a message sent in the browser gets Claude's answer in the chat.
   runs, a prompt typed on the PC is held back (`UserPromptSubmit` → `decision: "block"` with the reason), and the next
   prompt typed on the PC receives a summary of the remote turns as `additionalContext`.
 
+### What Claude says between tool calls (as built)
+
+Hooks carry only a turn's last message (`Stop.last_assistant_message`). To show the same conversation as the editor,
+the Local Agent follows the session's transcript (`transcript_path` from every hook payload; `TranscriptTail`). At each
+hook it reads the lines appended since the last one and reports each main-thread assistant **text** block as
+`agent.output`, before the hook's own event, so text and tool calls keep the editor's order.
+
+- Data minimisation is unchanged: only Claude's text blocks leave the PC, as its final reply already did. Thinking, tool
+  inputs/results, subagent (sidechain) lines and everything else in the file are ignored; tools still go through the
+  hook summaries.
+- It starts at the end of the file when it first sees a session (no history replay), reads at most 2 MB per hook, waits
+  for incomplete lines, and dedupes by line uuid and against Stop's copy of the last message.
+- Turns run by wake are already reported from the SDK stream; after each one the reader skips to the end of the file.
+- The other direction is not possible: the VS Code extension has no API to show messages it didn't send. Turns sent from
+  Pocket Agent are in the session's transcript (resume the conversation in VS Code to see them), and the next prompt typed
+  there gets their summary (see "Waking idle observed sessions").
+
 ### M5 implementation notes (as built)
 
 - **Two switches, both needed.** `pocket-agent approvals enable` on the PC (off by default, enforced there) allows remote

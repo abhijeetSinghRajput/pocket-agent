@@ -79,6 +79,8 @@ export class AgentService {
       remoteApprovalAllowed: () => this.policy.remoteApproval,
       holdForRemote: () => this.policy.remoteApproval && this.awayMode,
     });
+    // A woken turn was reported from the SDK stream; the transcript reader skips over it.
+    this.wake.onTurnEnd = (id) => this.hooks.transcripts.skipToEnd(id);
     const claudeDir = opts.claudeDir ?? claudeConfigDir();
     this.discovery = new ClaudeDiscovery(path.join(claudeDir, 'sessions'), this.registry, {
       isManaged: this.managed.isManaged,

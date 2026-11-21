@@ -45,6 +45,9 @@ export class IdleWake {
     private readonly approvals?: ManagedApprovalOptions,
   ) {}
 
+  /** Called after each woken turn (the transcript reader skips what this turn already reported). */
+  onTurnEnd: (sessionId: string) => void = () => undefined;
+
   isRunning = (sessionId: string): boolean => this.running.has(sessionId);
 
   /** Runs the instruction now (or right after the wake turn already running for this session). */
@@ -156,6 +159,7 @@ export class IdleWake {
       }
     }
 
+    this.onTurnEnd(sessionId);
     const list = this.missed.get(sessionId) ?? [];
     list.push({ prompt: truncate(item.text, 1000), reply: truncate(reply, 1500) });
     this.missed.set(sessionId, list.slice(-MAX_MISSED));

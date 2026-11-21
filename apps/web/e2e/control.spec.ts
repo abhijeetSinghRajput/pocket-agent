@@ -45,7 +45,7 @@ test('an instruction from the dashboard reaches a session the user started, at t
   const caps = await openSessionInfo(page);
   await expect(caps.locator('[data-capability="Send instructions"]')).toHaveAttribute('data-state', 'yes');
   await closeSessionInfo(page);
-  await expect(page.getByTestId('delivery-hint')).toContainText('at its next step');
+  await expect(page.getByTestId('delivery-hint')).toHaveCount(0); // nothing the user needs to know
   await expect(page.getByTestId('end-session')).toBeVisible(); // the PC allowed control of this session
 
   // Send from the "phone".
@@ -54,6 +54,13 @@ test('an instruction from the dashboard reaches a session the user started, at t
   const row = page.getByTestId('command-row').filter({ hasText: 'Also update the changelog' });
   await expect(row).toHaveAttribute('data-status', 'Accepted');
   await expect(row).toContainText('Queued');
+  // Not picked up yet: it waits under the conversation, not in it.
+  await expect(page.getByTestId('queued')).toContainText('Also update the changelog');
+  await expect(page.getByTestId('timeline')).not.toContainText('Also update the changelog');
+  // Clicking an empty part of the message box focuses the field (its label does it, no script).
+  const box = (await page.getByTestId('composer').boundingBox())!;
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height - 22);
+  await expect(page.getByLabel('Send an instruction')).toBeFocused();
 
   // Claude finishes its turn → the Stop hook answers with the instruction (same session continues).
   const answer = JSON.parse(hook(env, h['Stop']!)) as { decision: string; reason: string };

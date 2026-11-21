@@ -2,6 +2,7 @@
 
 import { DeviceListResponse, type ClaudeUsage } from '@pocket-agent/protocol';
 import { useCallback, useEffect, useState } from 'react';
+import { SleepingPc } from '@/components/illustrations';
 import { apiRequest } from '@/lib/api';
 import { timeAgo } from '@/lib/format';
 import { useLiveRefresh } from '@/lib/live';
@@ -86,6 +87,13 @@ export function ClaudeUsageCard() {
     (d) => d.usage && (d.usage.session || d.usage.weekly || d.usage.models.length),
   );
 
+  // Says exactly why there is nothing to show: the words match the status on the Devices page.
+  const empty = !devices.length
+    ? { title: 'No PC paired', hint: 'Pair a PC to see your usage.' }
+    : devices.some((d) => d.status === 'Online')
+      ? { title: 'No usage from your PC yet', hint: 'Update Pocket Agent on it to see your usage.' }
+      : { title: 'Your PC is offline', hint: 'Usage shows up when it is online.' };
+
   return (
     <section className="rounded-xl bg-card p-4" aria-labelledby="usage-heading" data-testid="claude-usage">
       <h2 id="usage-heading" className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
@@ -100,11 +108,11 @@ export function ClaudeUsageCard() {
         </p>
       )}
       {state.status === 'ready' && reporting.length === 0 && (
-        <p className="mt-2 text-sm text-muted-foreground" data-testid="no-usage">
-          {devices.length
-            ? 'Shows once your PC is online with the latest Pocket Agent.'
-            : 'Pair a PC to see it.'}
-        </p>
+        <div className="flex flex-col items-center px-2 pt-1 pb-3 text-center" data-testid="no-usage">
+          <SleepingPc className="h-auto w-44" />
+          <p className="mt-1 text-sm font-medium">{empty.title}</p>
+          <p className="text-sm text-muted-foreground">{empty.hint}</p>
+        </div>
       )}
       <div className="mt-3 flex flex-col gap-6">
         {reporting.map((d) => (

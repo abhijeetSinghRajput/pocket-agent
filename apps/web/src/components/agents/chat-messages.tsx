@@ -16,7 +16,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 're
 import { ClaudeSpinner } from '@/components/agents/claude-spinner';
 import { SentAttachments } from '@/components/agents/attachments';
 import { Markdown } from '@/components/agents/markdown';
-import type { AskedQuestion, ChatItem } from '@/lib/chat';
+import { isQueued, type AskedQuestion, type ChatItem } from '@/lib/chat';
 import { commandError, STATUS_LABEL } from '@/lib/commands';
 import { clockTime, dayLabel, daysAgo } from '@/lib/format';
 import { cn } from '@/lib/utils';
@@ -515,6 +515,8 @@ export function ChatMessages({
   header?: ReactNode;
   footer?: ReactNode;
 }) {
+  const queued = items.filter((i): i is Of<'user'> => isQueued(i));
+  const said = queued.length ? items.filter((i) => !isQueued(i)) : items;
   // Only messages that arrive after the first render animate in; the history is just there.
   const [settled, setSettled] = useState(false);
   useEffect(() => {
@@ -563,7 +565,7 @@ export function ChatMessages({
               aria-label="Conversation"
               {...(settled ? { 'data-enter-new': '' } : {})}
             >
-              {renderItems(items)}
+              {renderItems(said)}
             </ol>
           ) : (
             <p className="py-10 text-center text-sm text-muted-foreground" data-testid="timeline">
@@ -571,7 +573,20 @@ export function ChatMessages({
             </p>
           )}
           {typing && (
-            <TypingIndicator kind={typing} since={items.findLast((i) => i.kind === 'user')?.at ?? null} />
+            <TypingIndicator kind={typing} since={said.findLast((i) => i.kind === 'user')?.at ?? null} />
+          )}
+          {/* Sent but not picked up yet: these stay under everything until Claude takes them. */}
+          {queued.length > 0 && (
+            <ol
+              className="flex flex-col gap-3"
+              aria-label="Waiting to be delivered"
+              data-testid="queued"
+              data-enter-new=""
+            >
+              {queued.map((item) => (
+                <UserMessage key={item.key} item={item} />
+              ))}
+            </ol>
           )}
           {footer}
         </div>

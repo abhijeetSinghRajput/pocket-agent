@@ -42,7 +42,7 @@ function deliveryHint(s: AgentSessionDto): string {
   }
   return s.status === 'WaitingForInput'
     ? 'Claude is idle, so this waits for the next turn you start on the PC. To run it at once, turn on wake on the PC: pocket-agent instructions wake enable'
-    : 'Claude reads this at its next step while it works, or when the turn ends. Claude Code still asks on your PC for permissions.';
+    : '';
 }
 
 /** Commands sent to one session (newest first), refreshed live. */
@@ -281,6 +281,7 @@ export function Composer({
   const modelLocked = modelLock(session);
 
   // Something typed or attached: the button sends. Nothing, and Claude is working: it stops Claude.
+  const hint = locked ? '' : deliveryHint(session);
   const hasContent = !!text.trim() || ready.length > 0;
   const stopMode = !hasContent && showStop;
 
@@ -355,126 +356,140 @@ export function Composer({
           {error}
         </p>
       )}
-      <div className="rounded-2xl border bg-card shadow-xs transition-[border-color,box-shadow] focus-within:border-primary/60 focus-within:ring-[3px] focus-within:ring-primary/15">
-        <DraftFiles drafts={drafts} onRemove={removeDraft} />
-        <label htmlFor="instruction" className="sr-only">
-          Send an instruction
+      <div className="relative rounded-2xl border bg-card shadow-xs transition-[border-color,box-shadow] focus-within:border-primary/60 focus-within:ring-[3px] focus-within:ring-primary/15">
+        {/*
+          The field's own label covers the whole box, underneath its controls: a click anywhere that
+          isn't a button lands on the label, and the browser focuses the field. No script involved.
+        */}
+        <label
+          htmlFor="instruction"
+          className={cn('absolute inset-0 rounded-2xl', locked ? 'cursor-not-allowed' : 'cursor-text')}
+        >
+          <span className="sr-only">Send an instruction</span>
         </label>
-        <textarea
-          id="instruction"
-          ref={box}
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={onKey}
-          onPaste={(e) => {
-            // A screenshot pasted from the clipboard is attached like a picked file.
-            const files = [...e.clipboardData.files];
-            if (!files.length) return;
-            e.preventDefault();
-            addFiles(files);
-          }}
-          rows={1}
-          maxLength={20_000}
-          disabled={!!locked}
-          placeholder={locked ? 'Messaging is off for this session' : 'Message Claude…'}
-          className="block disabled:cursor-not-allowed max-h-[200px] w-full resize-none bg-transparent px-4 pt-3 pb-1 text-base leading-relaxed outline-none placeholder:text-muted-foreground sm:text-[14.5px]"
-        />
-        <p className="px-4 pb-1 text-xs text-pretty text-muted-foreground" data-testid="delivery-hint">
-          {locked ? (
-            <>
-              <Lock className="mr-1 inline size-3 align-[-1px]" aria-hidden />
-              <Ticks text={locked} />
-              {onInfo && (
+        <div className="pointer-events-none relative *:pointer-events-auto">
+          <DraftFiles drafts={drafts} onRemove={removeDraft} />
+          <textarea
+            id="instruction"
+            ref={box}
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            onKeyDown={onKey}
+            onPaste={(e) => {
+              // A screenshot pasted from the clipboard is attached like a picked file.
+              const files = [...e.clipboardData.files];
+              if (!files.length) return;
+              e.preventDefault();
+              addFiles(files);
+            }}
+            rows={1}
+            maxLength={20_000}
+            disabled={!!locked}
+            placeholder={locked ? 'Messaging is off for this session' : 'Message Claude…'}
+            className="block disabled:cursor-not-allowed max-h-[200px] w-full resize-none bg-transparent px-4 pt-3 pb-1 text-base leading-relaxed outline-none placeholder:text-muted-foreground sm:text-[14.5px]"
+          />
+          {(locked || hint) && (
+            <p
+              className="pointer-events-none! px-4 pb-1 text-xs text-pretty text-muted-foreground *:pointer-events-auto"
+              data-testid="delivery-hint"
+            >
+              {locked ? (
                 <>
-                  {' '}
-                  <button
-                    type="button"
-                    onClick={onInfo}
-                    className="font-medium text-primary underline-offset-4 hover:underline"
-                  >
-                    Session info
-                  </button>
+                  <Lock className="mr-1 inline size-3 align-[-1px]" aria-hidden />
+                  <Ticks text={locked} />
+                  {onInfo && (
+                    <>
+                      {' '}
+                      <button
+                        type="button"
+                        onClick={onInfo}
+                        className="font-medium text-primary underline-offset-4 hover:underline"
+                      >
+                        Session info
+                      </button>
+                    </>
+                  )}
                 </>
+              ) : (
+                hint
               )}
-            </>
-          ) : (
-            deliveryHint(session)
+            </p>
           )}
-        </p>
-        {/* Like the editor's input: what the message runs with on the left, stop and send on the right. */}
-        <div className="flex items-center gap-2 px-2 pt-1 pb-2">
-          {!locked && (
-            <>
-              <input
-                ref={picker}
-                type="file"
-                multiple
-                accept={ATTACHMENT_ACCEPT}
-                className="sr-only"
-                tabIndex={-1}
-                aria-label="Attach photos or PDFs"
-                data-testid="file-input"
-                onChange={(e) => {
-                  if (e.target.files) addFiles(e.target.files);
-                  e.target.value = ''; // the same file can be picked again
-                }}
-              />
-              <button
-                type="button"
-                onClick={() => picker.current?.click()}
-                disabled={drafts.length >= ATTACHMENT_MAX_PER_MESSAGE}
-                aria-label="Attach a photo or PDF"
-                title="Attach a photo or PDF (kept 30 days)"
-                className="grid size-8 shrink-0 place-items-center rounded-lg text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:opacity-40"
-              >
-                <Plus className="size-[18px]" aria-hidden />
-              </button>
-            </>
-          )}
-          {!locked && models.length > 0 && (
-            <ModelPicker models={models} value={model} onChange={setModel} locked={modelLocked} />
-          )}
-          <span className="flex-1" />
-          {/* One button: Send when there is something to send; Stop while Claude works; else nothing to do. */}
-          <button
-            type={stopMode ? 'button' : 'submit'}
-            onClick={stopMode ? () => void interrupt() : undefined}
-            disabled={
-              stopMode ? interrupting || !canInterrupt : pending || uploading || !hasContent || !!locked
-            }
-            aria-label={stopMode ? 'Interrupt' : pending ? 'Sending…' : 'Send'}
-            title={
-              stopMode
-                ? canInterrupt
-                  ? session.mode === 'managed'
-                    ? 'Stop Claude'
-                    : 'Stop Claude (it stops at its next step)'
-                  : 'Stopping is turned off on this PC (pocket-agent instructions enable)'
-                : 'Send (Enter)'
-            }
-            data-mode={stopMode ? 'stop' : 'send'}
-            className={cn(
-              'relative grid size-9 shrink-0 place-items-center rounded-xl bg-primary text-primary-foreground shadow-xs outline-none transition-[opacity,transform,background-color] focus-visible:ring-[3px] focus-visible:ring-ring/50 active:scale-95 disabled:opacity-40',
-              (pending || interrupting) && 'animate-pulse',
+          {/* Like the editor's input: what the message runs with on the left, stop and send on the right. */}
+          <div className="pointer-events-none! flex items-center gap-2 px-2 pt-1 pb-2 *:pointer-events-auto">
+            {!locked && (
+              <>
+                <input
+                  ref={picker}
+                  type="file"
+                  multiple
+                  accept={ATTACHMENT_ACCEPT}
+                  className="sr-only"
+                  tabIndex={-1}
+                  aria-label="Attach photos or PDFs"
+                  data-testid="file-input"
+                  onChange={(e) => {
+                    if (e.target.files) addFiles(e.target.files);
+                    e.target.value = ''; // the same file can be picked again
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => picker.current?.click()}
+                  disabled={drafts.length >= ATTACHMENT_MAX_PER_MESSAGE}
+                  aria-label="Attach a photo or PDF"
+                  title="Attach a photo or PDF (kept 30 days)"
+                  className="grid size-8 shrink-0 place-items-center rounded-lg text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:opacity-40"
+                >
+                  <Plus className="size-[18px]" aria-hidden />
+                </button>
+              </>
             )}
-          >
-            {/* The two icons share the spot: one turns into the other. */}
-            <ArrowUp
+            {!locked && models.length > 0 && (
+              <ModelPicker models={models} value={model} onChange={setModel} locked={modelLocked} />
+            )}
+            <span className="pointer-events-none! flex-1" />
+            {/* One button: Send when there is something to send; Stop while Claude works; else nothing to do. */}
+            <button
+              type={stopMode ? 'button' : 'submit'}
+              onClick={stopMode ? () => void interrupt() : undefined}
+              disabled={
+                stopMode ? interrupting || !canInterrupt : pending || uploading || !hasContent || !!locked
+              }
+              aria-label={stopMode ? 'Interrupt' : pending ? 'Sending…' : 'Send'}
+              title={
+                stopMode
+                  ? canInterrupt
+                    ? session.mode === 'managed'
+                      ? 'Stop Claude'
+                      : 'Stop Claude (it stops at its next step)'
+                    : 'Stopping is turned off on this PC (pocket-agent instructions enable)'
+                  : 'Send (Enter)'
+              }
+              data-mode={stopMode ? 'stop' : 'send'}
               className={cn(
-                'absolute size-4.5 transition-[opacity,transform] duration-200 ease-(--ease-out)',
-                stopMode ? 'scale-50 opacity-0' : 'scale-100 opacity-100',
+                'relative grid size-9 shrink-0 place-items-center rounded-xl bg-primary text-primary-foreground shadow-xs outline-none transition-[opacity,transform,background-color] focus-visible:ring-[3px] focus-visible:ring-ring/50 active:scale-95 disabled:opacity-40',
+                (pending || interrupting) && 'animate-pulse',
               )}
-              strokeWidth={2.5}
-              aria-hidden
-            />
-            <Square
-              className={cn(
-                'absolute size-3.5 fill-current transition-[opacity,transform] duration-200 ease-(--ease-out)',
-                stopMode ? 'scale-100 opacity-100' : 'scale-50 opacity-0',
-              )}
-              aria-hidden
-            />
-          </button>
+            >
+              {/* The two icons share the spot: one turns into the other. */}
+              <ArrowUp
+                className={cn(
+                  'absolute size-4.5 transition-[opacity,transform] duration-200 ease-(--ease-out)',
+                  stopMode ? 'scale-50 opacity-0' : 'scale-100 opacity-100',
+                )}
+                strokeWidth={2.5}
+                aria-hidden
+              />
+              <Square
+                className={cn(
+                  'absolute size-3.5 fill-current transition-[opacity,transform] duration-200 ease-(--ease-out)',
+                  stopMode ? 'scale-100 opacity-100' : 'scale-50 opacity-0',
+                )}
+                aria-hidden
+              />
+            </button>
+          </div>
         </div>
       </div>
     </form>

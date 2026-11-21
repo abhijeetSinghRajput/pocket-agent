@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { answerText } from '@/components/approvals/approval-card';
 import { typeOver } from '@/components/agents/chat-messages';
 import { resetLabel } from '@/components/claude-usage';
-import { buildChat } from '@/lib/chat';
+import { buildChat, isQueued } from '@/lib/chat';
 import { chatListTime, dayLabel, daysAgo, recentSections } from '@/lib/format';
 import { openChatId } from '@/lib/nav';
 
@@ -321,5 +321,22 @@ describe('notification sections', () => {
     const { sections, earlier } = recentSections([at(2026, 10, 19)], now);
     expect(sections.map((s) => s.label)).toEqual(['Last 7 days']);
     expect(earlier).toEqual([]);
+  });
+});
+
+describe('queued messages', () => {
+  it('wait apart from the conversation until Claude picks them up', () => {
+    const items = buildChat(
+      [
+        ev(1, 'agent.output', { role: 'user', text: 'typed on the PC' }),
+        ev(30, 'agent.output', { role: 'user', text: 'run it' }),
+      ],
+      [
+        cmd(20, { text: 'run it', status: 'Executing' }), // picked up: it is in the conversation
+        cmd(25, { text: 'and then deploy', status: 'Accepted' }), // still waiting
+        cmd(26, { text: 'never ran', status: 'Expired' }), // over: stays where it was sent
+      ],
+    );
+    expect(items.filter(isQueued).map((i) => (i.kind === 'user' ? i.text : ''))).toEqual(['and then deploy']);
   });
 });

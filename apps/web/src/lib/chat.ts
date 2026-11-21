@@ -117,6 +117,21 @@ export type ChatItem =
 /** The PC reports thinking time as a system note with exactly this shape. */
 const THOUGHT = /^Thought for (\d+m )?\d+s$/;
 
+/**
+ * A message sent from the app that Claude hasn't picked up yet. It has no place in the conversation
+ * so far: it waits at the bottom until it is delivered.
+ */
+export function isQueued(item: ChatItem): boolean {
+  return (
+    item.kind === 'user' &&
+    !!item.command &&
+    item.key.startsWith('cmd-') &&
+    (item.command.status === 'Pending' ||
+      item.command.status === 'Delivered' ||
+      item.command.status === 'Accepted')
+  );
+}
+
 const byTime = (a: { at: string }, b: { at: string }) => Date.parse(a.at) - Date.parse(b.at);
 
 /** The PC truncates long texts ("…" at the end); a command matches its echo either way. */

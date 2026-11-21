@@ -23,7 +23,7 @@ export const APPROVAL_STATUS: Record<
 };
 
 /** What the request is, in plain words. */
-function describeRequest(tool: string): { verb: string; label: string; shell: boolean } {
+export function describeRequest(tool: string): { verb: string; label: string; shell: boolean } {
   switch (tool) {
     case 'Bash':
     case 'PowerShell':
@@ -44,7 +44,7 @@ function describeRequest(tool: string): { verb: string; label: string; shell: bo
 }
 
 /** Tools the PC only describes by argument names (MCP and unknown tools): show them as a list. */
-function readableInput(input: string): string {
+export function readableInput(input: string): string {
   try {
     const v = JSON.parse(input) as Record<string, unknown>;
     const args = v['arguments'];

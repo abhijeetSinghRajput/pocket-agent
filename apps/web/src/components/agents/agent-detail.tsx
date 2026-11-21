@@ -16,7 +16,7 @@ import {
   sessionKind,
 } from '@/components/agents/session-badges';
 import { QuestionSheet } from '@/components/approvals/question-sheet';
-import { SessionApprovals } from '@/components/approvals/session-approvals';
+import { PermissionSheet } from '@/components/approvals/permission-sheet';
 import { useApprovals } from '@/lib/use-approvals';
 import { parseQuestions } from '@/lib/chat';
 import { Button } from '@/components/ui/button';
@@ -188,6 +188,10 @@ export function AgentDetail({ id }: { id: string }) {
   const approvals = useApprovals('pending');
   // A question from Claude waiting for this chat (the first one, if several).
   const question = pendingQuestion(approvals.state.data, id);
+  // Permission requests waiting for this chat, oldest first.
+  const permissions = (approvals.state.data ?? []).filter(
+    (a) => a.sessionId === id && a.toolName !== 'AskUserQuestion',
+  );
   const commands = useCommands(id);
   const [infoOpen, setInfoOpen] = useState(false);
   useLiveRefresh(
@@ -239,6 +243,10 @@ export function AgentDetail({ id }: { id: string }) {
     void refresh();
     void feed.refreshHead();
     void commands.refresh();
+  };
+  const decided = () => {
+    void approvals.refresh();
+    changed();
   };
 
   return (
@@ -324,31 +332,37 @@ export function AgentDetail({ id }: { id: string }) {
         />
       )}
 
-      {question ? (
-        // Claude is asking: its question takes the message box's place until it is answered.
+      {(question || permissions.length > 0) && (
+        // Claude is asking, or needs permission: that takes the message box's place until decided.
         <div className="shrink-0 sm:px-6">
           <div className="mx-auto max-w-3xl">
-            <QuestionSheet
-              key={question.approval.id}
-              approval={question.approval}
-              questions={question.questions}
-              onDone={() => {
-                void approvals.refresh();
-                changed();
-              }}
-            />
-          </div>
-        </div>
-      ) : (
-        <div className="shrink-0 border-t bg-background/95 px-3 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur-md sm:px-6">
-          <div className="mx-auto flex max-w-3xl flex-col gap-3">
-            <div className="max-h-[45dvh] overflow-y-auto empty:hidden">
-              <SessionApprovals sessionId={s.id} />
-            </div>
-            <Composer session={s} onSent={changed} onInfo={() => setInfoOpen(true)} />
+            {question ? (
+              <QuestionSheet
+                key={question.approval.id}
+                approval={question.approval}
+                questions={question.questions}
+                onDone={decided}
+              />
+            ) : (
+              <PermissionSheet
+                key={permissions[0]!.id}
+                approval={permissions[0]!}
+                more={permissions.length - 1}
+                onDone={decided}
+              />
+            )}
           </div>
         </div>
       )}
+      {/* Hidden, not removed, while a sheet is up: the typed message and picked files stay. */}
+      <div
+        hidden={!!question || permissions.length > 0}
+        className="shrink-0 border-t bg-background/95 px-3 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur-md sm:px-6"
+      >
+        <div className="mx-auto flex max-w-3xl flex-col gap-3">
+          <Composer session={s} onSent={changed} onInfo={() => setInfoOpen(true)} />
+        </div>
+      </div>
     </section>
   );
 }

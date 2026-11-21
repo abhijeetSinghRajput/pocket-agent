@@ -2,7 +2,9 @@
 
 import type { AttachmentRef } from '@pocket-agent/protocol';
 import { FileText, ImageOff, LoaderCircle, X } from 'lucide-react';
+import { Dialog } from 'radix-ui';
 import { useEffect, useState } from 'react';
+import { useBackToClose } from '@/components/ui/dialog';
 import { fileExtension, fileSize, isPdf, isPreviewable, openAttachment, thumbUrl } from '@/lib/attachments';
 import { cn } from '@/lib/utils';
 
@@ -131,6 +133,7 @@ export interface DraftFile {
 function DraftChip({ draft, onRemove }: { draft: DraftFile; onRemove: () => void }) {
   // A local preview of the picked image (never uploaded anywhere but to the message).
   const [preview, setPreview] = useState<string | null>(null);
+  const [viewing, setViewing] = useState(false);
   useEffect(() => {
     if (!draft.file.type.startsWith('image/')) return;
     const url = URL.createObjectURL(draft.file);
@@ -152,8 +155,15 @@ function DraftChip({ draft, onRemove }: { draft: DraftFile; onRemove: () => void
     >
       <span className="relative grid size-11 shrink-0 place-items-center overflow-hidden rounded-lg bg-background">
         {preview ? (
-          // eslint-disable-next-line @next/next/no-img-element -- local object URL
-          <img src={preview} alt="" className="size-full object-cover" />
+          <button
+            type="button"
+            onClick={() => setViewing(true)}
+            aria-label={`View ${draft.file.name || 'image'}`}
+            className="size-full outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element -- local object URL */}
+            <img src={preview} alt="" className="size-full object-cover" />
+          </button>
         ) : (
           <FileText className="size-5 text-muted-foreground" aria-hidden />
         )}
@@ -181,7 +191,55 @@ function DraftChip({ draft, onRemove }: { draft: DraftFile; onRemove: () => void
       >
         <X className="size-3.5" aria-hidden />
       </button>
+      {preview && (
+        <ImageViewer
+          src={preview}
+          name={draft.file.name || 'Pasted image'}
+          open={viewing}
+          onOpenChange={setViewing}
+        />
+      )}
     </li>
+  );
+}
+
+/** A picked image, full screen. Tap outside, the X or the back button closes it. */
+function ImageViewer({
+  src,
+  name,
+  open,
+  onOpenChange,
+}: {
+  src: string;
+  name: string;
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+}) {
+  useBackToClose(open, () => onOpenChange(false));
+  return (
+    <Dialog.Root open={open} onOpenChange={onOpenChange}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/90 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=closed]:animate-out data-[state=closed]:fade-out-0" />
+        <Dialog.Content
+          data-testid="image-viewer"
+          onClick={() => onOpenChange(false)}
+          className="fixed inset-0 z-50 grid place-items-center p-4 pt-[calc(3.5rem+env(safe-area-inset-top))] pb-[calc(1rem+env(safe-area-inset-bottom))] outline-none data-[state=open]:animate-in data-[state=open]:zoom-in-95 data-[state=open]:fade-in-0"
+        >
+          <Dialog.Title className="absolute top-[calc(1rem+env(safe-area-inset-top))] right-16 left-4 truncate text-sm font-medium text-white">
+            {name}
+          </Dialog.Title>
+          <Dialog.Description className="sr-only">Preview of the picked image.</Dialog.Description>
+          <Dialog.Close
+            aria-label="Close"
+            className="absolute top-[calc(0.5rem+env(safe-area-inset-top))] right-2 grid size-11 place-items-center rounded-full text-white outline-none hover:bg-white/10 focus-visible:ring-[3px] focus-visible:ring-white/60"
+          >
+            <X className="size-5" aria-hidden />
+          </Dialog.Close>
+          {/* eslint-disable-next-line @next/next/no-img-element -- local object URL */}
+          <img src={src} alt={name} className="max-h-full max-w-full rounded-lg object-contain" />
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
   );
 }
 

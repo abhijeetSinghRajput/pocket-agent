@@ -251,7 +251,7 @@ export function AskedQuestions({
         const chosen = new Set(answer ? answer.split(',').map((a) => a.trim()) : []);
         const other = !!answer && !q.options.some((o) => chosen.has(o.label));
         return (
-          <div key={qi} className="mt-3 rounded-lg border bg-muted/30 p-3">
+          <div key={qi} className="mt-3">
             {q.header && (
               <span className="mb-1.5 inline-block rounded-full bg-accent px-2 py-0.5 text-[11px] font-medium text-accent-foreground">
                 {q.header}
@@ -259,15 +259,16 @@ export function AskedQuestions({
             )}
             <p className="text-sm font-medium text-pretty [overflow-wrap:anywhere]">{q.question}</p>
             {q.multiSelect && <p className="mt-0.5 text-xs text-muted-foreground">Pick any</p>}
-            <ul className="mt-2 flex flex-col gap-1.5">
+            <ul className="mt-1 divide-y">
               {q.options.map((o) => {
                 const on = chosen.has(o.label);
                 return (
                   <li
                     key={o.label}
                     className={cn(
-                      'flex gap-2.5 rounded-lg border px-3 py-2',
-                      on ? 'border-primary/50 bg-primary/10' : 'bg-card',
+                      // One card: options are rows split by dividers, the chosen one in the accent colour.
+                      'flex gap-2.5 py-2.5',
+                      on && 'text-primary',
                     )}
                   >
                     <span

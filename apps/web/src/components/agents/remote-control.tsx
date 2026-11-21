@@ -307,7 +307,8 @@ export function Composer({
   onSent: () => void;
   onInfo?: () => void;
 }) {
-  const [text, setText] = useState('');
+  // The unsent message is kept on this device: it survives a refresh or leaving the chat.
+  const [text, setText] = useStoredChoice(`pocket-agent:draft:${session.id}`);
   const [pending, setPending] = useState(false);
   const [interrupting, setInterrupting] = useState(false);
   const [error, setError] = useState<string | null>(null);

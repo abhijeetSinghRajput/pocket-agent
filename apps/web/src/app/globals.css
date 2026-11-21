@@ -70,6 +70,14 @@
   --bubble-read: oklch(0.78 0.12 230);
 }
 
+/* File paths and links in tool steps (Claude Code shows them in the link colour). */
+:root {
+  --tool-link: oklch(0.5 0.14 250);
+}
+.dark {
+  --tool-link: oklch(0.75 0.12 245);
+}
+
 /* Syntax colours for highlight.js (GitHub-like), following the theme. */
 :root {
   --hl-keyword: #cf222e;
@@ -262,9 +270,140 @@
   }
 }
 
+/*
+ * Motion. Two curves: things arriving decelerate softly (--ease-out); things travelling start and
+ * stop gently (--ease-move). Feedback stays quick (~180ms); entrances take ~300ms. Nothing pops:
+ * new things fade and rise into place, changing words roll, the theme cross-fades.
+ */
+:root {
+  --ease-out: cubic-bezier(0.25, 0.8, 0.25, 1);
+  --ease-move: cubic-bezier(0.45, 0, 0.1, 1);
+  --dur-quick: 180ms;
+  --dur-enter: 320ms;
+}
+
+@layer components {
+  /* Claude's steps in a chat: a dot per step, a hairline joining consecutive steps (as in the editor). */
+  .step {
+    position: relative;
+    padding-left: 1.375rem;
+  }
+  .step-dot {
+    position: absolute;
+    left: 0;
+    top: 0.45rem;
+    width: 9px;
+    height: 9px;
+    border-radius: 9999px;
+    box-shadow: 0 0 0 3px var(--background);
+    z-index: 1;
+  }
+  .step:has(+ .step)::before {
+    content: '';
+    position: absolute;
+    left: 4px;
+    top: 0.9rem;
+    bottom: -1.25rem;
+    width: 1px;
+    background: var(--border);
+  }
+
+  /* The user's prompt, as Claude Code shows it: a quiet box, not a bubble. */
+  .user-prompt {
+    background: color-mix(in oklch, var(--muted) 70%, var(--card));
+  }
+  /* First lines of a command's output, fading out at the foot (tap shows all). */
+  .tool-out-fold {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+    overflow: hidden;
+    mask-image: linear-gradient(to bottom, black 55%, transparent);
+  }
+
+  /* A screen arriving (route change). */
+  .page-enter {
+    animation: page-enter var(--dur-enter) var(--ease-out) both;
+  }
+  @keyframes page-enter {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+  }
+  /* An opened chat: slides in from the side on phones, fades in beside the list on desktop. */
+  .chat-enter {
+    animation: chat-enter 340ms var(--ease-out) both;
+  }
+  @keyframes chat-enter {
+    from {
+      opacity: 0;
+      transform: translateX(24px);
+    }
+  }
+  @media (min-width: 64rem) {
+    .chat-enter {
+      animation-name: page-enter;
+    }
+  }
+  /* Content replacing its skeleton. */
+  .content-in {
+    animation: content-in 280ms var(--ease-out) both;
+  }
+  @keyframes content-in {
+    from {
+      opacity: 0;
+    }
+  }
+  /* A word that changes (presence, status) rolls up into place instead of swapping. */
+  .roll-in {
+    display: inline-block;
+    animation: roll-in 260ms var(--ease-out) both;
+  }
+  @keyframes roll-in {
+    from {
+      opacity: 0;
+      transform: translateY(55%);
+      filter: blur(1px);
+    }
+  }
+  /*
+   * Items added after a list first rendered (a new message, a new chat) rise into place.
+   * @starting-style only applies to newly inserted elements, so what was already there stays still.
+   */
+  [data-enter-new] > * {
+    transition:
+      opacity var(--dur-enter) var(--ease-out),
+      translate var(--dur-enter) var(--ease-out);
+    @starting-style {
+      opacity: 0;
+      translate: 0 10px;
+    }
+  }
+}
+
+/* Theme switch: one soft cross-fade of the whole page (View Transitions), never a flash. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 320ms;
+  animation-timing-function: var(--ease-out);
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
+  }
+  /* Hover and selection colours ease instead of snapping. */
+  a,
+  button,
+  [role='tab'],
+  [role='menuitem'],
+  input,
+  textarea,
+  select {
+    transition-property: color, background-color, border-color, box-shadow, opacity;
+    transition-duration: var(--dur-quick);
+    transition-timing-function: var(--ease-out);
   }
   html {
     -webkit-text-size-adjust: 100%;
@@ -280,6 +419,10 @@
     *::after {
       animation-duration: 0.01ms !important;
       transition-duration: 0.01ms !important;
+    }
+    ::view-transition-old(root),
+    ::view-transition-new(root) {
+      animation: none;
     }
   }
 }

@@ -40,7 +40,7 @@ test('empty history explains what will appear', async ({ page }) => {
 
 test('category and quiet-hour settings persist', async ({ page }) => {
   await freshUser(page);
-  await page.goto('/settings');
+  await page.goto('/profile');
   const started = page.getByTestId('category-agent_started');
   await expect(started).toHaveAttribute('aria-checked', 'false');
   await expect(page.getByTestId('category-permission_required')).toHaveAttribute('aria-checked', 'true');

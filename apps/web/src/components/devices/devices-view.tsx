@@ -197,7 +197,7 @@ export function DevicesView() {
     (signal: AbortSignal) => apiRequest('/devices', DeviceListResponse, { signal }).then((r) => r.devices),
     [],
   );
-  const { state, refresh } = usePoll(fetcher, 30_000);
+  const { state, refresh } = usePoll(['devices'], fetcher, 30_000);
   useLiveRefresh(
     () => void refresh(),
     (e) => e.eventType === 'device.status.changed',

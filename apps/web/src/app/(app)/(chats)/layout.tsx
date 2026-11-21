@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { ChatsLayout } from '@/components/agents/chats-layout';
 
-export default function AgentsLayout({ children }: { children: ReactNode }) {
+/** `/` (chat list) and `/agents/<id>` (a chat) share one layout, so the list stays mounted on desktop. */
+export default function ChatsGroupLayout({ children }: { children: ReactNode }) {
   return <ChatsLayout>{children}</ChatsLayout>;
 }

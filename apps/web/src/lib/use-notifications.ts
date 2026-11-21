@@ -12,7 +12,7 @@ export function useNotifications(limit = 30) {
     (signal: AbortSignal) => apiRequest(`/notifications?limit=${limit}`, NotificationPage, { signal }),
     [limit],
   );
-  const poll = usePoll(fetcher, 60_000);
+  const poll = usePoll(['notifications', limit], fetcher, 60_000);
   useLiveRefresh(
     () => void poll.refresh(),
     (e) => e.eventType === 'notification.created',

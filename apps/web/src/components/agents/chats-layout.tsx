@@ -17,7 +17,12 @@ export function ChatsLayout({ children }: { children: ReactNode }) {
       <div className={cn('bg-card lg:block lg:min-h-0 lg:border-r', chatId && 'hidden')}>
         <AgentsView activeId={chatId} />
       </div>
-      <div className={cn('min-w-0 lg:min-h-0', !chatId && 'hidden lg:block')}>{children}</div>
+      <div
+        key={chatId ?? 'none'}
+        className={cn('min-w-0 lg:min-h-0', chatId ? 'chat-enter' : 'hidden content-in lg:block')}
+      >
+        {children}
+      </div>
     </div>
   );
 }

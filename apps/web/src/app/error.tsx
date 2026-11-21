@@ -8,7 +8,7 @@ export default function ErrorPage({ reset }: { error: Error & { digest?: string 
       <h1 className="text-xl font-semibold">Something went wrong</h1>
       <p className="mt-2 max-w-sm text-sm text-muted-foreground">
         This page failed to load. Your agents are unaffected. Try again, and if it keeps happening check the
-        API status on the overview page.
+        service status in Settings.
       </p>
       <Button variant="outline" className="mt-6" onClick={reset}>
         Try again

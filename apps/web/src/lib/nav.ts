@@ -1,20 +1,17 @@
 import type { ComponentType, SVGProps } from 'react';
-import { ChatIcon, HomeIcon, LaptopIcon, SettingsIcon, ShieldCheckIcon } from '@/components/nav-icons';
+import { ChatIcon, LaptopIcon, ShieldCheckIcon } from '@/components/nav-icons';
 
 export interface NavItem {
   href: string;
   label: string;
   icon: ComponentType<SVGProps<SVGSVGElement>>;
-  /** Shown in the mobile bottom bar; the rest go under "More". */
-  primaryOnMobile: boolean;
 }
 
+/** Chats is home. Settings, notifications and sign-out live in the profile menu. */
 export const NAV_ITEMS: readonly NavItem[] = [
-  { href: '/', label: 'Overview', icon: HomeIcon, primaryOnMobile: true },
-  { href: '/agents', label: 'Agents', icon: ChatIcon, primaryOnMobile: true },
-  { href: '/approvals', label: 'Approvals', icon: ShieldCheckIcon, primaryOnMobile: true },
-  { href: '/devices', label: 'Devices', icon: LaptopIcon, primaryOnMobile: true },
-  { href: '/settings', label: 'Settings', icon: SettingsIcon, primaryOnMobile: false },
+  { href: '/', label: 'Chats', icon: ChatIcon },
+  { href: '/approvals', label: 'Approvals', icon: ShieldCheckIcon },
+  { href: '/devices', label: 'Devices', icon: LaptopIcon },
 ];
 
 /** The session whose chat is open (`/agents/<id>`), if any. */
@@ -22,7 +19,12 @@ export function openChatId(pathname: string): string | null {
   return /^\/agents\/([^/]+)\/?$/.exec(pathname)?.[1] ?? null;
 }
 
+/** The chat list (`/`) or an open chat (`/agents/<id>`). */
+export function isChatsRoute(pathname: string): boolean {
+  return pathname === '/' || pathname === '/agents' || pathname.startsWith('/agents/');
+}
+
 export function isActive(pathname: string, href: string): boolean {
-  if (href === '/') return pathname === '/';
+  if (href === '/') return isChatsRoute(pathname);
   return pathname === href || pathname.startsWith(`${href}/`);
 }

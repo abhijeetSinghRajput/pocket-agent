@@ -1,6 +1,8 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useQuery, useQueryClient, type QueryKey } from '@tanstack/react-query';
+import { useCallback, useMemo } from 'react';
+import { useLiveState } from '@/lib/live';
 
 export type PollState<T> =
   | { status: 'loading'; data: null; error: null }
@@ -8,53 +10,38 @@ export type PollState<T> =
   | { status: 'error'; data: null; error: string };
 
 /**
- * Fetches immediately, then every `intervalMs` while the tab is visible (a fallback: live updates
- * call `refresh()`). Keeps the last good data when a refresh fails and reports the error alongside
- * it, so a blip doesn't blank the page. When `fetcher` changes (e.g. a filter), it goes back to
- * loading and fetches right away — it never shows the previous query's data as the new one's.
+ * Cached API data (TanStack Query) under `key`. Every component using the same key shares one
+ * request and one cache entry. While live updates are connected there is no polling at all: live
+ * events call `refresh()`; only when the live connection is down does it poll every `intervalMs`.
+ * Keeps the last good data when a refresh fails and reports the error alongside it.
  */
-export function usePoll<T>(fetcher: (signal: AbortSignal) => Promise<T>, intervalMs: number) {
-  const [state, setState] = useState<PollState<T>>({ status: 'loading', data: null, error: null });
-  const fetcherRef = useRef(fetcher);
-  const inflight = useRef<AbortController | null>(null);
+export function usePoll<T>(key: QueryKey, fetcher: (signal: AbortSignal) => Promise<T>, intervalMs: number) {
+  const live = useLiveState() === 'live';
+  const client = useQueryClient();
+  const q = useQuery({
+    queryKey: key,
+    queryFn: ({ signal }) => fetcher(signal),
+    refetchInterval: live ? false : intervalMs,
+  });
 
-  const refresh = useCallback(async () => {
-    inflight.current?.abort();
-    const c = new AbortController();
-    inflight.current = c;
-    try {
-      const data = await fetcherRef.current(c.signal);
-      if (!c.signal.aborted) setState({ status: 'ready', data, error: null });
-    } catch (err) {
-      if (c.signal.aborted) return;
-      const message = (err as Error).message;
-      setState((prev) =>
-        prev.status === 'ready'
-          ? { ...prev, error: message }
-          : { status: 'error', data: null, error: message },
-      );
+  // Several components refreshing the same key at once share the request in flight.
+  const keyJson = JSON.stringify(key);
+  const refresh = useCallback(
+    () =>
+      client.invalidateQueries(
+        { queryKey: JSON.parse(keyJson) as QueryKey, exact: true },
+        { cancelRefetch: false },
+      ),
+    [client, keyJson],
+  );
+
+  const state = useMemo<PollState<T>>(() => {
+    if (q.data !== undefined) {
+      return { status: 'ready', data: q.data, error: q.error ? q.error.message : null };
     }
-  }, []);
-
-  useEffect(() => {
-    const changed = fetcherRef.current !== fetcher;
-    fetcherRef.current = fetcher;
-    const first = setTimeout(() => {
-      if (changed) setState({ status: 'loading', data: null, error: null });
-      void refresh();
-    }, 0);
-    const id = setInterval(() => {
-      if (document.visibilityState === 'visible') void refresh();
-    }, intervalMs);
-    const onVisible = () => document.visibilityState === 'visible' && void refresh();
-    document.addEventListener('visibilitychange', onVisible);
-    return () => {
-      clearTimeout(first);
-      clearInterval(id);
-      document.removeEventListener('visibilitychange', onVisible);
-      inflight.current?.abort();
-    };
-  }, [fetcher, refresh, intervalMs]);
+    if (q.error) return { status: 'error', data: null, error: q.error.message };
+    return { status: 'loading', data: null, error: null };
+  }, [q.data, q.error]);
 
   return { state, refresh };
 }

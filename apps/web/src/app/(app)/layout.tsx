@@ -1,37 +1,37 @@
 'use client';
 
 import { usePathname, useRouter } from 'next/navigation';
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import { AppShell } from '@/components/app-shell';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/lib/auth';
 import { LiveProvider } from '@/lib/live';
+import { QueryProvider } from '@/lib/query';
 
 /** Everything in (app) requires a signed-in user. The API enforces this too; this only drives the UI. */
 export default function AppLayout({ children }: { children: ReactNode }) {
-  const { state, logout, refresh } = useAuth();
+  const { state, refresh } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
 
+  // Signed out from inside the app: plain sign-in page. Arriving signed out: come back here afterwards.
+  const wasSignedIn = useRef(false);
   useEffect(() => {
+    if (state.status === 'authenticated') wasSignedIn.current = true;
     if (state.status === 'unauthenticated') {
-      router.replace(pathname === '/' ? '/login' : `/login?next=${encodeURIComponent(pathname)}`);
+      router.replace(
+        pathname === '/' || wasSignedIn.current ? '/login' : `/login?next=${encodeURIComponent(pathname)}`,
+      );
     }
   }, [state.status, pathname, router]);
 
   if (state.status === 'authenticated') {
     return (
-      <LiveProvider>
-        <AppShell
-          user={state.user}
-          onSignOut={async () => {
-            await logout();
-            router.replace('/login');
-          }}
-        >
-          {children}
-        </AppShell>
-      </LiveProvider>
+      <QueryProvider>
+        <LiveProvider>
+          <AppShell user={state.user}>{children}</AppShell>
+        </LiveProvider>
+      </QueryProvider>
     );
   }
 

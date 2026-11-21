@@ -143,7 +143,7 @@ export function AgentDetail({ id }: { id: string }) {
       apiRequest(`/sessions/${id}`, SessionResponse, { signal }).then((r) => r.session),
     [id],
   );
-  const { state, refresh } = usePoll(fetcher, 30_000);
+  const { state, refresh } = usePoll(['session', id], fetcher, 30_000);
   const feed = useEventFeed(`/sessions/${id}/events`);
   const commands = useCommands(id);
   const [infoOpen, setInfoOpen] = useState(false);
@@ -220,7 +220,9 @@ export function AgentDetail({ id }: { id: string }) {
             <h1 className="truncate text-[15px] leading-tight font-semibold">{s.projectName}</h1>
             <p className="mt-0.5 flex min-w-0 items-center gap-1.5 text-xs">
               <span className={cn('truncate', p.live ? 'font-medium text-primary' : 'text-muted-foreground')}>
-                {p.text}
+                <span key={p.text} className="roll-in">
+                  {p.text}
+                </span>
               </span>
               <span aria-hidden className="text-muted-foreground">
                 ·

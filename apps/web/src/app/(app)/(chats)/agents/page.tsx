@@ -1,9 +1,6 @@
-import type { Metadata } from 'next';
-import { NoChatSelected } from '@/components/agents/agents-view';
+import { redirect } from 'next/navigation';
 
-export const metadata: Metadata = { title: 'Agents' };
-
-/** The session list lives in the layout; this is the empty right-hand pane on desktop. */
+/** The chat list is the home screen now; old links to /agents land there. */
 export default function AgentsPage() {
-  return <NoChatSelected />;
+  redirect('/');
 }

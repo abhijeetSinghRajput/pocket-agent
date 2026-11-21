@@ -149,7 +149,7 @@ export function NotificationsView() {
           <p className="mt-2 max-w-md text-sm text-pretty text-muted-foreground">
             You’ll hear about permission requests, failures, finished turns and offline PCs. Choose what and
             when in{' '}
-            <Link href="/settings" className="font-medium text-foreground underline underline-offset-4">
+            <Link href="/profile" className="font-medium text-foreground underline underline-offset-4">
               Settings
             </Link>
             .

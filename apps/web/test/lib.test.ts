@@ -1,18 +1,20 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fetchHealth } from '@/lib/api';
-import { isActive, NAV_ITEMS } from '@/lib/nav';
+import { isActive, isChatsRoute, NAV_ITEMS } from '@/lib/nav';
 
 describe('isActive', () => {
-  it('matches the overview only on /', () => {
+  it('treats the chat list and every open chat as Chats (home)', () => {
     expect(isActive('/', '/')).toBe(true);
-    expect(isActive('/agents', '/')).toBe(false);
+    expect(isActive('/agents/abc', '/')).toBe(true);
+    expect(isActive('/approvals', '/')).toBe(false);
+    expect(isChatsRoute('/settings')).toBe(false);
   });
   it('matches nested routes', () => {
     expect(isActive('/agents/abc', '/agents')).toBe(true);
     expect(isActive('/agentsx', '/agents')).toBe(false);
   });
-  it('keeps the mobile bottom bar to at most 4 primary items plus More', () => {
-    expect(NAV_ITEMS.filter((i) => i.primaryOnMobile).length).toBeLessThanOrEqual(4);
+  it('keeps the bottom bar to 3 sections plus the profile button; settings live in the profile', () => {
+    expect(NAV_ITEMS.map((i) => i.label)).toEqual(['Chats', 'Approvals', 'Devices']);
   });
 });
 

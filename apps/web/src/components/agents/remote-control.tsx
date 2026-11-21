@@ -42,7 +42,7 @@ export function useCommands(sessionId: string) {
       apiRequest(`/sessions/${sessionId}/commands`, CommandListResponse, { signal }).then((r) => r.commands),
     [sessionId],
   );
-  const poll = usePoll(fetcher, 30_000);
+  const poll = usePoll(['commands', sessionId], fetcher, 30_000);
   useLiveRefresh(
     () => void poll.refresh(),
     (e) => e.eventType === 'command.status.changed' && e.sessionId === sessionId,

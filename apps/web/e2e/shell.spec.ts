@@ -1,11 +1,12 @@
 import { expect, test, type Page } from '@playwright/test';
 
 const ROUTES = [
-  { path: '/', heading: 'Overview' },
-  { path: '/agents', heading: 'Agents' },
+  { path: '/', heading: 'Chats' },
+  { path: '/agents', heading: 'Chats' }, // old link: redirects home
   { path: '/approvals', heading: 'Approvals' },
   { path: '/devices', heading: 'Devices' },
-  { path: '/settings', heading: 'Settings' },
+  { path: '/profile', heading: 'Profile' },
+  { path: '/settings', heading: 'Profile' }, // old link: redirects to the profile
 ];
 
 async function expectNoHorizontalOverflow(page: Page) {
@@ -31,13 +32,13 @@ test('sections show real (empty) data, never mock data', async ({ page }) => {
   await page.goto('/notifications');
   await expect(page.getByTestId('notification')).toHaveCount(0);
   // No placeholders remain: every section is backed by the real API.
-  await page.goto('/settings');
+  await page.goto('/profile');
   await expect(page.getByTestId('notification-settings')).toBeVisible();
   await expect(page.getByText(/Arrives in M\d/)).toHaveCount(0);
 });
 
-test('overview shows real backend health', async ({ page }) => {
-  await page.goto('/');
+test('the profile shows real backend health', async ({ page }) => {
+  await page.goto('/profile');
   const card = page.getByTestId('api-status');
   await expect(card.getByText('Operational')).toBeVisible({ timeout: 15_000 });
   await expect(card.getByText('Database')).toBeVisible();
@@ -57,9 +58,9 @@ test('theme toggle switches between light and dark and persists', async ({ page 
 
 test('pressing D toggles the theme, but not while typing', async ({ page }) => {
   await page.emulateMedia({ colorScheme: 'light' });
-  await page.goto('/agents');
+  await page.goto('/');
   const html = page.locator('html');
-  await expect(page.getByRole('heading', { level: 1, name: 'Agents' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'Chats' })).toBeVisible();
   await expect(html).not.toHaveClass(/dark/);
   await page.keyboard.press('d');
   await expect(html).toHaveClass(/dark/);

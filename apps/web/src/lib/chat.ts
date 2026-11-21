@@ -37,7 +37,7 @@ export interface AskedQuestion {
   options: { label: string; description: string }[];
 }
 
-function parseQuestions(input: string): AskedQuestion[] {
+export function parseQuestions(input: string): AskedQuestion[] {
   try {
     const raw = (JSON.parse(input) as P)['questions'];
     if (!Array.isArray(raw)) return [];

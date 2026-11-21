@@ -8,3 +8,6 @@ test-results
 **/src/generated/**
 poc/
 docs/
+.agents/
+.claude/
+skills-lock.json

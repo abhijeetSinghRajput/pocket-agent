@@ -1,5 +1,9 @@
-import { OverviewView } from '@/components/overview-view';
+import type { Metadata } from 'next';
+import { NoChatSelected } from '@/components/agents/agents-view';
 
-export default function OverviewPage() {
-  return <OverviewView />;
+export const metadata: Metadata = { title: 'Chats' };
+
+/** Home: the chat list lives in the layout; this is the empty right-hand pane on desktop. */
+export default function ChatsPage() {
+  return <NoChatSelected />;
 }

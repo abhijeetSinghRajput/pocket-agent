@@ -100,7 +100,7 @@ export function AgentsView({ activeId = null }: { activeId?: string | null }) {
       apiRequest(`/sessions?scope=${scope}`, SessionListResponse, { signal }).then((r) => r.sessions),
     [scope],
   );
-  const { state, refresh } = usePoll(fetcher, 30_000);
+  const { state, refresh } = usePoll(['sessions', scope], fetcher, 30_000);
   useLiveRefresh(() => void refresh());
   const approvals = useApprovals('pending').state.data;
 
@@ -132,9 +132,9 @@ export function AgentsView({ activeId = null }: { activeId?: string | null }) {
     >
       <div className="px-4 pt-5 pb-2 lg:pt-6">
         <div className="flex items-center justify-between gap-3">
-          <Title className="text-2xl font-semibold tracking-tight">Agents</Title>
+          <Title className="text-2xl font-semibold tracking-tight">Chats</Title>
           <Button size="sm" onClick={() => setCreating(true)}>
-            <Plus aria-hidden /> New session
+            <Plus aria-hidden /> New chat
           </Button>
         </div>
         <NewSessionDialog open={creating} onOpenChange={setCreating} />
@@ -222,6 +222,13 @@ export function AgentsView({ activeId = null }: { activeId?: string | null }) {
                 <code className="font-mono text-[13px] text-foreground">pocket-agent hooks install</code>
               </p>
               <p>
+                No PC paired yet?{' '}
+                <Link href="/devices" className="font-medium text-primary underline-offset-4 hover:underline">
+                  Pair a PC
+                </Link>{' '}
+                and run the Local Agent on it.
+              </p>
+              <p>
                 Or start a managed session:{' '}
                 <code className="font-mono text-[13px] text-foreground">
                   pocket-agent run &quot;your task&quot; --cwd path
@@ -236,7 +243,7 @@ export function AgentsView({ activeId = null }: { activeId?: string | null }) {
           </p>
         )}
         {sessions.length > 0 && (
-          <ul className="flex flex-col" aria-label="Sessions list">
+          <ul className="content-in flex flex-col" aria-label="Sessions list" data-enter-new="">
             {sessions.map((s) => (
               <SessionRow
                 key={s.id}

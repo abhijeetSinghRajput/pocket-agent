@@ -206,7 +206,7 @@ export function NotificationSettings() {
     (signal: AbortSignal) => apiRequest('/notification-settings', NotificationSettingsDto, { signal }),
     [],
   );
-  const { state, refresh } = usePoll(fetcher, 5 * 60_000);
+  const { state, refresh } = usePoll(['notification-settings'], fetcher, 5 * 60_000);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [override, setOverride] = useState<Settings | null>(null);

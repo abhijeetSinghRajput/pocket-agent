@@ -13,7 +13,7 @@ export function useApprovals(scope: 'pending' | 'all' = 'pending') {
       apiRequest(`/approvals?status=${scope}`, ApprovalListResponse, { signal }).then((r) => r.approvals),
     [scope],
   );
-  const poll = usePoll(fetcher, 30_000);
+  const poll = usePoll(['approvals', scope], fetcher, 30_000);
   useLiveRefresh(
     () => void poll.refresh(),
     (e) => e.eventType === 'approval.created' || e.eventType === 'approval.updated',

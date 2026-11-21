@@ -4,8 +4,10 @@ import { PASSWORD, registerViaApi, uniqueEmail } from './helpers';
 // These flows start signed out.
 test.use({ storageState: { cookies: [], origins: [] } });
 
-async function openAccountMenu(page: Page, isMobile: boolean) {
-  if (isMobile) await page.getByTestId('bottom-nav').getByRole('button', { name: 'More' }).click();
+/** The avatar (bottom right on phones, bottom of the sidebar on desktop) opens the profile. */
+async function openProfile(page: Page) {
+  await page.getByRole('link', { name: 'Profile' }).filter({ visible: true }).click();
+  await expect(page.getByTestId('profile-header')).toBeVisible();
 }
 
 test('signed-out visitors are sent to sign-in and returned to where they were going', async ({
@@ -22,17 +24,17 @@ test('signed-out visitors are sent to sign-in and returned to where they were go
   await expect(page.getByRole('heading', { level: 1, name: 'Devices' })).toBeVisible();
 });
 
-test('register through the UI, then sign out', async ({ page, isMobile }) => {
+test('register through the UI, then sign out', async ({ page }) => {
   await page.goto('/register');
   await page.getByLabel('Name').fill('Grace Hopper');
   await page.getByLabel('Email').fill(uniqueEmail());
   await page.getByLabel('Password').fill(PASSWORD);
   await page.getByRole('button', { name: 'Create account' }).click();
-  await expect(page.getByRole('heading', { level: 1, name: 'Overview' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'Chats' })).toBeVisible();
 
-  await openAccountMenu(page, isMobile);
+  await openProfile(page);
   await expect(page.getByText('Grace Hopper').filter({ visible: true }).first()).toBeVisible();
-  await page.getByRole('button', { name: 'Sign out' }).filter({ visible: true }).first().click();
+  await page.getByRole('button', { name: 'Sign out' }).click();
   await expect(page).toHaveURL(/\/login$/);
 
   // The session is gone server-side: protected pages bounce back to sign-in.
@@ -62,6 +64,6 @@ test('the post-login redirect cannot leave Pocket Agent', async ({ page, request
   await page.getByLabel('Email').fill(email);
   await page.getByLabel('Password').fill(PASSWORD);
   await page.getByRole('button', { name: 'Sign in' }).click();
-  await expect(page.getByRole('heading', { level: 1, name: 'Overview' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'Chats' })).toBeVisible();
   expect(new URL(page.url()).host).toBe('localhost:3000');
 });

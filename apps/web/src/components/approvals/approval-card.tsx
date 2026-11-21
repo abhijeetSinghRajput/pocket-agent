@@ -4,7 +4,8 @@ import { ApprovalResponse, type ApprovalDto } from '@pocket-agent/protocol';
 import { Check, Clock, ShieldAlert, X } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { toolTarget } from '@/lib/chat';
+import { AskedQuestions } from '@/components/agents/chat-messages';
+import { parseQuestions, toolTarget } from '@/lib/chat';
 import { Button } from '@/components/ui/button';
 import { shellTokens } from '@/components/ui/command-line';
 import { apiRequest } from '@/lib/api';
@@ -36,8 +37,24 @@ function describeRequest(tool: string): { verb: string; label: string; shell: bo
       return { verb: 'edit a file', label: 'File', shell: false };
     case 'WebFetch':
       return { verb: 'open a web page', label: 'URL', shell: false };
+    case 'AskUserQuestion':
+      return { verb: 'ask you a question', label: 'Question', shell: false };
     default:
       return { verb: `use ${tool}`, label: 'Details', shell: false };
+  }
+}
+
+/** Tools the PC only describes by argument names (MCP and unknown tools): show them as a list. */
+function readableInput(input: string): string {
+  try {
+    const v = JSON.parse(input) as Record<string, unknown>;
+    const args = v['arguments'];
+    if (Array.isArray(args) && Object.keys(v).length === 1) {
+      return args.length ? `Arguments: ${args.join(', ')}` : 'No arguments';
+    }
+    return JSON.stringify(v, null, 2);
+  } catch {
+    return input;
   }
 }
 
@@ -77,7 +94,9 @@ export function ApprovalCard({ approval, onDecided }: { approval: ApprovalDto; o
   }
 
   const what = describeRequest(approval.toolName);
-  const shown = target || approval.input;
+  const shown = target || readableInput(approval.input);
+  const asking = approval.toolName === 'AskUserQuestion';
+  const questions = asking ? parseQuestions(approval.input) : [];
   return (
     <article
       className="flex flex-col overflow-hidden rounded-2xl border bg-card shadow-sm"
@@ -118,15 +137,30 @@ export function ApprovalCard({ approval, onDecided }: { approval: ApprovalDto; o
         <p className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
           {what.label} · {approval.toolName}
         </p>
-        <pre className="max-h-56 overflow-auto rounded-lg border bg-muted/40 px-3 py-2.5 font-mono text-[13px] leading-relaxed whitespace-pre-wrap [overflow-wrap:anywhere]">
-          {what.shell
-            ? shellTokens(shown).map((t, i) => (
-                <span key={i} className={t.cls}>
-                  {t.text}
-                </span>
-              ))
-            : shown}
-        </pre>
+        {asking ? (
+          <div className="flex flex-col" data-testid="approval-questions">
+            {questions.length ? (
+              <AskedQuestions questions={questions} />
+            ) : (
+              <p className="rounded-lg border bg-muted/40 px-3 py-2.5 text-sm text-muted-foreground">
+                Update Pocket Agent on your PC to see Claude&apos;s question here.
+              </p>
+            )}
+            <p className="mt-2 text-xs text-muted-foreground">
+              Allow shows the question on your PC to answer there. Deny lets Claude carry on without asking.
+            </p>
+          </div>
+        ) : (
+          <pre className="max-h-56 overflow-auto rounded-lg border bg-muted/40 px-3 py-2.5 font-mono text-[13px] leading-relaxed whitespace-pre-wrap [overflow-wrap:anywhere]">
+            {what.shell
+              ? shellTokens(shown).map((t, i) => (
+                  <span key={i} className={t.cls}>
+                    {t.text}
+                  </span>
+                ))
+              : shown}
+          </pre>
+        )}
         <p className="text-xs text-muted-foreground">
           {approval.sessionMode === 'managed'
             ? 'If nobody decides in time, it is denied.'

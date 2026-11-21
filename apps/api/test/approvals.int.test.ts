@@ -37,7 +37,7 @@ async function setup() {
 /** The PC holds a permission request for a remote decision. */
 async function request(
   s: Awaited<ReturnType<typeof setup>>,
-  opts: { awaitingRemote?: boolean; expiresIn?: number } = {},
+  opts: { awaitingRemote?: boolean; expiresIn?: number; toolName?: string; input?: string } = {},
 ) {
   const requestId = `toolu_${randomUUID()}`;
   await s.agent.send(
@@ -45,8 +45,8 @@ async function request(
       'agent.permission.requested',
       {
         toolUseId: requestId,
-        toolName: 'Bash',
-        input: '{"command":"npm publish"}',
+        toolName: opts.toolName ?? 'Bash',
+        input: opts.input ?? '{"command":"npm publish"}',
         requestId,
         awaitingRemote: opts.awaitingRemote ?? true,
         expiresAt: new Date(Date.now() + (opts.expiresIn ?? 60_000)).toISOString(),
@@ -136,6 +136,51 @@ describe('remote approvals', () => {
     expect(frame['payload']).toMatchObject({ decision: 'deny', message: 'Not on a Friday' });
     await s.agent.send(ackDecision(approval!.id, 'applied'));
     expect((await dbApproval(approval!.id)).status).toBe('Denied');
+    s.agent.ws.close();
+  });
+
+  it('answers Claude’s question: only that tool, only the questions it asked', async () => {
+    const s = await setup();
+    const input = JSON.stringify({
+      questions: [{ question: 'Rock, Paper or Scissors?', options: [{ label: 'Rock' }, { label: 'Paper' }] }],
+    });
+    const answer = (id: string, answers: Record<string, string>) =>
+      t.app.inject({
+        method: 'POST',
+        url: `/approvals/${id}/decision`,
+        headers: browser(s.cookie),
+        payload: { decision: 'allow', answers },
+      });
+
+    // A permission request for anything else can't be "answered".
+    const bash = await request(s);
+    const refused = await answer(bash.approval!.id, { 'Rock, Paper or Scissors?': 'Rock' });
+    expect(refused.statusCode).toBe(400);
+    expect(refused.json().error).toBe('answers_not_supported');
+
+    const q = await request(s, { toolName: 'AskUserQuestion', input });
+    // Not a question Claude asked.
+    expect((await answer(q.approval!.id, { 'Delete the repo?': 'Yes' })).json().error).toBe(
+      'invalid_answers',
+    );
+    expect((await dbApproval(q.approval!.id)).decision).toBeNull(); // still answerable
+
+    const ok = await answer(q.approval!.id, { 'Rock, Paper or Scissors?': 'Paper' });
+    expect(ok.statusCode).toBe(200);
+    const frame = await s.agent.next(
+      (m) =>
+        m['eventType'] === 'approval.decision' &&
+        (m['payload'] as { requestId: string }).requestId === q.requestId,
+    );
+    expect(frame['payload']).toMatchObject({
+      decision: 'allow',
+      answers: { 'Rock, Paper or Scissors?': 'Paper' },
+    });
+    const audit = await t.ctx.prisma.auditLog.findFirstOrThrow({
+      where: { action: 'approval.decided', targetId: q.approval!.id },
+    });
+    expect(audit.metadata).toMatchObject({ answered: 1 });
+    expect(JSON.stringify(audit.metadata)).not.toContain('Paper'); // that it was answered, not what
     s.agent.ws.close();
   });
 

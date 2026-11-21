@@ -16,6 +16,11 @@ export const Policy = z.object({
    * through the SDK (instead of waiting for the next turn on the PC). Needs observedInstructions. Off by default.
    */
   wakeIdle: z.boolean().default(false),
+  /**
+   * Photos and PDFs the user attaches to prompts in the editor are uploaded so the app can show
+   * them (kept 30 days). Off by default: they are the user's files, leaving the PC.
+   */
+  shareAttachments: z.boolean().default(false),
   /** Permission requests may be decided in Pocket Agent. Off by default. */
   remoteApproval: z.boolean().default(false),
 });

@@ -224,6 +224,9 @@ export async function agentGateway(app: FastifyInstance, ctx: GatewayServices): 
             where: { id: device.id, revokedAt: null },
             data: {
               projects: msg.payload.projects,
+              models: msg.payload.models,
+              // Only sent by PCs that can read it; an older agent leaves the stored value alone.
+              ...(msg.payload.usage !== undefined ? { usage: msg.payload.usage ?? Prisma.DbNull } : {}),
               observedInstructions: msg.payload.observedInstructions,
               remoteApprovalEnabled: msg.payload.remoteApproval,
             },

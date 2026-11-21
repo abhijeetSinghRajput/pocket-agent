@@ -1,8 +1,10 @@
 import {
+  AttachmentRefs,
   BackendToAgent,
   COMMAND_TRANSITIONS,
   COMMAND_TTL_MS,
   createEvent,
+  type AttachmentRef,
   type CommandDto,
   type CommandKind,
   type CommandStatus,
@@ -17,6 +19,8 @@ export type Services = AppContext & { bus: Bus };
 interface CommandPayload {
   text?: string;
   projectPath?: string;
+  model?: string;
+  attachments?: AttachmentRef[];
 }
 
 export function toCommandDto(c: Command): CommandDto {
@@ -28,6 +32,8 @@ export function toCommandDto(c: Command): CommandDto {
     commandType: c.commandType as CommandKind,
     text: p.text ?? null,
     projectPath: p.projectPath ?? null,
+    model: p.model ?? null,
+    attachments: AttachmentRefs.catch([]).parse(p.attachments ?? []),
     status: c.status,
     error: c.error,
     createdAt: c.createdAt.toISOString(),
@@ -72,11 +78,24 @@ async function notifyCommand(ctx: Services, c: Command): Promise<void> {
 export function commandFrame(c: Command, externalSessionId: string | null) {
   const p = (c.payload ?? {}) as CommandPayload;
   const base = { commandId: c.id, expiresAt: c.expiresAt.toISOString() };
+  const model = p.model ? { model: p.model } : {};
   const payload =
     c.commandType === 'instruction'
-      ? { ...base, commandType: 'instruction' as const, text: p.text! }
+      ? {
+          ...base,
+          ...model,
+          ...(p.attachments?.length ? { attachments: p.attachments } : {}),
+          commandType: 'instruction' as const,
+          text: p.text!,
+        }
       : c.commandType === 'session.start'
-        ? { ...base, commandType: 'session.start' as const, projectPath: p.projectPath!, text: p.text! }
+        ? {
+            ...base,
+            ...model,
+            commandType: 'session.start' as const,
+            projectPath: p.projectPath!,
+            text: p.text!,
+          }
         : { ...base, commandType: c.commandType as 'interrupt' | 'session.stop' };
   return BackendToAgent.parse(
     createEvent('command.execute', payload, {
@@ -102,6 +121,8 @@ export interface CreateCommandInput {
   idempotencyKey: string;
   text?: string;
   projectPath?: string;
+  model?: string;
+  attachments?: AttachmentRef[];
   ip?: string;
 }
 
@@ -137,6 +158,8 @@ export async function createCommand(
         payload: {
           ...(input.text !== undefined ? { text: input.text } : {}),
           ...(input.projectPath !== undefined ? { projectPath: input.projectPath } : {}),
+          ...(input.model !== undefined ? { model: input.model } : {}),
+          ...(input.attachments?.length ? { attachments: input.attachments } : {}),
         },
         idempotencyKey: input.idempotencyKey,
         status: online ? 'Pending' : 'Failed',

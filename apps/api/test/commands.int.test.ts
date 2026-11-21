@@ -149,7 +149,52 @@ describe('instructions', () => {
     s.agent.ws.close();
   });
 
-  it('only managed sessions can be interrupted or stopped', async () => {
+  it('sends the chosen model to the PC, and only models that PC offers', async () => {
+    const s = await setup();
+    // Unknown until the PC reports its models.
+    const early = await post(`/sessions/${s.session.id}/instructions`, s.cookie, {
+      text: 'hi',
+      model: 'haiku',
+      idempotencyKey: randomUUID(),
+    });
+    expect(early.statusCode).toBe(400);
+    expect(early.json().error).toBe('model_not_available');
+
+    await s.agent.send(
+      createEvent('device.settings', {
+        projects: [],
+        observedInstructions: false,
+        models: [
+          { id: 'opus', name: 'Opus 5.5', description: 'For complex work' },
+          { id: 'haiku', name: 'Haiku 5.5', description: 'Fastest' },
+        ],
+      }),
+    );
+    const devices = (
+      await t.app.inject({ method: 'GET', url: '/devices', headers: { cookie: s.cookie } })
+    ).json();
+    expect(devices.devices[0].models.map((m: { id: string }) => m.id)).toEqual(['opus', 'haiku']);
+
+    const res = await post(`/sessions/${s.session.id}/instructions`, s.cookie, {
+      text: 'quick question',
+      model: 'haiku',
+      idempotencyKey: randomUUID(),
+    });
+    expect(res.statusCode).toBe(201);
+    expect(CommandResponse.parse(res.json()).command.model).toBe('haiku');
+    const frame = await s.agent.next((m) => m['eventType'] === 'command.execute');
+    expect(frame['payload']).toMatchObject({ text: 'quick question', model: 'haiku' });
+
+    const bad = await post(`/sessions/${s.session.id}/instructions`, s.cookie, {
+      text: 'x',
+      model: 'gpt-something',
+      idempotencyKey: randomUUID(),
+    });
+    expect(bad.statusCode).toBe(400);
+    s.agent.ws.close();
+  });
+
+  it('only sessions that can be stopped are interrupted or ended', async () => {
     const s = await setup({ ...OBSERVED_OFF, instructBetweenTurns: true }, 'observed');
     for (const action of ['interrupt', 'stop']) {
       const res = await post(`/sessions/${s.session.id}/${action}`, s.cookie, {

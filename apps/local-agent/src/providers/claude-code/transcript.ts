@@ -1,7 +1,20 @@
+import { ATTACHMENT_MAX_BYTES, ATTACHMENT_MAX_PER_MESSAGE } from '@pocket-agent/protocol';
 import { closeSync, fstatSync, openSync, readSync } from 'node:fs';
+import type { PastedFile } from '../../attachments.js';
+
+export type TranscriptEntry =
+  | { kind: 'text' | 'thought'; text: string }
+  /** Photos/PDFs the user attached to a prompt in the editor (only read when sharing is on). */
+  | { kind: 'files'; files: PastedFile[] };
+
+/** "Thought for 2s", as Claude Code shows it. */
+export function thoughtLabel(ms: number): string {
+  const s = Math.max(1, Math.round(ms / 1000));
+  return s < 60 ? `Thought for ${s}s` : `Thought for ${Math.floor(s / 60)}m ${s % 60}s`;
+}
 
 /** At most this much of a transcript is read per hook (a long turn is caught up over several hooks). */
-const MAX_READ = 2 * 1024 * 1024;
+const MAX_READ = 16 * 1024 * 1024;
 const MAX_SEEN = 2_000;
 
 interface Tail {
@@ -37,8 +50,11 @@ export class TranscriptTail {
     this.tails.set(sessionId, { path, offset: size(path), rest: '', seen: new Set(), last: t?.last ?? '' });
   }
 
-  /** New assistant text blocks since the last call, oldest first. */
-  read(sessionId: string): string[] {
+  /**
+   * What Claude wrote since the last call, oldest first: its text blocks, and how long it thought
+   * before them (the duration only, never the thinking itself).
+   */
+  read(sessionId: string, withFiles = false): TranscriptEntry[] {
     const t = this.tails.get(sessionId);
     if (!t) return [];
     let chunk: string;
@@ -67,8 +83,27 @@ export class TranscriptTail {
 
     const lines = (t.rest + chunk).split('\n');
     t.rest = lines.pop() ?? '';
-    const out: string[] = [];
+    const out: TranscriptEntry[] = [];
     for (const line of lines) {
+      const thought = thinkingTime(line);
+      if (thought) {
+        // One "Thought for …" per reply: its thinking can span several lines; the first has the time.
+        if (!t.seen.has(thought.messageId)) {
+          t.seen.add(thought.messageId);
+          out.push({ kind: 'thought', text: thoughtLabel(thought.ms) });
+        }
+        continue;
+      }
+      if (withFiles) {
+        const pasted = userFiles(line);
+        if (pasted) {
+          if (!t.seen.has(pasted.id)) {
+            t.seen.add(pasted.id);
+            out.push({ kind: 'files', files: pasted.files });
+          }
+          continue;
+        }
+      }
       const text = assistantText(line);
       if (!text) continue;
       if (text.id) {
@@ -78,7 +113,7 @@ export class TranscriptTail {
       }
       if (same(text.text, t.last)) continue; // already reported (Stop's last message)
       t.last = text.text;
-      out.push(text.text);
+      out.push({ kind: 'text', text: text.text });
     }
     return out;
   }
@@ -119,6 +154,53 @@ function size(path: string): number {
 }
 
 const same = (a: string, b: string) => a.trim() === b.trim();
+
+const PASTED_MIME = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'application/pdf']);
+
+/**
+ * Files the user attached to a prompt: image/document blocks at the top level of a main-thread
+ * user message. Files inside tool results (what Claude read itself) are not the user's attachments.
+ */
+function userFiles(line: string): { id: string; files: PastedFile[] } | undefined {
+  if (!line.includes('"base64"') || !line.includes('"type":"user"')) return undefined; // cheap pre-filter
+  let o: Record<string, unknown>;
+  try {
+    o = JSON.parse(line) as Record<string, unknown>;
+  } catch {
+    return undefined;
+  }
+  if (o['type'] !== 'user' || o['isSidechain'] === true || o['isMeta'] === true) return undefined;
+  const content = (o['message'] as { content?: unknown } | undefined)?.content;
+  if (!Array.isArray(content) || typeof o['uuid'] !== 'string') return undefined;
+  const files: PastedFile[] = [];
+  for (const b of content as Array<Record<string, unknown>>) {
+    if (b?.['type'] !== 'image' && b?.['type'] !== 'document') continue;
+    const src = b['source'] as { type?: unknown; media_type?: unknown; data?: unknown } | undefined;
+    if (src?.type !== 'base64' || typeof src.media_type !== 'string' || typeof src.data !== 'string')
+      continue;
+    if (!PASTED_MIME.has(src.media_type)) continue;
+    const data = Buffer.from(src.data, 'base64');
+    if (data.length && data.length <= ATTACHMENT_MAX_BYTES && files.length < ATTACHMENT_MAX_PER_MESSAGE)
+      files.push({ mime: src.media_type, data });
+  }
+  return files.length ? { id: `files:${o['uuid']}`, files } : undefined;
+}
+
+/** How long Claude thought, from a main-thread thinking line (the duration only). */
+function thinkingTime(line: string): { messageId: string; ms: number } | undefined {
+  if (!line.includes('"thinkingDurationMs"')) return undefined; // cheap pre-filter
+  let o: Record<string, unknown>;
+  try {
+    o = JSON.parse(line) as Record<string, unknown>;
+  } catch {
+    return undefined;
+  }
+  if (o['type'] !== 'assistant' || o['isSidechain'] === true) return undefined;
+  const ms = o['thinkingDurationMs'];
+  const id = (o['message'] as { id?: unknown } | undefined)?.id;
+  if (typeof ms !== 'number' || !(ms >= 0) || typeof id !== 'string') return undefined;
+  return { messageId: `think:${id}`, ms };
+}
 
 /** The text of a main-thread assistant text line, or undefined for anything else. */
 function assistantText(line: string): { id: string | undefined; text: string } | undefined {

@@ -84,6 +84,7 @@ model User {
   notifications     Notification[]
   notificationPrefs NotificationPreference[]
   notificationSettings NotificationSettings?
+  attachments       Attachment[]
   pushSubscriptions PushSubscription[]
   auditLogs         AuditLog[]
 
@@ -139,6 +140,10 @@ model Device {
   awayMode        Boolean      @default(false)
   /// Reported by the PC (device.settings), which also enforces them. Display-only on the server.
   projects        Json         @default("[]")
+  /// Models the PC's Claude Code offers ([{id,name,description}]), as reported by the PC.
+  models          Json         @default("[]")
+  /// Claude plan usage reported by the PC ({session, weekly, models, updatedAt}), or null.
+  usage           Json?
   observedInstructions Boolean @default(false)
   lastHeartbeatAt DateTime?
   revokedAt       DateTime?
@@ -327,6 +332,34 @@ model PushSubscription {
 
 /// Append-only security audit trail: approval decisions, setting changes, pairing, revocation.
 /// The application never updates or deletes rows here.
+/// A photo or PDF sent with a message. The file lives in Cloudinary for 30 days; `thumb` (a small
+/// JPEG) stays so the chat can still show a preview afterwards.
+model Attachment {
+  id        String    @id @default(uuid(7)) @db.Uuid
+  userId    String    @db.Uuid
+  /// The PC that uploaded it (a file attached in the editor); null when sent from the app.
+  deviceId  String?   @db.Uuid
+  name      String
+  mime      String
+  size      Int
+  /// Storage id (random; never derived from the name).
+  publicId  String    @unique
+  /// Set once storage confirmed the upload; null = reserved, not uploaded yet.
+  readyAt   DateTime?
+  thumb     Bytes?
+  createdAt DateTime  @default(now())
+  /// Set when the file was deleted from storage (the preview remains).
+  removedAt DateTime?
+  /// Set when a message carried it. Uploads that never get sent are deleted after an hour.
+  usedAt    DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([removedAt, createdAt])
+  @@map("attachments")
+}
+
 model AuditLog {
   id         String    @id @default(uuid(7)) @db.Uuid
   userId     String    @db.Uuid

@@ -1,7 +1,9 @@
 import { APPROVAL_WAIT_MS, CLAUDE_CODE_CAPABILITIES, type SessionCapabilities } from '@pocket-agent/protocol';
 import { createHash } from 'node:crypto';
 import { truncate, type SessionRegistry } from '../../sessions/registry.js';
+import type { AttachmentRef } from '@pocket-agent/protocol';
 import type { ApprovalBroker } from '../../approvals.js';
+import type { PastedFile } from '../../attachments.js';
 import type { ObservedInstructions } from './instructions.js';
 import type { IdleWake } from './wake.js';
 import { summarizeToolInput, summarizeToolOutput, toolKey } from './summarize.js';
@@ -10,7 +12,14 @@ import { TranscriptTail } from './transcript.js';
 /** JSON a hook may print to answer Claude Code: Stop (deliver an instruction) or PermissionRequest (remote decision). */
 export type HookOutput =
   | { decision: 'block'; reason: string }
-  | { hookSpecificOutput: { hookEventName: 'UserPromptSubmit'; additionalContext: string } }
+  /** Stop the turn (an interrupt sent from Pocket Agent). */
+  | { continue: false; stopReason: string }
+  | {
+      hookSpecificOutput: {
+        hookEventName: 'UserPromptSubmit' | 'PostToolUse' | 'PostToolUseFailure';
+        additionalContext: string;
+      };
+    }
   | {
       hookSpecificOutput: {
         hookEventName: 'PermissionRequest';
@@ -31,6 +40,8 @@ export function observedCapabilities(
   return {
     ...OBSERVED_WITH_HOOKS,
     instructBetweenTurns: instructionsAllowed,
+    // Stopping is part of the same opt-in: Claude stops at its next step.
+    interrupt: instructionsAllowed,
     // With wake on, an idle session takes an instruction at once (a busy one: after its turn).
     instructAnytime: instructionsAllowed && wakeIdleAllowed,
     remoteApproval: remoteApprovalAllowed,
@@ -72,6 +83,12 @@ export class ClaudeHookHandler {
       instructions?: ObservedInstructions;
       instructionsAllowed?: () => boolean;
       wakeIdleAllowed?: () => boolean;
+      /**
+       * Uploads files the user attached in the editor (PC opt-in). When absent or off, those files
+       * are never read from the transcript.
+       */
+      shareFiles?: (files: PastedFile[]) => Promise<AttachmentRef[]>;
+      shareFilesAllowed?: () => boolean;
       wake?: IdleWake;
       approvals?: ApprovalBroker;
       remoteApprovalAllowed?: () => boolean;
@@ -149,6 +166,9 @@ export class ClaudeHookHandler {
       }
 
       case 'PreToolUse': {
+        // Asked to stop from Pocket Agent: this tool doesn't run and the turn ends here.
+        const stopped = this.stopIfAsked(sessionId);
+        if (stopped) return stopped;
         const id = s(p['tool_use_id']);
         if (!id) break;
         this.map(this.toolIds, sessionId).set(toolKey(toolName, p['tool_input']), id);
@@ -165,7 +185,9 @@ export class ClaudeHookHandler {
         const key = toolKey(toolName, p['tool_input']);
         const toolUseId = this.map(this.toolIds, sessionId).get(key) ?? `perm-${hash(sessionId + key)}`;
         this.map(this.pendingPermissions, sessionId).set(toolUseId, toolUseId);
-        const hold = !!this.opts.approvals && !!this.opts.holdForRemote?.();
+        // Claude's question to the user can't be answered through a hook (verified): it is never
+        // held for Pocket Agent, so the editor shows it at once.
+        const hold = !!this.opts.approvals && !!this.opts.holdForRemote?.() && toolName !== 'AskUserQuestion';
         const waitMs = this.opts.approvalWaitMs ?? APPROVAL_WAIT_MS.observed;
         this.registry.event(sessionId, 'agent.permission.requested', {
           toolUseId,
@@ -205,6 +227,14 @@ export class ClaudeHookHandler {
             input,
             error: truncate(error || 'Tool failed', 2000),
           });
+        }
+        const stopped = this.stopIfAsked(sessionId);
+        if (stopped) return stopped;
+        // A message sent from Pocket Agent while Claude works reaches it here, at its next step
+        // (only with the PC owner's consent; never inside a subagent, which isn't the conversation).
+        if (this.opts.instructionsAllowed?.() && !s(p['agent_id'])) {
+          const context = this.opts.instructions?.onToolDone(sessionId);
+          if (context) return { hookSpecificOutput: { hookEventName: event, additionalContext: context } };
         }
         break;
       }
@@ -250,9 +280,32 @@ export class ClaudeHookHandler {
     }
   }
 
+  private stopIfAsked(sessionId: string): HookOutput | undefined {
+    if (!this.opts.instructionsAllowed?.() || !this.opts.instructions?.takeStop(sessionId)) return undefined;
+    this.resolvePending(sessionId);
+    this.registry.event(sessionId, 'agent.output', { role: 'system', text: 'Turn interrupted remotely' });
+    this.registry.setStatus(sessionId, 'WaitingForInput');
+    return { continue: false, stopReason: 'Stopped from Pocket Agent.' };
+  }
+
   private flushText(sessionId: string): void {
-    for (const text of this.transcripts.read(sessionId)) {
-      this.registry.event(sessionId, 'agent.output', { role: 'assistant', text: truncate(text) });
+    const share = this.opts.shareFiles && this.opts.shareFilesAllowed?.() ? this.opts.shareFiles : undefined;
+    for (const entry of this.transcripts.read(sessionId, !!share)) {
+      if (entry.kind === 'files') {
+        // Uploaded in the background; the chat attaches them to the message they came with.
+        void share!(entry.files)
+          .then((attachments) => {
+            if (attachments.length)
+              this.registry.event(sessionId, 'agent.output', { role: 'user', text: '', attachments });
+          })
+          .catch(() => undefined);
+        continue;
+      }
+      this.registry.event(sessionId, 'agent.output', {
+        // "Thought for 2s" is a note about the turn (the thinking itself never leaves the PC).
+        role: entry.kind === 'thought' ? 'system' : 'assistant',
+        text: truncate(entry.text),
+      });
     }
   }
 

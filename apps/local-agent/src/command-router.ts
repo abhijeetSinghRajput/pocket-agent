@@ -1,4 +1,5 @@
 import type { BackendToAgent } from '@pocket-agent/protocol';
+import { filesNote, type AttachmentClient, type LocalFile } from './attachments.js';
 import { isAllowedProject, type Policy } from './policy.js';
 import type { CommandAck } from './providers/claude-code/instructions.js';
 import type { ObservedInstructions } from './providers/claude-code/instructions.js';
@@ -29,6 +30,12 @@ export class CommandRouter {
       managed: ManagedSessions;
       observed: ObservedInstructions;
       wake?: IdleWake;
+      /** Models Claude Code offers on this PC ([] = unknown: any well-formed id is passed on). */
+      models?: () => Array<{ id: string }>;
+      /** Downloads the files sent with a message. */
+      attachments?: Pick<AttachmentClient, 'download'>;
+      /** Ends a process (tests inject this). */
+      kill?: (pid: number) => void;
       policy: () => Policy;
       ack: FullAck;
       log?: (level: 'info' | 'warn' | 'error', msg: string) => void;
@@ -50,6 +57,10 @@ export class CommandRouter {
 
     const fail = (error: string) => ack(p.commandId, 'Failed', { error });
     try {
+      // Only models this PC's Claude Code lists itself.
+      const model = 'model' in p ? p.model : undefined;
+      const known = this.deps.models?.() ?? [];
+      if (model && known.length && !known.some((m) => m.id === model)) return fail('model_not_available');
       switch (p.commandType) {
         case 'session.start': {
           const allowed = isAllowedProject(this.deps.policy(), p.projectPath);
@@ -58,6 +69,7 @@ export class CommandRouter {
             projectPath: allowed.path,
             prompt: p.text,
             commandId: p.commandId,
+            ...(model ? { model } : {}),
           });
           return ack(p.commandId, 'Executing', { externalSessionId: id });
         }
@@ -66,10 +78,27 @@ export class CommandRouter {
           const sid = msg.sessionId;
           const s = sid ? this.deps.registry.get(sid) : undefined;
           if (!sid || !s) return fail('session_not_found');
+          const allowed = s.mode === 'managed' || this.deps.policy().observedInstructions;
+          // Files sent with the message are fetched first: Claude gets all of it or nothing.
+          let files: LocalFile[] = [];
+          if (allowed && p.attachments?.length) {
+            if (!this.deps.attachments) return fail('attachments_not_supported');
+            try {
+              files = await this.deps.attachments.download(p.commandId, p.attachments);
+            } catch (err) {
+              this.deps.log?.('warn', `attachments of ${p.commandId}: ${(err as Error).message}`);
+              return fail('attachment_download_failed');
+            }
+          }
+          const withFiles = files.length ? { files } : {};
           if (s.mode === 'managed') {
             return void (
-              this.deps.managed.send(sid, p.text, { commandId: p.commandId, expiresAt }) ||
-              fail('session_not_found')
+              this.deps.managed.send(sid, p.text, {
+                commandId: p.commandId,
+                expiresAt,
+                ...(model ? { model } : {}),
+                ...withFiles,
+              }) || fail('session_not_found')
             );
           }
           if (!this.deps.policy().observedInstructions) return fail('instructions_disabled_on_pc');
@@ -82,21 +111,54 @@ export class CommandRouter {
             this.deps.policy().wakeIdle &&
             (wake.isRunning(sid) || s.status === 'WaitingForInput')
           ) {
-            return wake.run(sid, s.projectPath, item);
+            return wake.run(sid, s.projectPath, { ...item, ...(model ? { model } : {}), ...withFiles });
           }
-          this.deps.observed.enqueue(sid, item);
+          // Delivered into the editor's own turn: its model can't be changed from here.
+          // A hook can only carry text, so Claude is told where the files were saved.
+          this.deps.observed.enqueue(sid, {
+            ...item,
+            ...(files.length ? { deliver: p.text + filesNote(files) } : {}),
+          });
           return;
         }
 
         case 'interrupt':
         case 'session.stop': {
           const sid = msg.sessionId;
-          if (!sid || !this.deps.managed.isManaged(sid)) return fail('not_a_managed_session');
-          const ok =
-            p.commandType === 'interrupt'
-              ? await this.deps.managed.interrupt(sid)
-              : await this.deps.managed.stop(sid);
-          return ok ? ack(p.commandId, 'Completed') : fail('session_not_found');
+          if (!sid) return fail('session_not_found');
+          if (this.deps.managed.isManaged(sid)) {
+            const ok =
+              p.commandType === 'interrupt'
+                ? await this.deps.managed.interrupt(sid)
+                : await this.deps.managed.stop(sid);
+            return ok ? ack(p.commandId, 'Completed') : fail('session_not_found');
+          }
+          // A session the user started: only with the PC owner's opt-in.
+          const s = this.deps.registry.get(sid);
+          if (!s) return fail('session_not_found');
+          if (!this.deps.policy().observedInstructions) return fail('instructions_disabled_on_pc');
+          const woken = this.deps.wake?.interrupt(sid) ?? false; // a turn we run: stops at once
+
+          if (p.commandType === 'interrupt') {
+            if (woken) return ack(p.commandId, 'Completed');
+            if (!s.sources.has('hooks')) return fail('hooks_not_connected');
+            // Idle: nothing to stop. Working: Claude stops at its next step (the next tool hook).
+            if (s.status !== 'Running' && s.status !== 'WaitingForPermission')
+              return ack(p.commandId, 'Completed');
+            return this.deps.observed.requestStop(sid, p.commandId, expiresAt);
+          }
+
+          // End the session: close its Claude Code process on this PC. The conversation stays on
+          // disk and can be resumed in the editor.
+          if (s.pid === undefined) return fail('process_not_found');
+          try {
+            (this.deps.kill ?? ((pid) => process.kill(pid)))(s.pid);
+          } catch (err) {
+            if ((err as NodeJS.ErrnoException).code !== 'ESRCH') throw err; // already gone is fine
+          }
+          this.deps.observed.onSessionEnd(sid);
+          this.deps.registry.end(sid, 'stopped_remotely');
+          return ack(p.commandId, 'Completed');
         }
       }
     } catch (err) {

@@ -9,6 +9,7 @@ import { createPrisma, createRedis } from '../src/infra.js';
 import { hashPassword, randomToken, sha256 } from '../src/lib/crypto.js';
 import type { AppContext } from '../src/context.js';
 import type { GoogleVerifier } from '../src/auth/firebase.js';
+import type { AttachmentStorage } from '../src/attachments/storage.js';
 import type { PushMessage, PushResult, PushSender } from '../src/notifications/push.js';
 
 export const ORIGIN = 'http://localhost:3000';
@@ -30,6 +31,7 @@ export async function startTestApp(
     offlineCheckMs?: number;
     push?: PushSender;
     google?: GoogleVerifier | null;
+    storage?: AttachmentStorage | null;
     now?: () => Date;
   } = {},
 ): Promise<TestApp> {
@@ -42,13 +44,15 @@ export async function startTestApp(
   const prisma = createPrisma(env.DATABASE_URL);
   const redis = createRedis(env.REDIS_URL);
   await redis.connect();
-  const { push, google, ...rest } = opts;
+  const { push, google, storage, ...rest } = opts;
   const ctx: AppContext & typeof rest = { env, prisma, redis, now: () => new Date(), ...rest };
   const app = await buildApp({
     env,
     ctx,
     ...(push ? { push } : {}),
     ...(google !== undefined ? { google } : {}),
+    // Never a real storage service in tests unless one is passed.
+    storage: storage ?? null,
     disableRateLimits: !opts.rateLimits,
     health: {
       version: 'test',

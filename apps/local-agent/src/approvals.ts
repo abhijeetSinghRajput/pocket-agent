@@ -1,4 +1,29 @@
-export type RemoteDecision = { behavior: 'allow' } | { behavior: 'deny'; message: string };
+export type RemoteDecision =
+  /** `answers`: the user's answers to Claude's question (used for AskUserQuestion only). */
+  { behavior: 'allow'; answers?: Record<string, string> } | { behavior: 'deny'; message: string };
+
+/**
+ * The input AskUserQuestion runs with when the user answered in Pocket Agent: Claude's own questions,
+ * unchanged, plus the answers. Returns undefined unless every answer belongs to a question Claude
+ * asked — then nothing is added and the request is treated as a plain allow.
+ */
+export function answeredQuestionInput(
+  toolName: string,
+  toolInput: unknown,
+  answers: Record<string, string> | undefined,
+): Record<string, unknown> | undefined {
+  if (toolName !== 'AskUserQuestion' || !answers) return undefined;
+  const input = (toolInput && typeof toolInput === 'object' ? toolInput : {}) as Record<string, unknown>;
+  const questions = Array.isArray(input['questions']) ? input['questions'] : [];
+  const asked = questions
+    .map((q) => (q && typeof q === 'object' ? (q as { question?: unknown }).question : undefined))
+    .filter((q): q is string => typeof q === 'string');
+  const entries = Object.entries(answers);
+  const valid =
+    entries.length > 0 &&
+    entries.every(([q, a]) => asked.includes(q) && typeof a === 'string' && a.length > 0 && a.length <= 500);
+  return valid ? { ...input, answers: Object.fromEntries(entries) } : undefined;
+}
 
 interface Pending {
   resolve: (d: RemoteDecision | null) => void;

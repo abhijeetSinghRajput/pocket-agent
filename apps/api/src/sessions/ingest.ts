@@ -116,6 +116,23 @@ export async function ingestSessionEvent(
       session = await tx.agentSession.update({ where: { id: session.id }, data });
     }
 
+    // A message from the PC may only reference files this user uploaded and that are fully stored.
+    if (msg.eventType === 'agent.output' && msg.payload.attachments?.length) {
+      const owned = await tx.attachment.findMany({
+        where: {
+          id: { in: msg.payload.attachments.map((x) => x.id) },
+          userId: device.userId,
+          readyAt: { not: null },
+        },
+        select: { id: true, name: true, mime: true, size: true },
+      });
+      msg.payload.attachments = owned as typeof msg.payload.attachments;
+      await tx.attachment.updateMany({
+        where: { id: { in: owned.map((o) => o.id) }, usedAt: null },
+        data: { usedAt: now },
+      });
+    }
+
     const row = await tx.agentEvent.create({
       data: {
         eventId: msg.eventId,

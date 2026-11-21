@@ -3,7 +3,7 @@ import type { Query, SDKMessage, SDKUserMessage } from '@anthropic-ai/claude-age
 import { readFileSync } from 'node:fs';
 import os from 'node:os';
 import { describe, expect, it } from 'vitest';
-import { ApprovalBroker } from '../src/approvals.js';
+import { ApprovalBroker, answeredQuestionInput } from '../src/approvals.js';
 import { ClaudeHookHandler } from '../src/providers/claude-code/hooks.js';
 import {
   ManagedSessions,
@@ -158,11 +158,56 @@ describe('managed sessions: canUseTool', () => {
     expect(outcomes(h.events)).toEqual(['remote']);
   });
 
+  it('answers ignore every tool but Claude’s own question: a Bash input is never modified', async () => {
+    const h = managedHarness(true);
+    await h.managed.start({ projectPath: os.tmpdir(), prompt: 'publish' });
+    await new Promise((r) => setTimeout(r, 30));
+    h.broker.decide('toolu_pub', { behavior: 'allow', answers: { 'Run it?': 'rm -rf /' } });
+    await new Promise((r) => setTimeout(r, 30));
+    expect((h.decision() as { updatedInput: unknown }).updatedInput).toBe(h.input);
+  });
+
   it('denies when nobody decides in time', async () => {
     const h = managedHarness(true, 20);
     await h.managed.start({ projectPath: os.tmpdir(), prompt: 'publish' });
     await new Promise((r) => setTimeout(r, 80));
     expect(h.decision()).toEqual({ behavior: 'deny', message: NO_DECISION_IN_TIME });
     expect(outcomes(h.events)).toEqual(['timeout']);
+  });
+});
+
+describe('answering Claude’s question from Pocket Agent', () => {
+  const input = {
+    questions: [
+      { question: 'Which fruit?', header: 'Fruit', options: [{ label: 'Apple' }, { label: 'Mango' }] },
+      { question: 'Which sizes?', multiSelect: true, options: [{ label: 'S' }, { label: 'L' }] },
+    ],
+  };
+
+  it('adds the answers to Claude’s own questions, leaving them unchanged', () => {
+    const out = answeredQuestionInput('AskUserQuestion', input, {
+      'Which fruit?': 'Mango',
+      'Which sizes?': 'S, L',
+    });
+    expect(out).toEqual({ ...input, answers: { 'Which fruit?': 'Mango', 'Which sizes?': 'S, L' } });
+  });
+
+  it('refuses answers to questions Claude did not ask, other tools, and empty answers', () => {
+    expect(answeredQuestionInput('AskUserQuestion', input, { 'Delete everything?': 'Yes' })).toBeUndefined();
+    expect(answeredQuestionInput('Bash', { command: 'ls' }, { 'Which fruit?': 'Mango' })).toBeUndefined();
+    expect(answeredQuestionInput('AskUserQuestion', input, { 'Which fruit?': '' })).toBeUndefined();
+    expect(answeredQuestionInput('AskUserQuestion', input, undefined)).toBeUndefined();
+  });
+
+  it('a question in a session the user started is never held: the editor shows it', () => {
+    const t = observed({ away: true });
+    const out = t.handler.handle({
+      ...hook('PermissionRequest'),
+      tool_name: 'AskUserQuestion',
+      tool_input: input,
+    });
+    expect(out).toBeUndefined(); // not a promise: nothing waits for the phone
+    const req = t.events.filter((e) => e.eventType === 'agent.permission.requested').at(-1)!;
+    expect((req.payload as { awaitingRemote?: boolean }).awaitingRemote).toBeUndefined();
   });
 });

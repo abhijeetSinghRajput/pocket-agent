@@ -430,6 +430,25 @@ export function buildCli(): Command {
     );
     await reloadAgent();
   };
+  const attachments = program
+    .command('attachments')
+    .description('Show photos and PDFs you attach to prompts in your editor in the Pocket Agent chat');
+  const setAttachments = async (on: boolean) => {
+    const home = agentHome();
+    await savePolicy(home, { ...(await loadPolicy(home)), shareAttachments: on });
+    console.log(
+      on
+        ? 'On. Photos and PDFs you attach to a prompt in your editor are uploaded to your Pocket Agent account so the chat can show them. Files are deleted after 30 days; a small preview stays. Files sent to you from the app are always downloaded to this PC.'
+        : 'Off. Files you attach in your editor stay on this PC.',
+    );
+    await reloadAgent();
+  };
+  attachments.command('enable').action(() => setAttachments(true));
+  attachments.command('disable').action(() => setAttachments(false));
+  attachments.command('status').action(async () => {
+    console.log((await loadPolicy(agentHome())).shareAttachments ? 'Enabled' : 'Disabled (default)');
+  });
+
   instructions.command('enable').action(() => setInstructions(true));
   instructions.command('disable').action(() => setInstructions(false));
   instructions.command('status').action(async () => {

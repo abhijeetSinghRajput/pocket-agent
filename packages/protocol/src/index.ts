@@ -1,5 +1,6 @@
 export * from './api.js';
 export * from './approvals.js';
+export * from './attachments.js';
 export * from './capabilities.js';
 export * from './commands.js';
 export * from './enums.js';

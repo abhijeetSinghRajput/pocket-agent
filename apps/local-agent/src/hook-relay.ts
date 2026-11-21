@@ -5,9 +5,9 @@
 // Rules:
 // - Node built-ins only, so it starts fast (it runs on every tool call).
 // - Always exits 0. It prints something only when the agent returns hook output — which the agent
-//   does only for Stop, to deliver an instruction the PC owner allowed. Permission hooks are never
-//   answered, so Claude Code's own permission prompt is unchanged — and if the agent is down,
-//   nothing is printed at all.
+//   does only with the PC owner's consent: to deliver an instruction (PostToolUse while Claude works,
+//   Stop at the end of a turn) or a permission decision made in Pocket Agent (Away mode). Otherwise
+//   Claude Code's own behaviour is unchanged — and if the agent is down, nothing is printed at all.
 // - Managed sessions (started by Pocket Agent) are skipped: they report through the SDK instead.
 import { readFileSync } from 'node:fs';
 import { request } from 'node:http';

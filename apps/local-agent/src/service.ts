@@ -12,6 +12,11 @@ import { claudeConfigDir, defaultSettingsPath, hooksStatus } from './providers/c
 import { ObservedInstructions } from './providers/claude-code/instructions.js';
 import { ManagedSessions, type QueryFn } from './providers/claude-code/managed.js';
 import { IdleWake } from './providers/claude-code/wake.js';
+import { listModels } from './providers/claude-code/models.js';
+import { AttachmentClient, safeFileName } from './attachments.js';
+import type { ClaudeUsage, ModelOption } from '@pocket-agent/protocol';
+import { readUsage } from './providers/claude-code/usage.js';
+import os from 'node:os';
 import { SessionRegistry, type SessionEventOut } from './sessions/registry.js';
 
 export interface ServiceOptions {
@@ -27,6 +32,8 @@ export interface ServiceOptions {
   claudeDir?: string;
   discoveryIntervalMs?: number;
   heartbeatMs?: number;
+  /** Read Claude Code's model list after start (default true; tests turn it off). */
+  loadModels?: boolean;
 }
 
 /**
@@ -49,12 +56,18 @@ export class AgentService {
     projects: [],
     observedInstructions: false,
     wakeIdle: false,
+    shareAttachments: false,
     remoteApproval: false,
   };
   /** Set from the dashboard (config.update). Only matters for sessions the user started. */
   private awayMode = false;
+  /** Models Claude Code offers on this PC (read once after start). */
+  private models: ModelOption[] = [];
   readonly approvals = new ApprovalBroker();
   private expiryTimer: NodeJS.Timeout | null = null;
+  private usageTimer: NodeJS.Timeout | null = null;
+  /** Claude plan usage of the account on this PC (null = not available). */
+  private usage: ClaudeUsage | null = null;
 
   constructor(private readonly opts: ServiceOptions) {
     this.registry = new SessionRegistry((e) => this.enqueue(e));
@@ -70,7 +83,25 @@ export class AgentService {
       broker: this.approvals,
       enabled: () => this.policy.remoteApproval,
     });
+    const attachments = new AttachmentClient({
+      apiUrl: opts.apiUrl,
+      deviceId: opts.deviceId,
+      secret: opts.secret,
+      home: opts.home,
+    });
     this.hooks = new ClaudeHookHandler(this.registry, this.managed.isManaged, {
+      shareFilesAllowed: () => this.policy.shareAttachments,
+      shareFiles: async (files) => {
+        const refs = [];
+        for (const [i, f] of files.entries()) {
+          try {
+            refs.push(await attachments.upload(f, safeFileName(`attachment-${i + 1}`, f.mime)));
+          } catch (err) {
+            opts.log('warn', `could not share an attached file: ${(err as Error).message}`);
+          }
+        }
+        return refs;
+      },
       instructions: this.observed,
       instructionsAllowed: () => this.policy.observedInstructions,
       wakeIdleAllowed: () => this.policy.observedInstructions && this.policy.wakeIdle,
@@ -92,6 +123,8 @@ export class AgentService {
       managed: this.managed,
       observed: this.observed,
       wake: this.wake,
+      models: () => this.models,
+      attachments,
       policy: () => this.policy,
       ack,
       log: opts.log,
@@ -136,7 +169,7 @@ export class AgentService {
         const applied = this.approvals.decide(
           p.requestId,
           p.decision === 'allow'
-            ? { behavior: 'allow' }
+            ? { behavior: 'allow', ...(p.answers ? { answers: p.answers } : {}) }
             : { behavior: 'deny', message: p.message ?? 'Denied in Pocket Agent' },
         );
         // "stale": nothing was waiting any more (answered on the PC / timed out) — never applied.
@@ -160,7 +193,26 @@ export class AgentService {
       projects: this.policy.projects.slice(0, 50),
       observedInstructions: this.policy.observedInstructions,
       remoteApproval: this.policy.remoteApproval,
+      models: this.models,
+      usage: this.usage,
     });
+  }
+
+  /** Reads the Claude plan usage and tells the backend when it changed (the app's profile page). */
+  private async loadUsage(): Promise<void> {
+    const usage = await readUsage(this.opts.query, os.homedir());
+    const same =
+      JSON.stringify({ ...usage, updatedAt: 0 }) === JSON.stringify({ ...this.usage, updatedAt: 0 });
+    this.usage = usage;
+    if (!same) this.link.send(this.settingsEvent());
+  }
+
+  /** Asks Claude Code which models it offers, then tells the backend (the app's model picker). */
+  private async loadModels(): Promise<void> {
+    const models = await listModels(this.opts.query, os.homedir());
+    if (!models.length) return this.opts.log('warn', 'Could not read the model list from Claude Code');
+    this.models = models;
+    this.link.send(this.settingsEvent());
   }
 
   /** After (re)connecting: replay everything unacknowledged, in order, then policy and state. */
@@ -188,6 +240,10 @@ export class AgentService {
     this.discovery.start();
     this.expiryTimer = setInterval(() => this.observed.expire(), 5_000);
     this.link.start();
+    if (this.opts.loadModels !== false) {
+      void this.loadModels().then(() => this.loadUsage());
+      this.usageTimer = setInterval(() => void this.loadUsage(), 5 * 60_000);
+    }
   }
 
   get hooksAreInstalled(): boolean {
@@ -202,6 +258,7 @@ export class AgentService {
   async stop(): Promise<void> {
     this.discovery.stop();
     if (this.expiryTimer) clearInterval(this.expiryTimer);
+    if (this.usageTimer) clearInterval(this.usageTimer);
     this.approvals.cancelAll();
     this.wake.stopAll();
     await this.managed.stopAll();

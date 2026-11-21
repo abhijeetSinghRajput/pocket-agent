@@ -30,10 +30,21 @@ export type ApprovalListResponse = z.infer<typeof ApprovalListResponse>;
 export const ApprovalResponse = z.object({ approval: ApprovalDto });
 export type ApprovalResponse = z.infer<typeof ApprovalResponse>;
 
+/**
+ * The user's answers to Claude's question (AskUserQuestion only): question text → the chosen option
+ * label(s), comma-separated for multi-select, or the user's own words.
+ */
+export const QuestionAnswers = z
+  .record(z.string().min(1).max(500), z.string().trim().min(1).max(500))
+  .refine((r) => Object.keys(r).length >= 1 && Object.keys(r).length <= 4, 'Answer 1 to 4 questions');
+export type QuestionAnswers = z.infer<typeof QuestionAnswers>;
+
 export const DecideApprovalRequest = z.object({
   decision: z.enum(['allow', 'deny']),
   /** Shown to Claude when denying. */
   message: z.string().trim().max(500).optional(),
+  /** Only with `allow` on an AskUserQuestion request: the answers Claude receives. */
+  answers: QuestionAnswers.optional(),
 });
 export type DecideApprovalRequest = z.infer<typeof DecideApprovalRequest>;
 

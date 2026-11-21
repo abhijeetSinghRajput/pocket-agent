@@ -10,36 +10,48 @@ import { IdleWake } from '../src/providers/claude-code/wake.js';
 import { SessionRegistry, type SessionEventOut } from '../src/sessions/registry.js';
 
 type Exec = Extract<BackendToAgent, { eventType: 'command.execute' }>;
-const instruction = (text: string, sessionId = 'obs') =>
+const instruction = (text: string, sessionId = 'obs', model?: string) =>
   createEvent(
     'command.execute',
     {
       commandId: crypto.randomUUID(),
       commandType: 'instruction',
       text,
+      ...(model ? { model } : {}),
       expiresAt: new Date(Date.now() + 60_000).toISOString(),
     },
+    { sessionId },
+  ) as unknown as Exec;
+const control = (commandType: 'interrupt' | 'session.stop', sessionId = 'obs') =>
+  createEvent(
+    'command.execute',
+    { commandId: crypto.randomUUID(), commandType, expiresAt: new Date(Date.now() + 60_000).toISOString() },
     { sessionId },
   ) as unknown as Exec;
 
 /** Fake SDK: answers each resumed turn with a text reply, optionally held until released. */
 function fakeSdk() {
   const calls: Array<{ prompt: string; options: Options }> = [];
+  const contexts: string[] = [];
   const releases: Array<() => void> = [];
   let hold = false;
   const fn: QueryFn = (args) =>
     (async function* (): AsyncGenerator<SDKMessage> {
       for await (const m of args.prompt as AsyncIterable<SDKUserMessage>) {
-        calls.push({ prompt: m.message.content as string, options: args.options });
+        // The first woken turn of a session starts with the app context; the user's text is last.
+        const content = m.message.content as string | Array<{ type: string; text?: string }>;
+        const text = typeof content === 'string' ? content : (content.at(-1)?.text ?? '');
+        if (typeof content !== 'string') contexts.push(content[0]?.text ?? '');
+        calls.push({ prompt: text, options: args.options });
         if (hold) await new Promise<void>((r) => releases.push(r));
         yield {
           type: 'assistant',
-          message: { content: [{ type: 'text', text: `Did: ${m.message.content as string}` }] },
+          message: { content: [{ type: 'text', text: `Did: ${text}` }] },
         } as SDKMessage;
         yield { type: 'result', subtype: 'success' } as SDKMessage;
       }
     })() as unknown as Query;
-  return { fn, calls, holdTurns: (v: boolean) => (hold = v), release: () => releases.shift()?.() };
+  return { fn, calls, contexts, holdTurns: (v: boolean) => (hold = v), release: () => releases.shift()?.() };
 }
 
 function setup(policy: Partial<Policy> = {}) {
@@ -56,14 +68,18 @@ function setup(policy: Partial<Policy> = {}) {
     projects: [],
     observedInstructions: true,
     wakeIdle: true,
+    shareAttachments: false,
     remoteApproval: false,
     ...policy,
   };
+  const killed: number[] = [];
   const router = new CommandRouter({
     registry,
     managed,
     observed,
     wake,
+    models: () => [{ id: 'opus' }, { id: 'haiku' }],
+    kill: (pid) => void killed.push(pid),
     policy: () => full,
     ack: ack as never,
   });
@@ -86,7 +102,7 @@ function setup(policy: Partial<Policy> = {}) {
     events
       .filter((e) => e.eventType === 'agent.output')
       .map((e) => (e.payload as { role: string; text: string }).text);
-  return { registry, sdk, router, hooks, wake, observed, acks, statuses, tick, outputs };
+  return { registry, sdk, router, hooks, wake, observed, acks, statuses, tick, outputs, killed };
 }
 
 describe('waking an idle session from Pocket Agent', () => {
@@ -106,6 +122,20 @@ describe('waking an idle session from Pocket Agent', () => {
     expect(h.statuses(c.payload.commandId)).toEqual(['Delivered', 'Executing', 'Completed']);
     expect(h.outputs()).toEqual(['Update the changelog', 'Did: Update the changelog']);
     expect(h.registry.get('obs')!.status).toBe('WaitingForInput');
+  });
+
+  it('tells Claude once per session that the user is on the app, away from the PC', async () => {
+    const h = setup();
+    await h.router.handle(instruction('first'));
+    await h.tick();
+    await h.router.handle(instruction('second'));
+    await h.tick();
+    expect(h.sdk.calls.map((c) => c.prompt)).toEqual(['first', 'second']);
+    expect(h.sdk.contexts).toHaveLength(1);
+    expect(h.sdk.contexts[0]).toContain('Pocket Agent');
+    expect(h.sdk.contexts[0]).toContain("can't see this PC");
+    // The chat shows what the user wrote, never the context.
+    expect(h.outputs().join(' ')).not.toContain('pocket-agent-context');
   });
 
   it('runs instructions one after another while a woken turn is busy', async () => {
@@ -185,6 +215,174 @@ describe('waking an idle session from Pocket Agent', () => {
     await h.tick();
     expect(h.sdk.calls).toHaveLength(0);
     expect(h.observed.pending('obs')).toBe(1);
+  });
+
+  it('a busy session gets the message at its next tool step, in the same turn', async () => {
+    const h = setup({ wakeIdle: false });
+    const base = { session_id: 'obs', cwd: 'C:\\work\\app' };
+    h.hooks.handle({ ...base, hook_event_name: 'UserPromptSubmit', prompt: 'refactor it' });
+    const a = instruction('Also add tests');
+    const b = instruction('And update the README');
+    await h.router.handle(a);
+    await h.router.handle(b);
+    expect(h.statuses(a.payload.commandId)).toEqual(['Delivered', 'Accepted']);
+
+    // A subagent's tool call is not the conversation: nothing is delivered there.
+    const sub = h.hooks.handle({
+      ...base,
+      hook_event_name: 'PostToolUse',
+      tool_name: 'Read',
+      tool_use_id: 't0',
+      tool_input: {},
+      agent_id: 'agent-1',
+    });
+    expect(sub).toBeUndefined();
+
+    const out = h.hooks.handle({
+      ...base,
+      hook_event_name: 'PostToolUse',
+      tool_name: 'Bash',
+      tool_use_id: 't1',
+      tool_input: { command: 'ls' },
+    }) as { hookSpecificOutput: { hookEventName: string; additionalContext: string } };
+    expect(out.hookSpecificOutput.hookEventName).toBe('PostToolUse');
+    expect(out.hookSpecificOutput.additionalContext).toContain('1. Also add tests');
+    expect(out.hookSpecificOutput.additionalContext).toContain('2. And update the README');
+    expect(h.statuses(b.payload.commandId)).toEqual(['Delivered', 'Accepted', 'Executing']);
+    expect(h.outputs()).toEqual(['refactor it', 'Also add tests', 'And update the README']);
+    expect(h.observed.pending('obs')).toBe(0);
+
+    // Given once; the turn's end completes them and doesn't start another turn for them.
+    expect(
+      h.hooks.handle({
+        ...base,
+        hook_event_name: 'PostToolUse',
+        tool_name: 'Bash',
+        tool_use_id: 't2',
+        tool_input: { command: 'pwd' },
+      }),
+    ).toBeUndefined();
+    expect(h.hooks.handle({ ...base, hook_event_name: 'Stop' })).toBeUndefined();
+    expect(h.statuses(a.payload.commandId)).toEqual(['Delivered', 'Accepted', 'Executing', 'Completed']);
+    expect(h.statuses(b.payload.commandId)).toEqual(['Delivered', 'Accepted', 'Executing', 'Completed']);
+  });
+
+  it('without the instructions opt-in, tool steps never carry anything', async () => {
+    const h = setup({ observedInstructions: false, wakeIdle: false });
+    const base = { session_id: 'obs', cwd: 'C:\\work\\app' };
+    h.hooks.handle({ ...base, hook_event_name: 'UserPromptSubmit', prompt: 'work' });
+    const c = instruction('sneak in');
+    await h.router.handle(c);
+    expect(h.statuses(c.payload.commandId)).toEqual(['Delivered', 'Failed']);
+    expect(
+      h.hooks.handle({
+        ...base,
+        hook_event_name: 'PostToolUse',
+        tool_name: 'Bash',
+        tool_use_id: 't1',
+        tool_input: {},
+      }),
+    ).toBeUndefined();
+  });
+
+  it('runs a woken turn with the chosen model, and refuses a model this PC does not offer', async () => {
+    const h = setup();
+    await h.router.handle(instruction('quick one', 'obs', 'haiku'));
+    await h.tick();
+    expect(h.sdk.calls[0]!.options.model).toBe('haiku');
+
+    const bad = instruction('nope', 'obs', 'made-up-model');
+    await h.router.handle(bad);
+    await h.tick();
+    expect(h.acks.filter((a) => a.id === bad.payload.commandId).at(-1)).toMatchObject({
+      status: 'Failed',
+      extra: { error: 'model_not_available' },
+    });
+    expect(h.sdk.calls).toHaveLength(1);
+  });
+
+  it('stops a working session at its next tool step', async () => {
+    const h = setup({ wakeIdle: false });
+    const base = { session_id: 'obs', cwd: 'C:\\work\\app' };
+    h.hooks.handle({ ...base, hook_event_name: 'UserPromptSubmit', prompt: 'long job' });
+    const stop = control('interrupt');
+    await h.router.handle(stop);
+    expect(h.statuses(stop.payload.commandId)).toEqual(['Delivered', 'Accepted']);
+
+    const out = h.hooks.handle({
+      ...base,
+      hook_event_name: 'PreToolUse',
+      tool_name: 'Bash',
+      tool_use_id: 't1',
+      tool_input: { command: 'rm -rf build' },
+    });
+    expect(out).toMatchObject({ continue: false });
+    expect(h.statuses(stop.payload.commandId)).toEqual(['Delivered', 'Accepted', 'Completed']);
+    expect(h.registry.get('obs')!.status).toBe('WaitingForInput');
+    // Only once: the next turn runs normally.
+    h.hooks.handle({ ...base, hook_event_name: 'UserPromptSubmit', prompt: 'again' });
+    expect(
+      h.hooks.handle({
+        ...base,
+        hook_event_name: 'PreToolUse',
+        tool_name: 'Bash',
+        tool_use_id: 't2',
+        tool_input: {},
+      }),
+    ).toBeUndefined();
+  });
+
+  it('interrupting an idle session is a no-op; a woken turn stops at once', async () => {
+    const h = setup();
+    const idle = control('interrupt');
+    await h.router.handle(idle);
+    expect(h.statuses(idle.payload.commandId)).toEqual(['Delivered', 'Completed']);
+
+    h.sdk.holdTurns(true);
+    const c = instruction('long remote job');
+    await h.router.handle(c);
+    await h.tick();
+    const stop = control('interrupt');
+    await h.router.handle(stop);
+    expect(h.statuses(stop.payload.commandId)).toEqual(['Delivered', 'Completed']);
+    h.sdk.release();
+    await h.tick();
+    expect(h.acks.filter((a) => a.id === c.payload.commandId).at(-1)).toMatchObject({
+      status: 'Failed',
+      extra: { error: 'interrupted' },
+    });
+    expect(h.registry.get('obs')!.status).toBe('WaitingForInput');
+  });
+
+  it('ends a session the user started by closing its Claude Code process', async () => {
+    const h = setup();
+    const noPid = control('session.stop');
+    await h.router.handle(noPid);
+    expect(h.acks.at(-1)).toMatchObject({ status: 'Failed', extra: { error: 'process_not_found' } });
+
+    const t = h.registry.get('obs')!;
+    h.registry.announce({ ...t }, 'discovery', { pid: 4242 });
+    const end = control('session.stop');
+    await h.router.handle(end);
+    expect(h.killed).toEqual([4242]);
+    expect(h.statuses(end.payload.commandId)).toEqual(['Delivered', 'Completed']);
+    expect(h.registry.get('obs')).toBeUndefined();
+  });
+
+  it('never stops or ends a session without the PC owner’s opt-in', async () => {
+    const h = setup({ observedInstructions: false, wakeIdle: false });
+    const t = h.registry.get('obs')!;
+    h.registry.announce({ ...t }, 'discovery', { pid: 4242 });
+    for (const kind of ['interrupt', 'session.stop'] as const) {
+      await h.router.handle(control(kind));
+      expect(h.acks.at(-1)).toMatchObject({
+        status: 'Failed',
+        extra: { error: 'instructions_disabled_on_pc' },
+      });
+    }
+    expect(h.killed).toEqual([]);
+    expect(observedCapabilities(false).interrupt).toBe(false);
+    expect(observedCapabilities(true).interrupt).toBe(true);
   });
 
   it('advertises "instruct any time" only with both opt-ins', () => {

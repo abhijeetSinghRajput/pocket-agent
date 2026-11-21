@@ -1,6 +1,8 @@
 import {
   createEvent,
   PAIRING_CODE_TTL_MS,
+  ClaudeUsage,
+  ModelOption,
   PairDeviceRequest,
   type DeviceDto,
   type PairingCodeResponse,
@@ -36,6 +38,10 @@ export function toDeviceDto(d: Device): DeviceDto {
           .map((p) => ({ name: p.name as string, path: p.path as string }))
       : [],
     observedInstructions: d.observedInstructions,
+    models: z.array(ModelOption).catch([]).parse(d.models),
+    usage: ClaudeUsage.nullable()
+      .catch(null)
+      .parse(d.usage ?? null),
     awayMode: d.awayMode,
   };
 }

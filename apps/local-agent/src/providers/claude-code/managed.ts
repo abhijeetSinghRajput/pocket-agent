@@ -1,5 +1,8 @@
 import { APPROVAL_WAIT_MS, CLAUDE_CODE_CAPABILITIES } from '@pocket-agent/protocol';
 import type { ApprovalBroker } from '../../approvals.js';
+import { answeredQuestionInput } from '../../approvals.js';
+import { appSystemPrompt } from './app-context.js';
+import { messageContent, type LocalFile } from '../../attachments.js';
 import type { CanUseTool, Options, Query, SDKMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import { randomUUID } from 'node:crypto';
 import { stat } from 'node:fs/promises';
@@ -31,6 +34,10 @@ interface Instruction {
   /** The command it came from (absent for local `pocket-agent run`). */
   commandId?: string;
   expiresAt?: number;
+  /** Switch the session to this model before running the instruction. */
+  model?: string;
+  /** Files sent with the message. */
+  files?: LocalFile[];
 }
 
 interface Managed {
@@ -95,10 +102,11 @@ export function approvalGate(
     }
     registry.event(id, 'agent.permission.resolved', { requestId: toolUseID, outcome: 'remote' });
     registry.setStatus(id, 'Running');
-    // Exactly what Claude asked for — the input is passed back unchanged, never modified.
-    return decision.behavior === 'allow'
-      ? { behavior: 'allow', updatedInput: toolInput }
-      : { behavior: 'deny', message: decision.message };
+    if (decision.behavior !== 'allow') return { behavior: 'deny', message: decision.message };
+    // Exactly what Claude asked for: the input is passed back unchanged, never modified. The one
+    // exception is Claude's own question to the user, which gets the user's answers added.
+    const answered = answeredQuestionInput(toolName, toolInput, decision.answers);
+    return { behavior: 'allow', updatedInput: answered ?? toolInput };
   };
 }
 
@@ -140,9 +148,16 @@ export function reportSdkMessage(
     if (block.is_error) {
       registry.event(id, 'agent.tool.failed', { ...base, error: truncate(text || 'Tool failed', 2000) });
     } else {
+      // The user's answers to Claude's question come as the structured result (shown in the chat).
+      const structured = (msg as { tool_use_result?: unknown }).tool_use_result;
       registry.event(id, 'agent.tool.completed', {
         ...base,
-        output: summarizeToolOutput(toolName, { stdout: text }),
+        output: summarizeToolOutput(
+          toolName,
+          toolName === 'AskUserQuestion' && structured && typeof structured === 'object'
+            ? structured
+            : { stdout: text },
+        ),
       });
     }
   }
@@ -229,6 +244,8 @@ export class ManagedSessions {
         permissionMode: 'default',
         abortController: m.abort,
         ...(input.model ? { model: input.model } : {}),
+        // Started from the app: Claude is told the user is on their phone, away from this PC.
+        ...(input.commandId ? { systemPrompt: appSystemPrompt } : {}),
         // Lets the hook relay skip this session (its events come from this stream).
         env: { ...process.env, POCKET_AGENT_MANAGED_SESSION: '1' },
       },
@@ -246,7 +263,11 @@ export class ManagedSessions {
   }
 
   /** Queues an instruction; it runs as soon as Claude isn't busy with another one. */
-  send(id: string, text: string, command?: { commandId: string; expiresAt: number }): boolean {
+  send(
+    id: string,
+    text: string,
+    command?: { commandId: string; expiresAt: number; model?: string; files?: LocalFile[] },
+  ): boolean {
     const m = this.sessions.get(id);
     if (!m || m.closed) return false;
     this.enqueue(id, m, { text, ...command }, true);
@@ -300,7 +321,18 @@ export class ManagedSessions {
       if (item.commandId && item.expiresAt !== undefined) this.ack(item.commandId, 'Executing');
       this.registry.event(id, 'agent.output', { role: 'user', text: truncate(item.text) });
       this.registry.setStatus(id, 'Running', truncate(item.text.trim().split(/\r?\n/)[0] ?? '', 200));
-      yield { type: 'user', message: { role: 'user', content: item.text }, parent_tool_use_id: null };
+      if (item.model) {
+        // Applies to this turn and the ones after it, like the model picker in the editor.
+        await m.query?.setModel(item.model).catch((err: Error) => {
+          this.log('warn', `could not switch ${id} to ${item.model}: ${err.message}`);
+          this.registry.event(id, 'agent.error', { message: `Could not switch to ${item.model}` });
+        });
+      }
+      yield {
+        type: 'user',
+        message: { role: 'user', content: messageContent(item.text, item.files) },
+        parent_tool_use_id: null,
+      };
     }
   }
 

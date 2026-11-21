@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ClaudeUsage, ModelOption } from './events.js';
 import { DeviceStatus, Platform } from './enums.js';
 
 // ── Errors ───────────────────────────────────────────────────────────────────
@@ -80,6 +81,10 @@ export const DeviceDto = z.object({
   projects: z.array(z.object({ name: z.string(), path: z.string() })),
   /** PC-side switch: instructions to sessions the user started themselves. */
   observedInstructions: z.boolean(),
+  /** Models this PC's Claude Code offers (empty until the PC reports them). */
+  models: z.array(ModelOption).default([]),
+  /** Claude plan usage of the account on this PC, if it reported one. */
+  usage: ClaudeUsage.nullable().default(null),
   /** Away mode (set from the dashboard or the PC). */
   awayMode: z.boolean(),
 });

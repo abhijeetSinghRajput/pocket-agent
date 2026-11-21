@@ -15,6 +15,8 @@ import { offlineNotifierJob } from './notifications/triggers.js';
 import { createBus } from './realtime/bus.js';
 import { clientGateway } from './realtime/client-gateway.js';
 import { approvalRoutes } from './routes/approvals.js';
+import { attachmentRoutes } from './routes/attachments.js';
+import { cloudinaryStorage, type AttachmentStorage } from './attachments/storage.js';
 import { authRoutes } from './routes/auth.js';
 import { firebaseGoogleVerifier, type GoogleVerifier } from './auth/firebase.js';
 import { commandRoutes } from './routes/commands.js';
@@ -34,6 +36,8 @@ export interface AppDeps {
   ctx?: AppContext & GatewayOptions & { offlineCheckMs?: number };
   /** Web push sender (FCM). Defaults to none: notifications are recorded but not pushed. */
   push?: PushSender;
+  /** Where attachments are stored. Defaults to Cloudinary when CLOUDINARY_URL is set, else off. */
+  storage?: AttachmentStorage | null;
   /** Verifies "Sign in with Google" tokens. Defaults to Firebase Auth when FIREBASE_PROJECT_ID is set. */
   google?: GoogleVerifier | null;
   /**
@@ -87,6 +91,12 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
         : ctx.env.FIREBASE_PROJECT_ID
           ? firebaseGoogleVerifier(ctx.env.FIREBASE_PROJECT_ID)
           : null;
+    const storage =
+      deps.storage !== undefined
+        ? deps.storage
+        : ctx.env.CLOUDINARY_URL
+          ? cloudinaryStorage(ctx.env.CLOUDINARY_URL)
+          : null;
     const services = { ...ctx, bus: createBus(ctx, app.log), push: deps.push ?? NO_PUSH, google };
     app.addHook('onClose', async () => services.bus.close());
     await app.register(websocket, { options: { maxPayload: MAX_FRAME_BYTES } });
@@ -101,6 +111,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     await app.register(approvalRoutes, services);
     await app.register(commandExpiryJob, services);
     await app.register(notificationRoutes, services);
+    await app.register(attachmentRoutes, { ...ctx, storage });
     await app.register(offlineNotifierJob, services);
   }
 

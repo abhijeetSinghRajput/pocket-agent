@@ -97,7 +97,14 @@ export async function closeApprovalFromPc(
 
 export class DecisionError extends Error {
   constructor(
-    readonly code: 'not_found' | 'already_decided' | 'expired' | 'not_pending' | 'device_offline',
+    readonly code:
+      | 'not_found'
+      | 'already_decided'
+      | 'expired'
+      | 'not_pending'
+      | 'device_offline'
+      | 'answers_not_supported'
+      | 'invalid_answers',
     message: string,
     readonly status = 409,
   ) {
@@ -110,9 +117,30 @@ export class DecisionError extends Error {
  * sends it to the PC. The approval only becomes Approved/Denied when the PC confirms it applied
  * the decision; a decision that arrives too late becomes Cancelled — never "Approved".
  */
+/** The question texts in an AskUserQuestion request's stored input summary. */
+function askedQuestions(inputSummary: string): string[] {
+  try {
+    const q = (JSON.parse(inputSummary) as { questions?: unknown }).questions;
+    if (!Array.isArray(q)) return [];
+    return q
+      .map((x) => (x && typeof x === 'object' ? (x as { question?: unknown }).question : undefined))
+      .filter((x): x is string => typeof x === 'string' && x.length > 0);
+  } catch {
+    return [];
+  }
+}
+
 export async function decideApproval(
   ctx: Services,
-  input: { userId: string; approvalId: string; decision: 'allow' | 'deny'; message?: string; ip?: string },
+  input: {
+    userId: string;
+    approvalId: string;
+    decision: 'allow' | 'deny';
+    message?: string;
+    /** Answers to Claude's question; only accepted for an AskUserQuestion request. */
+    answers?: Record<string, string>;
+    ip?: string;
+  },
 ): Promise<ApprovalRow> {
   const a = await ctx.prisma.approval.findFirst({
     where: { id: input.approvalId, userId: input.userId },
@@ -122,6 +150,18 @@ export async function decideApproval(
   if (a.decision) throw new DecisionError('already_decided', 'This request was already answered.');
   if (a.status !== 'Pending')
     throw new DecisionError('not_pending', 'This request is no longer waiting for a decision.');
+
+  // Answers exist for one tool only, and only for the questions Claude actually asked.
+  const answers = input.decision === 'allow' ? input.answers : undefined;
+  if (answers) {
+    if (a.toolName !== 'AskUserQuestion')
+      throw new DecisionError('answers_not_supported', 'Only a question from Claude can be answered.', 400);
+    const stored = (a.requestPayload ?? {}) as { input?: unknown };
+    const asked = askedQuestions(typeof stored.input === 'string' ? stored.input : '{}');
+    const given = Object.keys(answers);
+    if (!asked.length || given.length !== asked.length || !given.every((q) => asked.includes(q)))
+      throw new DecisionError('invalid_answers', 'Answer every question Claude asked.', 400);
+  }
 
   const now = ctx.now();
   if (a.expiresAt <= now) {
@@ -161,6 +201,8 @@ export async function decideApproval(
     metadata: {
       decision: input.decision,
       toolName: a.toolName,
+      // That the question was answered here, not what was answered.
+      ...(answers ? { answered: Object.keys(answers).length } : {}),
       sessionId: a.sessionId,
       deviceId: a.deviceId,
     },
@@ -175,6 +217,7 @@ export async function decideApproval(
         requestId: a.requestId,
         decision: input.decision,
         ...(message ? { message } : {}),
+        ...(answers ? { answers } : {}),
       },
       { deviceId: a.deviceId, sessionId: a.session.externalSessionId },
     ),

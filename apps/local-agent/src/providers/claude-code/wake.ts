@@ -1,5 +1,7 @@
 import type { SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import { truncate, type SessionRegistry } from '../../sessions/registry.js';
+import { messageContent, type LocalFile } from '../../attachments.js';
+import { APP_CONTEXT } from './app-context.js';
 import type { CommandAck } from './instructions.js';
 import { approvalGate, reportSdkMessage, type ManagedApprovalOptions, type QueryFn } from './managed.js';
 
@@ -7,11 +9,17 @@ interface Item {
   commandId: string;
   text: string;
   expiresAt: number;
+  /** Model for this turn (the editor's own model is not changed). */
+  model?: string;
+  /** Files sent with the message. */
+  files?: LocalFile[];
 }
 
 interface Running {
   queue: Item[];
   abort: AbortController;
+  /** Stopped from Pocket Agent (as opposed to the session ending). */
+  interrupted: boolean;
 }
 
 /** One exchange that happened outside the PC's own Claude Code window. */
@@ -35,6 +43,8 @@ const MAX_MISSED = 5;
 export class IdleWake {
   private readonly running = new Map<string, Running>();
   private readonly missed = new Map<string, Missed[]>();
+  /** Sessions already told that the user is on the app. */
+  private readonly briefed = new Set<string>();
 
   constructor(
     private readonly registry: SessionRegistry,
@@ -58,7 +68,7 @@ export class IdleWake {
       this.ack(item.commandId, 'Accepted');
       return;
     }
-    const fresh: Running = { queue: [item], abort: new AbortController() };
+    const fresh: Running = { queue: [item], abort: new AbortController(), interrupted: false };
     this.running.set(sessionId, fresh);
     void this.drain(sessionId, cwd, fresh);
   }
@@ -85,9 +95,19 @@ export class IdleWake {
     );
   }
 
+  /** Stops the turn running for this session now, and drops what was queued behind it. */
+  interrupt(sessionId: string): boolean {
+    const r = this.running.get(sessionId);
+    if (!r) return false;
+    r.interrupted = true;
+    r.abort.abort();
+    return true;
+  }
+
   onSessionEnd(sessionId: string): void {
     this.running.get(sessionId)?.abort.abort();
     this.missed.delete(sessionId);
+    this.briefed.delete(sessionId);
   }
 
   stopAll(): void {
@@ -98,27 +118,46 @@ export class IdleWake {
     try {
       for (let item = r.queue.shift(); item; item = r.queue.shift()) {
         if (r.abort.signal.aborted) {
-          this.ack(item.commandId, 'Failed', { error: 'session_ended' });
+          this.ack(item.commandId, 'Failed', { error: r.interrupted ? 'interrupted' : 'session_ended' });
           continue;
         }
         if (item.expiresAt <= this.now()) {
           this.ack(item.commandId, 'Expired');
           continue;
         }
-        await this.turn(sessionId, cwd, item, r.abort);
+        await this.turn(sessionId, cwd, item, r);
       }
     } finally {
       this.running.delete(sessionId);
     }
   }
 
-  private async turn(sessionId: string, cwd: string, item: Item, abort: AbortController): Promise<void> {
+  private async turn(sessionId: string, cwd: string, item: Item, r: Running): Promise<void> {
+    // The session was started in the editor, so its system prompt knows nothing about the app: the
+    // first message we run in it says where the user is. Once per session is enough.
+    const first = !this.briefed.has(sessionId);
+    this.briefed.add(sessionId);
+    const withContext = (content: ReturnType<typeof messageContent>) => {
+      if (!first) return content;
+      const note = {
+        type: 'text',
+        text: `<pocket-agent-context>\n${APP_CONTEXT}\n</pocket-agent-context>`,
+      } as const;
+      return typeof content === 'string'
+        ? [note, { type: 'text', text: content } as const]
+        : [note, ...content];
+    };
+    const abort = r.abort;
     this.ack(item.commandId, 'Executing');
     this.registry.event(sessionId, 'agent.output', { role: 'user', text: truncate(item.text) });
     this.registry.setStatus(sessionId, 'Running', truncate(item.text.trim().split(/\r?\n/)[0] ?? '', 200));
 
     async function* prompt(): AsyncGenerator<SDKUserMessage> {
-      yield { type: 'user', message: { role: 'user', content: item.text }, parent_tool_use_id: null };
+      yield {
+        type: 'user',
+        message: { role: 'user', content: withContext(messageContent(item.text, item.files)) },
+        parent_tool_use_id: null,
+      };
     }
     const toolNames = new Map<string, string>();
     let reply = '';
@@ -133,6 +172,7 @@ export class IdleWake {
           canUseTool: approvalGate(this.registry, sessionId, this.approvals, this.now),
           permissionMode: 'default',
           abortController: abort,
+          ...(item.model ? { model: item.model } : {}),
           // Its hooks would report this turn a second time; the SDK stream already does.
           env: { ...process.env, POCKET_AGENT_MANAGED_SESSION: '1' },
         },
@@ -152,19 +192,28 @@ export class IdleWake {
         }
       }
     } catch (err) {
-      error = abort.signal.aborted ? 'session_ended' : 'session_error';
+      error = r.interrupted ? 'interrupted' : abort.signal.aborted ? 'session_ended' : 'session_error';
       if (!abort.signal.aborted) {
         this.log('error', `waking session ${sessionId} failed: ${(err as Error).message}`);
         this.registry.event(sessionId, 'agent.error', { message: truncate((err as Error).message) });
       }
     }
 
+    if (r.interrupted) {
+      // Stopped from Pocket Agent, however the stream ended.
+      outcome = 'Failed';
+      error = 'interrupted';
+    }
     this.onTurnEnd(sessionId);
     const list = this.missed.get(sessionId) ?? [];
     list.push({ prompt: truncate(item.text, 1000), reply: truncate(reply, 1500) });
     this.missed.set(sessionId, list.slice(-MAX_MISSED));
-    if (!abort.signal.aborted)
+    if (r.interrupted) {
+      this.registry.event(sessionId, 'agent.output', { role: 'system', text: 'Turn interrupted remotely' });
+      this.registry.setStatus(sessionId, 'WaitingForInput');
+    } else if (!abort.signal.aborted) {
       this.registry.setStatus(sessionId, outcome === 'Completed' ? 'WaitingForInput' : 'Failed');
+    }
     this.ack(item.commandId, outcome, outcome === 'Failed' ? { error } : {});
   }
 }

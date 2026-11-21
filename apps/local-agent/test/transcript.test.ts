@@ -3,7 +3,11 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { ClaudeHookHandler } from '../src/providers/claude-code/hooks.js';
-import { TranscriptTail } from '../src/providers/claude-code/transcript.js';
+import {
+  thoughtLabel,
+  TranscriptTail,
+  type TranscriptEntry,
+} from '../src/providers/claude-code/transcript.js';
 import { SessionRegistry, type SessionEventOut } from '../src/sessions/registry.js';
 
 // Lines as Claude Code 2.1 writes them: one content block per line.
@@ -26,6 +30,14 @@ const thinking = () =>
 const toolResult = () =>
   line({ type: 'user', message: { content: [{ type: 'tool_result', content: 'secret' }] } });
 
+const thought = (ms: number, messageId: string) =>
+  line({
+    type: 'assistant',
+    thinkingDurationMs: ms,
+    message: { id: messageId, content: [{ type: 'thinking', thinking: 'private reasoning' }] },
+  });
+const texts = (entries: TranscriptEntry[]) => entries.map((e) => ('text' in e ? e.text : '[files]'));
+
 function file(initial = '') {
   const p = path.join(mkdtempSync(path.join(tmpdir(), 'pa-transcript-')), 's.jsonl');
   writeFileSync(p, initial);
@@ -38,10 +50,26 @@ describe('TranscriptTail', () => {
     const t = new TranscriptTail();
     t.attach('s', p);
     appendFileSync(p, thinking() + text('Checking the build first.') + toolUse() + toolResult());
-    expect(t.read('s')).toEqual(['Checking the build first.']);
+    expect(texts(t.read('s'))).toEqual(['Checking the build first.']);
     appendFileSync(p, text('Sub-agent says hi', { isSidechain: true }) + text('All green.'));
-    expect(t.read('s')).toEqual(['All green.']);
-    expect(t.read('s')).toEqual([]);
+    expect(texts(t.read('s'))).toEqual(['All green.']);
+    expect(texts(t.read('s'))).toEqual([]);
+  });
+
+  it('reports how long Claude thought (once per reply), never the thinking itself', () => {
+    const p = file();
+    const t = new TranscriptTail();
+    t.attach('s', p);
+    // Claude Code writes a reply's thinking over several lines; the first carries the time.
+    appendFileSync(p, thought(2045, 'msg_1') + thought(6, 'msg_1') + text('On it.') + thought(695, 'msg_2'));
+    const out = t.read('s');
+    expect(out).toEqual([
+      { kind: 'thought', text: 'Thought for 2s' },
+      { kind: 'text', text: 'On it.' },
+      { kind: 'thought', text: 'Thought for 1s' },
+    ]);
+    expect(JSON.stringify(out)).not.toContain('private reasoning');
+    expect(thoughtLabel(84_000)).toBe('Thought for 1m 24s');
   });
 
   it('waits for a line to be complete', () => {
@@ -50,9 +78,9 @@ describe('TranscriptTail', () => {
     t.attach('s', p);
     const l = text('Half written');
     appendFileSync(p, l.slice(0, 20));
-    expect(t.read('s')).toEqual([]);
+    expect(texts(t.read('s'))).toEqual([]);
     appendFileSync(p, l.slice(20));
-    expect(t.read('s')).toEqual(['Half written']);
+    expect(texts(t.read('s'))).toEqual(['Half written']);
   });
 
   it('never reports the same text twice between the transcript and Stop', () => {
@@ -60,11 +88,11 @@ describe('TranscriptTail', () => {
     const t = new TranscriptTail();
     t.attach('s', p);
     appendFileSync(p, text('Done.'));
-    expect(t.read('s')).toEqual(['Done.']);
+    expect(texts(t.read('s'))).toEqual(['Done.']);
     expect(t.claim('s', 'Done.')).toBe(false); // Stop's last_assistant_message: already shown
     expect(t.claim('s', 'Another')).toBe(true); // not in the transcript yet: Stop reports it…
     appendFileSync(p, text('Another'));
-    expect(t.read('s')).toEqual([]); // …and the transcript line isn't repeated
+    expect(texts(t.read('s'))).toEqual([]); // …and the transcript line isn't repeated
   });
 
   it('skips a turn Pocket Agent already reported itself', () => {
@@ -74,7 +102,7 @@ describe('TranscriptTail', () => {
     appendFileSync(p, text('From the woken turn'));
     t.skipToEnd('s');
     appendFileSync(p, text('Back in the editor'));
-    expect(t.read('s')).toEqual(['Back in the editor']);
+    expect(texts(t.read('s'))).toEqual(['Back in the editor']);
   });
 });
 

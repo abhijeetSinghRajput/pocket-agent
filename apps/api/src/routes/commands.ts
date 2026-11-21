@@ -3,10 +3,12 @@ import {
   SessionCapabilities,
   SessionControlRequest,
   StartSessionRequest,
+  type AttachmentRef,
   type CommandKind,
 } from '@pocket-agent/protocol';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
+import { markUsed, ownedAttachments } from '../attachments/service.js';
 import { createCommand, toCommandDto, type Services } from '../commands/service.js';
 import { requireTrustedOrigin, requireUser } from '../auth/session.js';
 import { limit } from '../context.js';
@@ -35,7 +37,23 @@ export async function commandRoutes(app: FastifyInstance, ctx: Services): Promis
     return s;
   }
 
-  async function sessionCommand(req: FastifyRequest, reply: FastifyReply, kind: CommandKind, text?: string) {
+  /** The model must be one this PC reported; the PC checks again. */
+  function knownModel(device: { models: unknown }, model: string | undefined): boolean {
+    if (!model) return true;
+    const list = z.array(z.object({ id: z.string() })).safeParse(device.models);
+    return list.success && list.data.some((m) => m.id === model);
+  }
+  const unknownModel = (reply: FastifyReply) =>
+    bad(reply, 'model_not_available', 'That model is not available on this PC.', 400);
+
+  async function sessionCommand(
+    req: FastifyRequest,
+    reply: FastifyReply,
+    kind: CommandKind,
+    text?: string,
+    model?: string,
+    attachmentIds?: string[],
+  ) {
     const s = await ownedSession(req, reply);
     if (!s) return;
     if (s.endedAt) return bad(reply, 'session_ended', 'This session has ended.');
@@ -55,8 +73,18 @@ export async function commandRoutes(app: FastifyInstance, ctx: Services): Promis
       return bad(
         reply,
         'not_supported',
-        'Only sessions started by Pocket Agent can be interrupted or stopped remotely.',
+        s.mode === 'observed'
+          ? 'Stopping sessions you start yourself is turned off on this PC. Run `pocket-agent instructions enable` on the PC to allow it.'
+          : 'This session cannot be stopped remotely.',
       );
+    }
+    if (!knownModel(s.device, model)) return unknownModel(reply);
+    // Only the user's own, fully uploaded files that still exist.
+    let attachments: AttachmentRef[] | undefined;
+    if (attachmentIds?.length) {
+      attachments = await ownedAttachments(ctx, req.user!.id, attachmentIds);
+      if (!attachments)
+        return bad(reply, 'attachment_not_found', 'An attached file is missing. Attach it again.', 400);
     }
     const key = (kind === 'instruction' ? SendInstructionRequest : SessionControlRequest).safeParse(req.body);
     if (!key.success)
@@ -68,8 +96,15 @@ export async function commandRoutes(app: FastifyInstance, ctx: Services): Promis
       kind,
       idempotencyKey: key.data.idempotencyKey,
       ...(text !== undefined ? { text } : {}),
+      ...(model !== undefined ? { model } : {}),
+      ...(attachments ? { attachments } : {}),
       ip: req.ip,
     });
+    if (attachments)
+      await markUsed(
+        ctx,
+        attachments.map((a) => a.id),
+      );
     return reply.code(created ? 201 : 200).send({ command: toCommandDto(command) });
   }
 
@@ -77,7 +112,14 @@ export async function commandRoutes(app: FastifyInstance, ctx: Services): Promis
     const body = SendInstructionRequest.safeParse(req.body);
     if (!body.success)
       return bad(reply, 'invalid_request', body.error.issues[0]?.message ?? 'Invalid request', 400);
-    return sessionCommand(req, reply, 'instruction', body.data.text);
+    return sessionCommand(
+      req,
+      reply,
+      'instruction',
+      body.data.text,
+      body.data.model,
+      body.data.attachmentIds,
+    );
   });
   app.post('/sessions/:id/interrupt', opts, (req, reply) => sessionCommand(req, reply, 'interrupt'));
   app.post('/sessions/:id/stop', opts, (req, reply) => sessionCommand(req, reply, 'session.stop'));
@@ -100,6 +142,7 @@ export async function commandRoutes(app: FastifyInstance, ctx: Services): Promis
         400,
       );
     }
+    if (!knownModel(device, body.data.model)) return unknownModel(reply);
     const { command, created } = await createCommand(ctx, {
       userId: req.user!.id,
       deviceId: device.id,
@@ -108,6 +151,7 @@ export async function commandRoutes(app: FastifyInstance, ctx: Services): Promis
       idempotencyKey: body.data.idempotencyKey,
       text: body.data.text,
       projectPath: body.data.projectPath,
+      ...(body.data.model ? { model: body.data.model } : {}),
       ip: req.ip,
     });
     return reply.code(created ? 201 : 200).send({ command: toCommandDto(command) });

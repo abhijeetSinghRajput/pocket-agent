@@ -66,6 +66,7 @@ function harness(policy: Partial<Policy> = {}) {
     projects: [],
     observedInstructions: false,
     wakeIdle: false,
+    shareAttachments: false,
     remoteApproval: false,
     ...policy,
   };
@@ -82,6 +83,7 @@ describe('PC policy', () => {
       projects: [],
       observedInstructions: false,
       wakeIdle: false,
+      shareAttachments: false,
       remoteApproval: false,
     });
     const { writeFile } = await import('node:fs/promises');
@@ -91,6 +93,7 @@ describe('PC policy', () => {
       projects: [{ name: 'api', path: 'C:\\Work\\API' }],
       observedInstructions: true,
       wakeIdle: false,
+      shareAttachments: false,
       remoteApproval: false,
     });
     expect(await loadPolicy(home)).toMatchObject({ observedInstructions: true });
@@ -101,6 +104,7 @@ describe('PC policy', () => {
       projects: [{ name: 'api', path: 'C:\\Work\\API' }],
       observedInstructions: false,
       wakeIdle: false,
+      shareAttachments: false,
       remoteApproval: false,
     };
     expect(normalizeProjectPath('C:\\Work\\API\\', 'win32')).toBe(
@@ -175,11 +179,11 @@ describe('command router', () => {
     expect(h2.acks.at(-1)).toMatchObject({ status: 'Failed', extra: { error: 'hooks_not_connected' } });
   });
 
-  it('refuses interrupt/stop for sessions it does not manage', async () => {
+  it('refuses interrupt/stop for sessions it does not know', async () => {
     const h = harness();
     const c = cmd({ commandType: 'session.stop' }, 'someone-elses-session');
     await h.router.handle(c);
-    expect(h.acks.at(-1)).toMatchObject({ status: 'Failed', extra: { error: 'not_a_managed_session' } });
+    expect(h.acks.at(-1)).toMatchObject({ status: 'Failed', extra: { error: 'session_not_found' } });
   });
 });
 

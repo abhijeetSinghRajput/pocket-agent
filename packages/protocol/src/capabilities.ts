@@ -14,7 +14,10 @@ export const SessionCapabilities = z.object({
   instructAnytime: z.boolean(),
   /** An instruction can be delivered only after the current turn ends. */
   instructBetweenTurns: z.boolean(),
-  /** The running turn can be interrupted. */
+  /**
+   * The running turn can be stopped, and the session ended. Managed sessions: at once. Sessions the
+   * user started: at Claude's next step (hooks), with the PC owner's opt-in.
+   */
   interrupt: z.boolean(),
 });
 export type SessionCapabilities = z.infer<typeof SessionCapabilities>;

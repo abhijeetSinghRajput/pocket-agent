@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import { QuestionAnswers } from './approvals.js';
+import { AttachmentRefs } from './attachments.js';
 import { SessionCapabilities } from './capabilities.js';
 import { defineEvent } from './envelope.js';
 import {
@@ -86,7 +88,12 @@ export const AgentPermissionResolved = defineEvent(
 );
 export const AgentOutput = defineEvent(
   'agent.output',
-  z.object({ role: z.enum(['assistant', 'user', 'system']), text }),
+  z.object({
+    role: z.enum(['assistant', 'user', 'system']),
+    text,
+    /** Photos/PDFs the user attached to this message on the PC (uploaded by the PC, opt-in). */
+    attachments: AttachmentRefs.optional(),
+  }),
 );
 export const AgentError = defineEvent('agent.error', z.object({ message: text }));
 /**
@@ -107,6 +114,40 @@ export const CommandAck = defineEvent(
     externalSessionId: id.optional(),
   }),
 );
+/** Pattern of a model id or alias (e.g. "opus", "claude-sonnet-5-5"). */
+export const ModelId = z
+  .string()
+  .min(1)
+  .max(100)
+  .regex(/^[A-Za-z0-9][A-Za-z0-9._:[\]-]*$/);
+/** One model the PC can run, as Claude Code describes it. */
+export const ModelOption = z.object({
+  id: ModelId,
+  name: z.string().max(100),
+  description: z.string().max(200).default(''),
+});
+export type ModelOption = z.infer<typeof ModelOption>;
+
+/** One plan limit: how much of it is used, and when it resets. */
+export const UsageWindow = z.object({
+  percent: z.number().min(0).max(1000),
+  resetsAt: z.iso.datetime({ offset: true }).nullable(),
+});
+/**
+ * The Claude plan usage of the account signed in on the PC, as Claude Code's own /usage reports it.
+ * Absent when the PC can't read it (API key sign-in, or an older Claude Code).
+ */
+export const ClaudeUsage = z.object({
+  /** The 5-hour session limit. */
+  session: UsageWindow.nullable(),
+  /** The 7-day limit across all models. */
+  weekly: UsageWindow.nullable(),
+  /** 7-day limits of single models. */
+  models: z.array(UsageWindow.extend({ name: z.string().min(1).max(60) })).max(8),
+  updatedAt: z.iso.datetime({ offset: true }),
+});
+export type ClaudeUsage = z.infer<typeof ClaudeUsage>;
+
 /**
  * PC-side policy, sent after every connect and whenever it changes. The PC enforces it; the
  * backend uses it only to show what is possible.
@@ -120,6 +161,10 @@ export const DeviceSettings = defineEvent(
     observedInstructions: z.boolean(),
     /** Whether permission requests may be decided remotely (PC opt-in, off by default). */
     remoteApproval: z.boolean().default(false),
+    /** Models this PC's Claude Code offers (as it lists them itself). Empty until known. */
+    models: z.array(ModelOption).max(40).default([]),
+    /** Claude plan usage on this PC (refreshed every few minutes). */
+    usage: ClaudeUsage.nullable().optional(),
   }),
 );
 export const ApprovalDecisionAck = defineEvent(
@@ -178,6 +223,10 @@ export const CommandExecute = defineEvent(
       commandId: z.uuid(),
       commandType: z.literal('instruction'),
       text: z.string().min(1).max(INSTRUCTION_MAX),
+      /** Model to run this turn with (only for turns Pocket Agent starts itself). */
+      model: ModelId.optional(),
+      /** Files sent with the message; the PC downloads them from the API. */
+      attachments: AttachmentRefs.optional(),
       expiresAt,
     }),
     z.object({
@@ -185,6 +234,7 @@ export const CommandExecute = defineEvent(
       commandType: z.literal('session.start'),
       projectPath: z.string().max(1024),
       text: z.string().min(1).max(INSTRUCTION_MAX),
+      model: ModelId.optional(),
       expiresAt,
     }),
     z.object({ commandId: z.uuid(), commandType: z.literal('interrupt'), expiresAt }),
@@ -199,6 +249,8 @@ export const ApprovalDecision = defineEvent(
     requestId: id,
     decision: z.enum(['allow', 'deny']),
     message: text.optional(),
+    /** Answers to Claude's question (AskUserQuestion only; the PC ignores it for any other tool). */
+    answers: QuestionAnswers.optional(),
   }),
 );
 export const DeviceRevoke = defineEvent('device.revoke', z.object({ reason: z.string().max(200) }));

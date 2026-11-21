@@ -39,6 +39,14 @@ export const EnvSchema = z.object({
     .string()
     .regex(/^[a-z0-9-]{4,40}$/)
     .optional(),
+  /**
+   * Where photos and PDFs sent with messages are stored: `cloudinary://<key>:<secret>@<cloud>`.
+   * A secret. Optional: without it, attachments are off (messages stay text only).
+   */
+  CLOUDINARY_URL: z
+    .string()
+    .regex(/^cloudinary:\/\/\d+:[A-Za-z0-9_-]+@[a-z0-9-]+$/)
+    .optional(),
   /** Absolute lifetime of a browser login session. */
   SESSION_TTL_DAYS: z.coerce.number().int().min(1).max(90).default(30),
   /** Defaults to true in production. Only set false for plain-http local development. */

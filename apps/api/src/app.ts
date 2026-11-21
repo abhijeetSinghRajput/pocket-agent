@@ -16,6 +16,7 @@ import { createBus } from './realtime/bus.js';
 import { clientGateway } from './realtime/client-gateway.js';
 import { approvalRoutes } from './routes/approvals.js';
 import { authRoutes } from './routes/auth.js';
+import { firebaseGoogleVerifier, type GoogleVerifier } from './auth/firebase.js';
 import { commandRoutes } from './routes/commands.js';
 import { agentRoutes, deviceRoutes } from './routes/devices.js';
 import { healthRoutes, type HealthDeps } from './routes/health.js';
@@ -33,6 +34,8 @@ export interface AppDeps {
   ctx?: AppContext & GatewayOptions & { offlineCheckMs?: number };
   /** Web push sender (FCM). Defaults to none: notifications are recorded but not pushed. */
   push?: PushSender;
+  /** Verifies "Sign in with Google" tokens. Defaults to Firebase Auth when FIREBASE_PROJECT_ID is set. */
+  google?: GoogleVerifier | null;
   /**
    * Test-only escape hatch so functional tests from one IP aren't throttled. Refused outside
    * NODE_ENV=test; dedicated tests run with limits on.
@@ -78,7 +81,13 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
         message: `Too many requests. Try again in ${Math.ceil(c.ttl / 1000)}s.`,
       }),
     });
-    const services = { ...ctx, bus: createBus(ctx, app.log), push: deps.push ?? NO_PUSH };
+    const google =
+      deps.google !== undefined
+        ? deps.google
+        : ctx.env.FIREBASE_PROJECT_ID
+          ? firebaseGoogleVerifier(ctx.env.FIREBASE_PROJECT_ID)
+          : null;
+    const services = { ...ctx, bus: createBus(ctx, app.log), push: deps.push ?? NO_PUSH, google };
     app.addHook('onClose', async () => services.bus.close());
     await app.register(websocket, { options: { maxPayload: MAX_FRAME_BYTES } });
     await app.register(authRoutes, services);

@@ -6,6 +6,7 @@ export type AuditAction =
   | 'user.registered'
   | 'user.login'
   | 'user.login_failed'
+  | 'user.google_linked'
   | 'user.logout'
   | 'device.pairing_code_created'
   | 'device.paired'

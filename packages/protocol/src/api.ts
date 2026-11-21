@@ -25,10 +25,17 @@ export const LoginRequest = z.object({
 });
 export type LoginRequest = z.infer<typeof LoginRequest>;
 
+export const GoogleLoginRequest = z.object({
+  /** Firebase Auth ID token from "Sign in with Google". */
+  idToken: z.string().min(20).max(8192),
+});
+export type GoogleLoginRequest = z.infer<typeof GoogleLoginRequest>;
+
 export const UserDto = z.object({
   id: z.string(),
   name: z.string(),
   email: z.string(),
+  avatarUrl: z.string().nullable().optional(),
   createdAt: z.iso.datetime({ offset: true }),
 });
 export type UserDto = z.infer<typeof UserDto>;

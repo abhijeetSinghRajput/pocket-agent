@@ -14,6 +14,8 @@ interface AuthApi {
   state: AuthState;
   login(input: LoginRequest): Promise<void>;
   register(input: RegisterRequest): Promise<void>;
+  /** Signs in with a Firebase ID token from "Sign in with Google". */
+  loginWithGoogle(idToken: string): Promise<void>;
   logout(): Promise<void>;
   refresh(): Promise<void>;
 }
@@ -53,6 +55,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
       async register(input) {
         const { user } = await apiRequest('/auth/register', MeResponse, { method: 'POST', body: input });
+        setState({ status: 'authenticated', user });
+      },
+      async loginWithGoogle(idToken) {
+        const { user } = await apiRequest('/auth/google', MeResponse, { method: 'POST', body: { idToken } });
         setState({ status: 'authenticated', user });
       },
       async logout() {

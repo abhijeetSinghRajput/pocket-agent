@@ -67,7 +67,12 @@ model User {
   name         String
   /// Stored lower-cased; uniqueness is case-insensitive by construction.
   email        String   @unique
-  passwordHash String
+  /// Null for accounts that only sign in with Google.
+  passwordHash String?
+  /// Firebase Auth user id of the linked Google account.
+  googleUid    String?  @unique
+  /// Google profile photo (https), shown as the avatar.
+  avatarUrl    String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 

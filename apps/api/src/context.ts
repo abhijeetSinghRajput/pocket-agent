@@ -15,6 +15,7 @@ export interface AuthenticatedUser {
   name: string;
   email: string;
   createdAt: Date;
+  avatarUrl: string | null;
   sessionId: string;
 }
 

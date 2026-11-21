@@ -215,6 +215,17 @@ hook it reads the lines appended since the last one and reports each main-thread
 
 ## 4. Identity, pairing and trust
 
+**Signing in.** Email + password (Argon2), or **Sign in with Google through Firebase Authentication** (project
+`pocket-agent27`). Firebase only proves the Google account: the browser gets a Firebase ID token from the Google popup
+(or a full-page redirect when popups are blocked), sends it to `POST /auth/google`, and signs out of Firebase at once.
+The API verifies the token itself (RS256 against Google's `securetoken` certificates, audience/issuer = the project,
+not expired, `sign_in_provider = google.com`, verified email), then starts the usual httpOnly session cookie. The
+Google account (Firebase uid) maps to one user. On first use, an existing account with the same Google-verified email
+is linked (audited as `user.google_linked`), otherwise a new account is created when sign-ups are open. Google-only
+accounts have no password. Config: `FIREBASE_PROJECT_ID` on the API (unset = Google sign-in off), and the existing
+`NEXT_PUBLIC_FIREBASE_*` values (plus optional `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN`) on the web. Every web origin must be
+listed in Firebase Auth → Authorized domains.
+
 1. A logged-in user clicks **Add device**. The API creates a pairing code: 8 characters from the
    Crockford base32 alphabet, valid for 10 minutes, single use, stored as a hash, and rate-limited.
 2. The user runs `pocket-agent pair <code>` on the PC. The agent calls `POST /devices/pair` with the code,

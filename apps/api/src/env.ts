@@ -31,6 +31,14 @@ export const EnvSchema = z.object({
    * the repository; it is a secret.
    */
   FCM_SERVICE_ACCOUNT_FILE: z.string().min(1).optional(),
+  /**
+   * Firebase project whose Auth issues "Sign in with Google" ID tokens. Optional: without it,
+   * Google sign-in is off and only email + password work. Not a secret.
+   */
+  FIREBASE_PROJECT_ID: z
+    .string()
+    .regex(/^[a-z0-9-]{4,40}$/)
+    .optional(),
   /** Absolute lifetime of a browser login session. */
   SESSION_TTL_DAYS: z.coerce.number().int().min(1).max(90).default(30),
   /** Defaults to true in production. Only set false for plain-http local development. */

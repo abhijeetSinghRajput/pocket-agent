@@ -46,8 +46,8 @@ export async function loadUser(ctx: AppContext, req: FastifyRequest): Promise<vo
     include: { user: true },
   });
   if (!session || session.revokedAt || session.expiresAt <= ctx.now()) return;
-  const { id, name, email, createdAt } = session.user;
-  req.user = { id, name, email, createdAt, sessionId: session.id };
+  const { id, name, email, createdAt, avatarUrl } = session.user;
+  req.user = { id, name, email, createdAt, avatarUrl, sessionId: session.id };
 }
 
 /** preHandler: 401 unless a valid browser session is present. */
@@ -71,6 +71,18 @@ export function requireTrustedOrigin(ctx: AppContext) {
   };
 }
 
-export function toUserDto(u: { id: string; name: string; email: string; createdAt: Date }) {
-  return { id: u.id, name: u.name, email: u.email, createdAt: u.createdAt.toISOString() };
+export function toUserDto(u: {
+  id: string;
+  name: string;
+  email: string;
+  createdAt: Date;
+  avatarUrl?: string | null;
+}) {
+  return {
+    id: u.id,
+    name: u.name,
+    email: u.email,
+    avatarUrl: u.avatarUrl ?? null,
+    createdAt: u.createdAt.toISOString(),
+  };
 }

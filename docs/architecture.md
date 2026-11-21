@@ -44,8 +44,9 @@ mechanisms. Pocket Agent models this explicitly, and the UI shows each session's
 | Discovery | Known from creation | `SessionStart` hook; best-effort scan of `~/.claude/sessions/*.json` (undocumented) |
 | Live status, tool events | Yes (SDK message stream) | Yes (hooks) |
 | Remote approve/deny | Yes, via `canUseTool`. No timeout, so the request can wait indefinitely | Yes, via `PermissionRequest` hook (bounded by hook timeout) |
-| Send instruction anytime | **Yes**, as an SDK streaming input message | **At the end of a turn**, through `Stop` → `{"decision":"block","reason":…}`. **While idle**, only with the PC opt-in `instructions wake enable`: the Local Agent resumes the same session through the SDK (`resume: <session id>`) for one turn (see "Waking idle observed sessions") |
-| Interrupt / stop | Yes (`interrupt()`, abort) | No supported mechanism |
+| Send instruction anytime | **Yes**, as an SDK streaming input message | **While Claude works**, at its next tool step, through `PostToolUse` → `additionalContext` (Claude reads it in the same turn); otherwise **at the end of a turn**, through `Stop` → `{"decision":"block","reason":…}`. **While idle**, only with the PC opt-in `instructions wake enable`: the Local Agent resumes the same session through the SDK (`resume: <session id>`) for one turn (see "Waking idle observed sessions") |
+| Interrupt / stop | Yes (`interrupt()`, abort), at once | With the PC opt-in `instructions enable`: **stop** at Claude's next tool step (`PreToolUse`/`PostToolUse` → `{"continue": false}`); **end** by closing the session's Claude Code process (pid from discovery). A turn run by wake is aborted at once |
+| Choose the model | Yes: `model` at start, `setModel()` before a turn | Only for turns Pocket Agent runs itself (wake: `model` for that turn). A turn running in the editor keeps the editor's model |
 | Conversation history | SDK stream | Transcript JSONL (`transcript_path` from hook input) |
 
 **The MVP's "control from phone" path is the managed session.** Observed sessions get monitoring and
@@ -76,6 +77,13 @@ Agent tray). Otherwise the hook returns immediately with no decision, and the lo
    - Pocket Agent never changes `permissionMode`, allow/deny rules or any other Claude Code permission
      setting, and never returns `updatedPermissions` or `updatedInput`. The hook installer adds only
      Pocket Agent hook entries.
+   - **One exception, added at the owner's request (2026-11-21): answering Claude's own question.** When a turn that
+     Pocket Agent runs (a managed session or a woken turn) uses `AskUserQuestion`, the app shows the question with its
+     options and the user's choice is returned to Claude as `updatedInput` = Claude's own questions, unchanged, plus
+     `answers`. It applies to that tool only: the API accepts answers only for an `AskUserQuestion` request and only for
+     the questions asked, and the PC checks both again and otherwise passes the input back untouched. Verified with
+     Claude Code. It does not work through a `PermissionRequest` hook (verified), so a question in a session the user
+     started is never held for Pocket Agent; it is shown in the chat and answered in the editor.
    - Claude Code's own deny/ask rules are still evaluated after a hook says allow, so local policy always wins.
    - If anything fails, the request falls back to the local prompt (interactive) or a deny (headless).
    - Every request, decision, expiry, cancellation and setting change is written to an append-only audit log.
@@ -188,6 +196,8 @@ hook it reads the lines appended since the last one and reports each main-thread
 - Data minimisation is unchanged: only Claude's text blocks leave the PC, as its final reply already did. Thinking, tool
   inputs/results, subagent (sidechain) lines and everything else in the file are ignored; tools still go through the
   hook summaries.
+- Thinking is reported as its duration only ("Thought for 2s", from the line's `thinkingDurationMs`, once per reply), as a
+  system note the chat shows as a step. The thinking text is never read into an event.
 - It starts at the end of the file when it first sees a session (no history replay), reads at most 2 MB per hook, waits
   for incomplete lines, and dedupes by line uuid and against Stop's copy of the last message.
 - Turns run by wake are already reported from the SDK stream; after each one the reader skips to the end of the file.
@@ -272,9 +282,63 @@ Local Agent: check requestId is still waiting locally → answer the hook / reso
    are never queued for a later reconnect, so they can't run as a surprise.
 3. The Local Agent dedupes on `commandId`, then routes the command:
    - managed session → push into the SDK inbox → `Accepted` → `Executing` → `Completed` or `Failed` on the result message
-   - observed session → queue for the next `Stop`. The command stays `Accepted` (shown as "will be
-     delivered when Claude finishes the current turn") and expires after a TTL if no `Stop` happens.
+   - observed session, idle, wake on → resumed through the SDK at once (see "Waking idle observed sessions").
+   - observed session otherwise → queued (`Accepted`) for the next hook of the main conversation:
+     `PostToolUse`/`PostToolUseFailure` hands every waiting instruction to Claude as `additionalContext`
+     (verified with Claude Code: it acts on it in the same turn; subagent tool calls are skipped), or
+     `Stop` delivers one with `decision: "block"`. Delivered instructions are `Executing` and become
+     `Completed` at the turn's `Stop`. One that no hook picks up expires after its TTL.
 4. Status updates go to the browser through `command.status.changed`.
+
+**Stopping a session the user started** (`interrupt`, `session.stop`; same PC opt-in as instructions). `interrupt` on a
+working session is `Accepted` and applied at the next tool hook of that session: the hook answers
+`{"continue": false, "stopReason": …}` (verified with Claude Code: the tool doesn't run and the turn ends), the command
+becomes `Completed`, and the instruction Claude was working on fails with `interrupted`. If the turn ends by itself first,
+the interrupt completes as a no-op; an idle session completes at once. `session.stop` ends the session by terminating its
+Claude Code process (the pid Claude Code wrote to `sessions/<pid>.json`; `process_not_found` if unknown). The transcript
+stays on disk, so the conversation can be resumed in the editor.
+
+**Telling Claude the user is on the app.** Claude Code assumes someone is at the keyboard. Turns that come from the
+app say otherwise (`app-context.ts`): the user is on their phone, can't see the PC's screen or answer its dialogs,
+reads replies on a small screen, answers questions through `AskUserQuestion` and approves permissions in the app.
+A session started from the app gets it as an appended system prompt (Claude Code's own prompt is kept); a session
+started in the editor gets it once, as a context block in front of the first message Pocket Agent runs in it (wake);
+a message delivered by a hook carries a one-line version.
+
+**Claude plan usage.** The Local Agent reads the numbers behind Claude Code's `/usage` (5-hour session, 7 days,
+per-model) from an SDK session that is never sent a prompt, at start and every 5 minutes, and reports them in
+`device.settings` when they change; the profile page shows them per PC. The SDK marks this API experimental, so
+anything unexpected, or a sign-in without plan limits (API key), is reported as "not available", never estimated.
+
+**Models.** After start, the Local Agent asks Claude Code for its model list (`supportedModels()` on an SDK session that is
+never sent a prompt: nothing runs, nothing is billed) and reports it in `device.settings`. The app offers exactly that list.
+A chosen model travels with the instruction (`model`), is checked against the PC's list by the API and again on the PC
+(`model_not_available`), and is applied only where Pocket Agent starts the turn: managed sessions (`setModel`, which
+persists for later turns) and woken turns (that turn only).
+
+### Attachments: photos and PDFs (as built)
+
+A message can carry up to 4 files (PNG, JPEG, WebP, GIF, PDF; 10 MB each). Files live in **Cloudinary**
+(`CLOUDINARY_URL` on the API, a secret; unset = attachments off) for **30 days**; a small JPEG preview (first page
+for a PDF) is kept in Postgres, so the chat still shows it after the file is gone and says why it can't be opened.
+
+- **Upload.** The API reserves an `Attachment` (random storage id, no user or file name in it) and signs a direct
+  upload; the browser (or the PC) sends the file straight to storage, never through our servers; the API then
+  verifies storage's signature, checks the real size and format, and stores the preview.
+- **Access.** Files are uploaded as `authenticated`: a URL works only when signed with our secret. Only the API
+  signs, after checking the owner: the app gets a 5-minute link (`GET /attachments/:id/link`), the user's PC a
+  redirect (`GET /agent/attachments/:id/file`, device credentials). Previews are served by the API to the owner.
+- **App → Claude.** `attachmentIds` on the instruction; the PC downloads every file first (or the message fails with
+  `attachment_download_failed`). In turns Pocket Agent runs (managed, wake) the files are in the message itself
+  (image / document blocks). In a turn running in the editor a hook can only carry text, so Claude is told where the
+  files were saved (`<agent home>/attachments/<command id>/`) and opens them with Read.
+- **Editor → app** (PC opt-in `pocket-agent attachments enable`, off by default). Photos/PDFs the user attaches to a
+  prompt are read from the transcript (top-level image/document blocks of a user message, never tool results),
+  uploaded by the PC and attached to that message in the chat. With the opt-in off these files are never read.
+- **Retention.** A job (every 15 minutes) deletes files older than 30 days from storage and marks them removed.
+- **Unused uploads.** A file is `usedAt` once a message carries it. One taken out of the message box before sending
+  is deleted at once (`DELETE /attachments/:id`, refused for a used file; an upload still in flight is aborted), and
+  anything never sent, or never finished, is swept after an hour, so unused files don't pile up.
 
 ## 7. Protocol envelope (`packages/protocol`)
 

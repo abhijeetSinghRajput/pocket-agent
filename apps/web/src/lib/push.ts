@@ -1,6 +1,6 @@
 'use client';
 
-import { apiRequest } from '@/lib/api';
+import { apiBaseUrl, apiRequest } from '@/lib/api';
 
 /** Firebase web config from the environment. Null when push isn't configured for this deployment. */
 export function firebaseConfig() {
@@ -85,7 +85,11 @@ async function messaging() {
     import('firebase/messaging'),
   ]);
   const app = getApps()[0] ?? initializeApp(cfg.app);
-  const registration = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+  // The worker answers yes/no notifications itself, so it needs to know where the API is.
+  const registration = await navigator.serviceWorker.register(
+    `/sw.js?api=${encodeURIComponent(apiBaseUrl())}`,
+    { scope: '/' },
+  );
   await navigator.serviceWorker.ready;
   return { m, messaging: m.getMessaging(app), registration, vapidKey: cfg.vapidKey };
 }

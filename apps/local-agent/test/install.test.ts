@@ -50,7 +50,8 @@ describe('hooks installer', () => {
     expect(s.hooks.PreToolUse[0].hooks[0].command).toBe('my-own-linter.sh');
     expect(s.hooks.PreToolUse[1]).toEqual({
       matcher: '*',
-      hooks: [{ type: 'command', command: CMD, timeout: 10 }],
+      // A question from Claude may wait for an answer from the phone, like a permission request.
+      hooks: [{ type: 'command', command: CMD, timeout: 330 }],
     });
     expect(s.hooks.SessionStart[0]).toEqual({ hooks: [{ type: 'command', command: CMD, timeout: 10 }] });
     // A held permission request (phone decision, ≤ 5 min) must not be cut off by Claude Code.

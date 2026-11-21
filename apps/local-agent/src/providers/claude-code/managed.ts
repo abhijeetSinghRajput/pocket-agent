@@ -2,6 +2,7 @@ import { APPROVAL_WAIT_MS, CLAUDE_CODE_CAPABILITIES } from '@pocket-agent/protoc
 import type { ApprovalBroker } from '../../approvals.js';
 import { answeredQuestionInput } from '../../approvals.js';
 import { appSystemPrompt } from './app-context.js';
+import type { TurnEffort, TurnMode } from '@pocket-agent/protocol';
 import { messageContent, type LocalFile } from '../../attachments.js';
 import type { CanUseTool, Options, Query, SDKMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import { randomUUID } from 'node:crypto';
@@ -36,6 +37,8 @@ interface Instruction {
   expiresAt?: number;
   /** Switch the session to this model before running the instruction. */
   model?: string;
+  /** And to this permission mode (never "bypass"). */
+  permissionMode?: TurnMode;
   /** Files sent with the message. */
   files?: LocalFile[];
 }
@@ -188,6 +191,9 @@ export class ManagedSessions {
     }
   }
 
+  /** Where files sent with messages are saved: readable by sessions started here. */
+  filesRoot: string | undefined;
+
   isManaged = (id: string) => this.sessions.has(id);
 
   ids(): string[] {
@@ -199,6 +205,8 @@ export class ManagedSessions {
     projectPath: string;
     prompt: string;
     model?: string;
+    permissionMode?: TurnMode;
+    effort?: TurnEffort;
     commandId?: string;
   }): Promise<string> {
     const projectPath = path.resolve(input.projectPath);
@@ -241,9 +249,11 @@ export class ManagedSessions {
         cwd: projectPath,
         sessionId: id,
         canUseTool,
-        permissionMode: 'default',
+        permissionMode: input.permissionMode ?? 'default',
         abortController: m.abort,
         ...(input.model ? { model: input.model } : {}),
+        ...(input.effort ? { effort: input.effort } : {}),
+        ...(this.filesRoot ? { additionalDirectories: [this.filesRoot] } : {}),
         // Started from the app: Claude is told the user is on their phone, away from this PC.
         ...(input.commandId ? { systemPrompt: appSystemPrompt } : {}),
         // Lets the hook relay skip this session (its events come from this stream).
@@ -266,7 +276,14 @@ export class ManagedSessions {
   send(
     id: string,
     text: string,
-    command?: { commandId: string; expiresAt: number; model?: string; files?: LocalFile[] },
+    command?: {
+      commandId: string;
+      expiresAt: number;
+      model?: string;
+      permissionMode?: TurnMode;
+      effort?: TurnEffort;
+      files?: LocalFile[];
+    },
   ): boolean {
     const m = this.sessions.get(id);
     if (!m || m.closed) return false;
@@ -321,6 +338,11 @@ export class ManagedSessions {
       if (item.commandId && item.expiresAt !== undefined) this.ack(item.commandId, 'Executing');
       this.registry.event(id, 'agent.output', { role: 'user', text: truncate(item.text) });
       this.registry.setStatus(id, 'Running', truncate(item.text.trim().split(/\r?\n/)[0] ?? '', 200));
+      if (item.permissionMode) {
+        await m.query?.setPermissionMode(item.permissionMode).catch((err: Error) => {
+          this.log('warn', `could not switch ${id} to ${item.permissionMode}: ${err.message}`);
+        });
+      }
       if (item.model) {
         // Applies to this turn and the ones after it, like the model picker in the editor.
         await m.query?.setModel(item.model).catch((err: Error) => {

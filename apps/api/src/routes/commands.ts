@@ -5,6 +5,8 @@ import {
   StartSessionRequest,
   type AttachmentRef,
   type CommandKind,
+  type TurnEffort,
+  type TurnMode,
 } from '@pocket-agent/protocol';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
@@ -53,6 +55,7 @@ export async function commandRoutes(app: FastifyInstance, ctx: Services): Promis
     text?: string,
     model?: string,
     attachmentIds?: string[],
+    turn: { permissionMode?: TurnMode; effort?: TurnEffort } = {},
   ) {
     const s = await ownedSession(req, reply);
     if (!s) return;
@@ -97,6 +100,8 @@ export async function commandRoutes(app: FastifyInstance, ctx: Services): Promis
       idempotencyKey: key.data.idempotencyKey,
       ...(text !== undefined ? { text } : {}),
       ...(model !== undefined ? { model } : {}),
+      ...(turn.permissionMode ? { permissionMode: turn.permissionMode } : {}),
+      ...(turn.effort ? { effort: turn.effort } : {}),
       ...(attachments ? { attachments } : {}),
       ip: req.ip,
     });
@@ -119,6 +124,10 @@ export async function commandRoutes(app: FastifyInstance, ctx: Services): Promis
       body.data.text,
       body.data.model,
       body.data.attachmentIds,
+      {
+        ...(body.data.permissionMode ? { permissionMode: body.data.permissionMode } : {}),
+        ...(body.data.effort ? { effort: body.data.effort } : {}),
+      },
     );
   });
   app.post('/sessions/:id/interrupt', opts, (req, reply) => sessionCommand(req, reply, 'interrupt'));
@@ -152,6 +161,8 @@ export async function commandRoutes(app: FastifyInstance, ctx: Services): Promis
       text: body.data.text,
       projectPath: body.data.projectPath,
       ...(body.data.model ? { model: body.data.model } : {}),
+      ...(body.data.permissionMode ? { permissionMode: body.data.permissionMode } : {}),
+      ...(body.data.effort ? { effort: body.data.effort } : {}),
       ip: req.ip,
     });
     return reply.code(created ? 201 : 200).send({ command: toCommandDto(command) });

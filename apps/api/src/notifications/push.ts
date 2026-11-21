@@ -10,6 +10,17 @@ export interface PushMessage {
   /** Notifications with the same tag replace each other on the device. */
   tag: string;
   priority: NotificationPriority;
+  /** Two buttons on the notification, for a yes/no request only (Allow/Deny, or a two-option question). */
+  actions?: PushAction[];
+}
+
+export interface PushAction {
+  /** What the button sends: a decision on `approvalId`, with an answer for a question. */
+  id: string;
+  title: string;
+  approvalId: string;
+  decision: 'allow' | 'deny';
+  answers?: Record<string, string>;
 }
 
 export type PushResult = 'ok' | 'invalid_token' | 'error';
@@ -67,7 +78,15 @@ export function createFcmSender(
                 // A permission request is pointless after it expires; others can wait a bit longer.
                 TTL: m.priority === 'critical' ? '300' : '3600',
               },
-              data: { title: m.title, body: m.body, link: m.link, tag: m.tag, priority: m.priority },
+              // FCM data values are strings: the actions travel as JSON.
+              data: {
+                title: m.title,
+                body: m.body,
+                link: m.link,
+                tag: m.tag,
+                priority: m.priority,
+                ...(m.actions?.length ? { actions: JSON.stringify(m.actions) } : {}),
+              },
             },
           },
         }),

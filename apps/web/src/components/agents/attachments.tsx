@@ -3,7 +3,7 @@
 import type { AttachmentRef } from '@pocket-agent/protocol';
 import { FileText, ImageOff, LoaderCircle, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { fileSize, isPdf, openAttachment, thumbUrl } from '@/lib/attachments';
+import { fileExtension, fileSize, isPdf, isPreviewable, openAttachment, thumbUrl } from '@/lib/attachments';
 import { cn } from '@/lib/utils';
 
 /** One sent photo or PDF: its preview; tapping opens the original (while it still exists). */
@@ -24,6 +24,35 @@ function SentFile({ file, single }: { file: AttachmentRef; single: boolean }) {
     } finally {
       setOpening(false);
     }
+  }
+
+  if (!isPreviewable(file.mime)) {
+    // Not a picture: the file as a card (type, name, size); tapping opens it.
+    const ext = fileExtension(file.name) || 'file';
+    return (
+      <div className="w-full min-w-0">
+        <button
+          type="button"
+          onClick={() => void open()}
+          aria-label={`Open ${file.name}`}
+          data-testid="attachment"
+          className="flex w-full min-w-0 items-center gap-2.5 rounded-xl bg-black/15 p-2 pr-3 text-left outline-none focus-visible:ring-[3px] focus-visible:ring-white/60"
+        >
+          <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-black/20 font-mono text-[10.5px] font-bold uppercase">
+            {opening ? <LoaderCircle className="size-4 animate-spin" aria-hidden /> : ext.slice(0, 4)}
+          </span>
+          <span className="min-w-0">
+            <span className="block truncate text-[13px] font-medium">{file.name}</span>
+            <span className="block text-[11px] opacity-80">{fileSize(file.size)}</span>
+          </span>
+        </button>
+        {error && (
+          <p role="alert" className="mt-1 text-[11px] leading-snug opacity-90">
+            {error}
+          </p>
+        )}
+      </div>
+    );
   }
 
   return (

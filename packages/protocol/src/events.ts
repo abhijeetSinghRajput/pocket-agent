@@ -120,6 +120,16 @@ export const ModelId = z
   .min(1)
   .max(100)
   .regex(/^[A-Za-z0-9][A-Za-z0-9._:[\]-]*$/);
+/**
+ * How Claude Code asks before acting, chosen in the app for a turn Pocket Agent runs. "Bypass
+ * permissions" is never offered (approved constraint #3, as amended 2026-11-21).
+ */
+export const TurnMode = z.enum(['default', 'acceptEdits', 'plan', 'auto']);
+export type TurnMode = z.infer<typeof TurnMode>;
+/** How much Claude thinks before answering. */
+export const TurnEffort = z.enum(['low', 'medium', 'high', 'xhigh', 'max']);
+export type TurnEffort = z.infer<typeof TurnEffort>;
+
 /** One model the PC can run, as Claude Code describes it. */
 export const ModelOption = z.object({
   id: ModelId,
@@ -223,8 +233,10 @@ export const CommandExecute = defineEvent(
       commandId: z.uuid(),
       commandType: z.literal('instruction'),
       text: z.string().min(1).max(INSTRUCTION_MAX),
-      /** Model to run this turn with (only for turns Pocket Agent starts itself). */
+      /** Model, mode and effort for this turn (only for turns Pocket Agent runs itself). */
       model: ModelId.optional(),
+      permissionMode: TurnMode.optional(),
+      effort: TurnEffort.optional(),
       /** Files sent with the message; the PC downloads them from the API. */
       attachments: AttachmentRefs.optional(),
       expiresAt,
@@ -235,6 +247,8 @@ export const CommandExecute = defineEvent(
       projectPath: z.string().max(1024),
       text: z.string().min(1).max(INSTRUCTION_MAX),
       model: ModelId.optional(),
+      permissionMode: TurnMode.optional(),
+      effort: TurnEffort.optional(),
       expiresAt,
     }),
     z.object({ commandId: z.uuid(), commandType: z.literal('interrupt'), expiresAt }),

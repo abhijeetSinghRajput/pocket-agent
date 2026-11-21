@@ -74,16 +74,24 @@ Agent tray). Otherwise the hook returns immediately with no decision, and the lo
 3. **Remote approval is opt-in and never weakens local settings.**
    - Remote approval is **off by default** for each device. The user turns it on explicitly; for observed
      sessions, Away mode must also be on.
-   - Pocket Agent never changes `permissionMode`, allow/deny rules or any other Claude Code permission
-     setting, and never returns `updatedPermissions` or `updatedInput`. The hook installer adds only
+   - Pocket Agent never changes allow/deny rules or any other Claude Code permission setting, and never
+     returns `updatedPermissions` or `updatedInput` (one exception below). The hook installer adds only
      Pocket Agent hook entries.
+   - **Amended by the owner (2026-11-21): the mode of a turn Pocket Agent runs may be chosen in the app.**
+     Manual (`default`), Edit automatically (`acceptEdits`), Plan (`plan`) or Auto (`auto`), for a managed
+     session or a woken turn only; a turn running in the editor keeps the editor's mode. `bypassPermissions`
+     is never accepted (the API's schema has no such value; the PC's too). Every chosen mode is in the
+     `command.created` audit entry.
    - **One exception, added at the owner's request (2026-11-21): answering Claude's own question.** When a turn that
      Pocket Agent runs (a managed session or a woken turn) uses `AskUserQuestion`, the app shows the question with its
      options and the user's choice is returned to Claude as `updatedInput` = Claude's own questions, unchanged, plus
      `answers`. It applies to that tool only: the API accepts answers only for an `AskUserQuestion` request and only for
      the questions asked, and the PC checks both again and otherwise passes the input back untouched. Verified with
-     Claude Code. It does not work through a `PermissionRequest` hook (verified), so a question in a session the user
-     started is never held for Pocket Agent; it is shown in the chat and answered in the editor.
+     Claude Code. In a session the user started (Away mode only), the question is held at **`PreToolUse`** and
+     answered with `permissionDecision: "allow"` + `updatedInput` = its questions plus `answers` (the documented
+     way; "allow" alone runs it with no answers, which is what the first version did). Not answered in time, or
+     an answer that doesn't match the questions: nothing is returned and the editor asks as usual. The installer
+     gives PreToolUse the same 330 s timeout as PermissionRequest, and a running agent updates older entries.
    - Claude Code's own deny/ask rules are still evaluated after a hook says allow, so local policy always wins.
    - If anything fails, the request falls back to the local prompt (interactive) or a deny (headless).
    - Every request, decision, expiry, cancellation and setting change is written to an append-only audit log.
@@ -316,9 +324,13 @@ A chosen model travels with the instruction (`model`), is checked against the PC
 (`model_not_available`), and is applied only where Pocket Agent starts the turn: managed sessions (`setModel`, which
 persists for later turns) and woken turns (that turn only).
 
-### Attachments: photos and PDFs (as built)
+### Attachments (as built)
 
-A message can carry up to 4 files (PNG, JPEG, WebP, GIF, PDF; 10 MB each). Files live in **Cloudinary**
+A message can carry up to 4 files of 10 MB each: photos, PDFs, documents, spreadsheets, code, text — anything but
+programs and installers (`BLOCKED_EXTENSIONS`). Photos and PDFs are stored as images (with a preview); other files as
+plain files. Claude gets photos and PDFs as themselves, text and code as their content (`<attached-file>` blocks, up
+to 200 KB), and anything else (a spreadsheet, a document) saved on the PC in a folder it may read for that turn
+(`additionalDirectories`). Files can be picked, pasted, or dropped anywhere on the chat screen. Files live in **Cloudinary**
 (`CLOUDINARY_URL` on the API, a secret; unset = attachments off) for **30 days**; a small JPEG preview (first page
 for a PDF) is kept in Postgres, so the chat still shows it after the file is gone and says why it can't be opened.
 
@@ -339,6 +351,13 @@ for a PDF) is kept in Postgres, so the chat still shows it after the file is gon
 - **Unused uploads.** A file is `usedAt` once a message carries it. One taken out of the message box before sending
   is deleted at once (`DELETE /attachments/:id`, refused for a used file; an upload still in flight is aborted), and
   anything never sent, or never finished, is swept after an hour, so unused files don't pile up.
+
+### Answering from the notification (as built)
+
+A yes/no request carries two buttons on its push notification: a permission request (Allow / Deny), or a question
+from Claude with exactly one question, two options and one choice (its two labels). Anything with more choices opens
+the app. The service worker sends the decision with the signed-in browser's cookie (`POST /approvals/:id/decision`;
+it learns the API address from its registration URL); if that fails, it opens the app instead.
 
 ## 7. Protocol envelope (`packages/protocol`)
 

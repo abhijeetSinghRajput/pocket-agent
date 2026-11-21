@@ -49,9 +49,11 @@ process.stdin.on('end', () => {
   // else is answered in milliseconds. The agent always answers before this.
   let waitMs = 3000;
   try {
+    const h = JSON.parse(body.toString('utf8')) as { hook_event_name?: unknown; tool_name?: unknown };
+    // Also a question from Claude, which may wait for an answer from the phone.
     if (
-      (JSON.parse(body.toString('utf8')) as { hook_event_name?: unknown }).hook_event_name ===
-      'PermissionRequest'
+      h.hook_event_name === 'PermissionRequest' ||
+      (h.hook_event_name === 'PreToolUse' && h.tool_name === 'AskUserQuestion')
     ) {
       waitMs = 310_000;
     }

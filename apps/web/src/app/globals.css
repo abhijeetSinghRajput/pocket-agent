@@ -344,6 +344,17 @@
     }
   }
 
+  /* A panel rising from the bottom edge (Claude's question in place of the message box). */
+  .sheet-in {
+    animation: sheet-in 360ms var(--ease-out) both;
+  }
+  @keyframes sheet-in {
+    from {
+      transform: translateY(24px);
+      opacity: 0;
+    }
+  }
+
   /* A screen arriving (route change). */
   .page-enter {
     animation: page-enter var(--dur-enter) var(--ease-out) both;

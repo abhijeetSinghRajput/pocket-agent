@@ -1,7 +1,8 @@
 import type { SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import { truncate, type SessionRegistry } from '../../sessions/registry.js';
-import { messageContent, type LocalFile } from '../../attachments.js';
+import { filesDir, messageContent, type LocalFile } from '../../attachments.js';
 import { APP_CONTEXT } from './app-context.js';
+import type { TurnEffort, TurnMode } from '@pocket-agent/protocol';
 import type { CommandAck } from './instructions.js';
 import { approvalGate, reportSdkMessage, type ManagedApprovalOptions, type QueryFn } from './managed.js';
 
@@ -9,8 +10,10 @@ interface Item {
   commandId: string;
   text: string;
   expiresAt: number;
-  /** Model for this turn (the editor's own model is not changed). */
+  /** Model, mode and effort for this turn (the editor's own settings are not changed). */
   model?: string;
+  permissionMode?: TurnMode;
+  effort?: TurnEffort;
   /** Files sent with the message. */
   files?: LocalFile[];
 }
@@ -170,9 +173,12 @@ export class IdleWake {
           cwd,
           resume: sessionId, // same session id, full history
           canUseTool: approvalGate(this.registry, sessionId, this.approvals, this.now),
-          permissionMode: 'default',
+          permissionMode: item.permissionMode ?? 'default',
           abortController: abort,
           ...(item.model ? { model: item.model } : {}),
+          ...(item.effort ? { effort: item.effort } : {}),
+          // The folder this message's files were saved in: readable for this turn.
+          ...(filesDir(item.files) ? { additionalDirectories: [filesDir(item.files)!] } : {}),
           // Its hooks would report this turn a second time; the SDK stream already does.
           env: { ...process.env, POCKET_AGENT_MANAGED_SESSION: '1' },
         },

@@ -1,6 +1,46 @@
 import type { BackendToWeb } from '@pocket-agent/protocol';
 import type { FastifyInstance } from 'fastify';
+import type { PushAction } from './push.js';
 import { notify, type NotifyServices } from './service.js';
+
+/**
+ * Buttons on the notification, only for a plain yes/no: a permission request (Allow / Deny), or a
+ * question from Claude with exactly two options and one choice. Anything with more choices (radio
+ * or checkbox) opens the app instead.
+ */
+export function yesNoActions(a: { id: string; toolName: string; requestPayload: unknown }): {
+  actions?: PushAction[];
+} {
+  if (a.toolName !== 'AskUserQuestion') {
+    return {
+      actions: [
+        { id: 'allow', title: 'Allow', approvalId: a.id, decision: 'allow' },
+        { id: 'deny', title: 'Deny', approvalId: a.id, decision: 'deny' },
+      ],
+    };
+  }
+  try {
+    const input = (a.requestPayload as { input?: unknown } | null)?.input;
+    const q = (JSON.parse(typeof input === 'string' ? input : '{}') as { questions?: unknown }).questions;
+    if (!Array.isArray(q) || q.length !== 1) return {};
+    const only = q[0] as { question?: unknown; multiSelect?: unknown; options?: unknown };
+    const options = Array.isArray(only.options) ? (only.options as Array<{ label?: unknown }>) : [];
+    if (typeof only.question !== 'string' || only.multiSelect === true || options.length !== 2) return {};
+    const labels = options.map((o) => (typeof o.label === 'string' ? o.label : ''));
+    if (labels.some((l) => !l)) return {};
+    return {
+      actions: labels.map((label, i) => ({
+        id: `answer-${i}`,
+        title: label.slice(0, 40),
+        approvalId: a.id,
+        decision: 'allow' as const,
+        answers: { [only.question as string]: label },
+      })),
+    };
+  } catch {
+    return {};
+  }
+}
 
 /** Turns what just happened (browser events from ingest) into notifications. Best effort. */
 export async function notifyFromEvents(ctx: NotifyServices, events: BackendToWeb[]): Promise<void> {
@@ -15,10 +55,12 @@ export async function notifyFromEvents(ctx: NotifyServices, events: BackendToWeb
         userId: a.userId,
         category: 'permission_required',
         // No command text in the push itself (it passes through Google/Apple); the app shows it.
-        title: `Permission needed · ${a.toolName}`,
+        title:
+          a.toolName === 'AskUserQuestion' ? 'Claude is asking you' : `Permission needed · ${a.toolName}`,
         body: `${a.session.projectName} on ${a.device.name}. Tap to review.`,
-        link: '/approvals',
+        link: a.toolName === 'AskUserQuestion' ? `/agents/${a.sessionId}` : '/approvals',
         dedupeKey: `approval:${a.id}`,
+        ...yesNoActions(a),
       });
       continue;
     }

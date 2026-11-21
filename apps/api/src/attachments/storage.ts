@@ -1,18 +1,21 @@
 import { createHash } from 'node:crypto';
 
 /** Where attachment files live. Injectable so tests never talk to a real storage service. */
+/** Photos and PDFs are stored as images (they get previews); everything else as plain files. */
+export type StoredAs = 'image' | 'raw';
+
 export interface AttachmentStorage {
   /** A signed direct upload for `publicId` (the browser or the PC sends the file straight to storage). */
-  signUpload(publicId: string): { uploadUrl: string; fields: Record<string, string> };
+  signUpload(publicId: string, as: StoredAs): { uploadUrl: string; fields: Record<string, string> };
   /** Did storage really sign this upload result? */
   verifyUpload(publicId: string, version: number, signature: string): boolean;
   /** The stored file's real size and format, or null if it is not there. */
-  info(publicId: string): Promise<{ bytes: number; format: string } | null>;
+  info(publicId: string, as: StoredAs): Promise<{ bytes: number; format: string } | null>;
   /** A small JPEG preview (first page for a PDF), or null if none could be made. */
   thumbnail(publicId: string, mime: string): Promise<Buffer | null>;
   /** A short-lived link to the original file. */
-  downloadUrl(publicId: string, mime: string, expiresAt: Date): string;
-  destroy(publicId: string): Promise<void>;
+  downloadUrl(publicId: string, mime: string, as: StoredAs, expiresAt: Date): string;
+  destroy(publicId: string, as: StoredAs): Promise<void>;
 }
 
 const FORMAT: Record<string, string> = {
@@ -47,15 +50,16 @@ export function cloudinaryStorage(url: string, now: () => number = Date.now): At
   const seconds = () => Math.floor(now() / 1000);
 
   return {
-    signUpload(publicId) {
+    signUpload(publicId, as) {
       const params = {
-        allowed_formats: ALLOWED_FORMATS.join(','),
+        // Images and PDFs must really be one of those; other files are stored as they are.
+        ...(as === 'image' ? { allowed_formats: ALLOWED_FORMATS.join(',') } : {}),
         public_id: publicId,
         timestamp: seconds(),
         type: 'authenticated',
       };
       return {
-        uploadUrl: `${api}/image/upload`,
+        uploadUrl: `${api}/${as}/upload`,
         fields: { ...strings(params), api_key: key, signature: sign(params) },
       };
     },
@@ -64,15 +68,16 @@ export function cloudinaryStorage(url: string, now: () => number = Date.now): At
       return signature === sha1(`public_id=${publicId}&version=${version}${secret}`);
     },
 
-    async info(publicId) {
-      const res = await fetch(`${api}/resources/image/authenticated/${publicId}`, {
+    async info(publicId, as) {
+      const res = await fetch(`${api}/resources/${as}/authenticated/${publicId}`, {
         headers: { authorization: `Basic ${Buffer.from(`${key}:${secret}`).toString('base64')}` },
         signal: AbortSignal.timeout(15_000),
       });
       if (!res.ok) return null;
       const j = (await res.json()) as { bytes?: unknown; format?: unknown };
-      return typeof j.bytes === 'number' && typeof j.format === 'string'
-        ? { bytes: j.bytes, format: j.format }
+      // Plain files have no format of their own.
+      return typeof j.bytes === 'number'
+        ? { bytes: j.bytes, format: typeof j.format === 'string' ? j.format : '' }
         : null;
     },
 
@@ -91,21 +96,21 @@ export function cloudinaryStorage(url: string, now: () => number = Date.now): At
       return buf.length && buf.length <= THUMB_MAX_BYTES ? buf : null;
     },
 
-    downloadUrl(publicId, mime, expiresAt) {
+    downloadUrl(publicId, mime, as, expiresAt) {
       const params = {
         expires_at: Math.floor(expiresAt.getTime() / 1000),
-        format: FORMAT[mime] ?? 'jpg',
+        ...(as === 'image' ? { format: FORMAT[mime] ?? 'jpg' } : {}),
         public_id: publicId,
         timestamp: seconds(),
         type: 'authenticated',
       };
       const qs = new URLSearchParams({ ...strings(params), api_key: key, signature: sign(params) });
-      return `${api}/image/download?${qs.toString()}`;
+      return `${api}/${as}/download?${qs.toString()}`;
     },
 
-    async destroy(publicId) {
+    async destroy(publicId, as) {
       const params = { invalidate: 'true', public_id: publicId, timestamp: seconds(), type: 'authenticated' };
-      const res = await fetch(`${api}/image/destroy`, {
+      const res = await fetch(`${api}/${as}/destroy`, {
         method: 'POST',
         body: new URLSearchParams({ ...strings(params), api_key: key, signature: sign(params) }),
         signal: AbortSignal.timeout(15_000),

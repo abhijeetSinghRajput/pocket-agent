@@ -129,3 +129,62 @@ test('without the PC opt-in nothing is ever held, and the dashboard says how to 
   agent.kill();
   await agent.exited;
 });
+
+test('in Away mode, Claude’s question in a session started in the editor is answered from the phone', async ({
+  page,
+}, info) => {
+  test.setTimeout(120_000);
+  const { env, agent } = await setup(page, { approvals: true });
+  const sessionId = randomUUID();
+  const h = hookPayloads(sessionId, String.raw`C:\work\rps`);
+  relay(env, h['SessionStart']!);
+  relay(env, h['UserPromptSubmit']!);
+  await page.goto('/devices');
+  await page.getByTestId('away-switch').click();
+  await expect.poll(() => agent.output()).toContain('Away mode ON');
+
+  const questions = [
+    {
+      question: 'Round 2 — Rock, Paper, Scissors: aap kya chunoge?',
+      header: 'Your move',
+      multiSelect: false,
+      options: [
+        { label: '🪨 Rock', description: 'Scissors ko todta hai' },
+        { label: '📄 Paper', description: 'Rock ko cover karta hai' },
+        { label: '✂️ Scissors', description: 'Paper ko kaatta hai' },
+      ],
+    },
+  ];
+  // Claude asks: the PreToolUse hook waits for the phone.
+  const asked = relayAsync(env, {
+    ...h['PreToolUse']!,
+    tool_name: 'AskUserQuestion',
+    tool_use_id: `toolu_${randomUUID().slice(0, 8)}`,
+    tool_input: { questions },
+  });
+
+  await page.goto('/');
+  // On any other screen the question pops up as a dialog; "Open chat" goes to the conversation.
+  await page.getByRole('link', { name: 'Open chat' }).click();
+  const sheet = page.getByTestId('question-sheet');
+  await expect(sheet).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByTestId('composer')).toHaveCount(0); // the question takes the message box's place
+  const send = sheet.getByRole('button', { name: 'Choose an answer' });
+  await expect(send).toBeDisabled();
+  await sheet.getByRole('radio', { name: /^📄 Paper/ }).click();
+  await page.screenshot({ path: `test-results/question-${info.project.name}.png` });
+  await sheet.getByRole('button', { name: 'Send answer' }).click();
+
+  // The hook answers Claude Code with its own questions plus the answer.
+  expect(JSON.parse(await asked)).toEqual({
+    hookSpecificOutput: {
+      hookEventName: 'PreToolUse',
+      permissionDecision: 'allow',
+      updatedInput: { questions, answers: { [questions[0]!.question]: '📄 Paper' } },
+    },
+  });
+  await expect(sheet).toHaveCount(0);
+  await expect(page.getByTestId('composer')).toBeVisible();
+  agent.kill();
+  await agent.exited;
+});

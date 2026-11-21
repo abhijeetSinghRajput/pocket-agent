@@ -57,7 +57,7 @@ function readableInput(input: string): string {
   }
 }
 
-function useCountdown(expiresAt: string) {
+export function useCountdown(expiresAt: string) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 1000);
@@ -67,7 +67,7 @@ function useCountdown(expiresAt: string) {
 }
 
 /** What the user picked for one question: option labels, and/or their own words. */
-interface Pick {
+export interface Pick {
   labels: string[];
   other: string;
 }

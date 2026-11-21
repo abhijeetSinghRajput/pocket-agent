@@ -1,6 +1,6 @@
 'use client';
 
-import { SessionResponse, type AgentSessionDto } from '@pocket-agent/protocol';
+import { SessionResponse, type AgentSessionDto, type ApprovalDto } from '@pocket-agent/protocol';
 import { ArrowLeft, FolderOpen, Laptop, X } from 'lucide-react';
 import Link from 'next/link';
 import { Dialog } from 'radix-ui';
@@ -15,7 +15,10 @@ import {
   SessionStatusBadge,
   sessionKind,
 } from '@/components/agents/session-badges';
+import { QuestionSheet } from '@/components/approvals/question-sheet';
 import { SessionApprovals } from '@/components/approvals/session-approvals';
+import { useApprovals } from '@/lib/use-approvals';
+import { parseQuestions } from '@/lib/chat';
 import { Button } from '@/components/ui/button';
 import { apiRequest, NOT_FOUND_MESSAGE } from '@/lib/api';
 import { useBackToClose } from '@/components/ui/dialog';
@@ -163,6 +166,16 @@ function useVisibleHeight() {
   }, []);
 }
 
+/** A question from Claude waiting for this chat (the first one, if several). */
+function pendingQuestion(list: ApprovalDto[] | null | undefined, sessionId: string) {
+  for (const a of list ?? []) {
+    if (a.sessionId !== sessionId || a.toolName !== 'AskUserQuestion') continue;
+    const questions = parseQuestions(a.input);
+    if (questions.length) return { approval: a, questions };
+  }
+  return null;
+}
+
 export function AgentDetail({ id }: { id: string }) {
   useVisibleHeight();
   const fetcher = useCallback(
@@ -172,6 +185,9 @@ export function AgentDetail({ id }: { id: string }) {
   );
   const { state, refresh } = usePoll(['session', id], fetcher, 30_000);
   const feed = useEventFeed(`/sessions/${id}/events`);
+  const approvals = useApprovals('pending');
+  // A question from Claude waiting for this chat (the first one, if several).
+  const question = pendingQuestion(approvals.state.data, id);
   const commands = useCommands(id);
   const [infoOpen, setInfoOpen] = useState(false);
   useLiveRefresh(
@@ -287,7 +303,10 @@ export function AgentDetail({ id }: { id: string }) {
         </p>
       ) : (
         <ChatMessages
-          items={items}
+          items={
+            // The question being asked is shown below, not also in the conversation.
+            question ? items.filter((i) => !(i.kind === 'question' && i.state === 'running')) : items
+          }
           typing={typingKind(s)}
           header={
             feed.hasMore && (
@@ -305,14 +324,31 @@ export function AgentDetail({ id }: { id: string }) {
         />
       )}
 
-      <div className="shrink-0 border-t bg-background/95 px-3 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur-md sm:px-6">
-        <div className="mx-auto flex max-w-3xl flex-col gap-3">
-          <div className="max-h-[45dvh] overflow-y-auto empty:hidden">
-            <SessionApprovals sessionId={s.id} />
+      {question ? (
+        // Claude is asking: its question takes the message box's place until it is answered.
+        <div className="shrink-0 sm:px-6">
+          <div className="mx-auto max-w-3xl">
+            <QuestionSheet
+              key={question.approval.id}
+              approval={question.approval}
+              questions={question.questions}
+              onDone={() => {
+                void approvals.refresh();
+                changed();
+              }}
+            />
           </div>
-          <Composer session={s} onSent={changed} onInfo={() => setInfoOpen(true)} />
         </div>
-      </div>
+      ) : (
+        <div className="shrink-0 border-t bg-background/95 px-3 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur-md sm:px-6">
+          <div className="mx-auto flex max-w-3xl flex-col gap-3">
+            <div className="max-h-[45dvh] overflow-y-auto empty:hidden">
+              <SessionApprovals sessionId={s.id} />
+            </div>
+            <Composer session={s} onSent={changed} onInfo={() => setInfoOpen(true)} />
+          </div>
+        </div>
+      )}
     </section>
   );
 }

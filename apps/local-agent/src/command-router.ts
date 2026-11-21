@@ -59,6 +59,11 @@ export class CommandRouter {
     try {
       // Only models this PC's Claude Code lists itself.
       const model = 'model' in p ? p.model : undefined;
+      // Mode and effort for turns Pocket Agent runs (a turn in the editor keeps its own).
+      const turn = {
+        ...('permissionMode' in p && p.permissionMode ? { permissionMode: p.permissionMode } : {}),
+        ...('effort' in p && p.effort ? { effort: p.effort } : {}),
+      };
       const known = this.deps.models?.() ?? [];
       if (model && known.length && !known.some((m) => m.id === model)) return fail('model_not_available');
       switch (p.commandType) {
@@ -70,6 +75,7 @@ export class CommandRouter {
             prompt: p.text,
             commandId: p.commandId,
             ...(model ? { model } : {}),
+            ...turn,
           });
           return ack(p.commandId, 'Executing', { externalSessionId: id });
         }
@@ -97,6 +103,7 @@ export class CommandRouter {
                 commandId: p.commandId,
                 expiresAt,
                 ...(model ? { model } : {}),
+                ...turn,
                 ...withFiles,
               }) || fail('session_not_found')
             );
@@ -111,7 +118,12 @@ export class CommandRouter {
             this.deps.policy().wakeIdle &&
             (wake.isRunning(sid) || s.status === 'WaitingForInput')
           ) {
-            return wake.run(sid, s.projectPath, { ...item, ...(model ? { model } : {}), ...withFiles });
+            return wake.run(sid, s.projectPath, {
+              ...item,
+              ...(model ? { model } : {}),
+              ...turn,
+              ...withFiles,
+            });
           }
           // Delivered into the editor's own turn: its model can't be changed from here.
           // A hook can only carry text, so Claude is told where the files were saved.

@@ -1,8 +1,7 @@
 'use client';
 
 import {
-  ATTACHMENT_MAX_BYTES,
-  ATTACHMENT_MIME,
+  attachmentProblem as protocolProblem,
   AttachmentLinkResponse,
   AttachmentResponse,
   SignAttachmentResponse,
@@ -10,18 +9,14 @@ import {
 } from '@pocket-agent/protocol';
 import { apiBaseUrl, apiRequest } from '@/lib/api';
 
-export const ATTACHMENT_ACCEPT = ATTACHMENT_MIME.join(',');
+/** Why a file can't be attached, or null if it can (the same check the server makes). */
+export const attachmentProblem = (file: { name: string; size: number }) => protocolProblem(file);
 
-/** Why a file can't be attached, or null if it can. */
-export function attachmentProblem(file: { type: string; size: number }): string | null {
-  if (!(ATTACHMENT_MIME as readonly string[]).includes(file.type))
-    return 'Only photos (PNG, JPEG, WebP, GIF) and PDFs can be attached.';
-  if (file.size > ATTACHMENT_MAX_BYTES) return 'That file is larger than 10 MB.';
-  if (file.size === 0) return 'That file is empty.';
-  return null;
-}
+/** The type to declare for a file the browser can't name (code, Markdown…). */
+export const mimeOf = (file: File) => file.type || 'application/octet-stream';
 
 export const isPdf = (a: { mime: string }) => a.mime === 'application/pdf';
+export { fileExtension, isPreviewable } from '@pocket-agent/protocol';
 
 export function fileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -36,7 +31,7 @@ export function fileSize(bytes: number): string {
 export async function uploadAttachment(file: File, signal?: AbortSignal): Promise<AttachmentRef> {
   const signed = await apiRequest('/attachments/sign', SignAttachmentResponse, {
     method: 'POST',
-    body: { name: file.name || 'file', mime: file.type, size: file.size },
+    body: { name: file.name || 'file', mime: mimeOf(file), size: file.size },
     ...(signal ? { signal } : {}),
   });
   const form = new FormData();

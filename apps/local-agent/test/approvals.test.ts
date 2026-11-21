@@ -199,15 +199,68 @@ describe('answering Claude’s question from Pocket Agent', () => {
     expect(answeredQuestionInput('AskUserQuestion', input, undefined)).toBeUndefined();
   });
 
-  it('a question in a session the user started is never held: the editor shows it', () => {
+  it('a question in a session the user started is never held as a permission request', () => {
     const t = observed({ away: true });
     const out = t.handler.handle({
       ...hook('PermissionRequest'),
       tool_name: 'AskUserQuestion',
       tool_input: input,
     });
-    expect(out).toBeUndefined(); // not a promise: nothing waits for the phone
+    expect(out).toBeUndefined();
+  });
+
+  it('in Away mode, a question is answered from the phone at PreToolUse, with the answers added', async () => {
+    const t = observed({ away: true });
+    const pre = {
+      ...hook('PreToolUse'),
+      tool_name: 'AskUserQuestion',
+      tool_use_id: 'toolu_q1',
+      tool_input: input,
+    };
+    const pending = t.handler.handle(pre) as Promise<unknown>;
     const req = t.events.filter((e) => e.eventType === 'agent.permission.requested').at(-1)!;
-    expect((req.payload as { awaitingRemote?: boolean }).awaitingRemote).toBeUndefined();
+    expect(req.payload).toMatchObject({
+      requestId: 'toolu_q1',
+      toolName: 'AskUserQuestion',
+      awaitingRemote: true,
+    });
+    t.broker.decide('toolu_q1', { behavior: 'allow', answers: { 'Which fruit?': 'Mango' } });
+    expect(await pending).toEqual({
+      hookSpecificOutput: {
+        hookEventName: 'PreToolUse',
+        permissionDecision: 'allow',
+        updatedInput: { ...input, answers: { 'Which fruit?': 'Mango' } },
+      },
+    });
+  });
+
+  it('a question skipped on the phone is declined; one not answered in time is left to the editor', async () => {
+    const t = observed({ away: true, waitMs: 30 });
+    const pre = (id: string) => ({
+      ...hook('PreToolUse'),
+      tool_name: 'AskUserQuestion',
+      tool_use_id: id,
+      tool_input: input,
+    });
+    const skipped = t.handler.handle(pre('toolu_q2')) as Promise<unknown>;
+    t.broker.decide('toolu_q2', { behavior: 'deny', message: 'The user skipped this question.' });
+    expect(await skipped).toMatchObject({ hookSpecificOutput: { permissionDecision: 'deny' } });
+    // "Allow" without answers would run the tool with none: the editor asks instead.
+    const empty = t.handler.handle(pre('toolu_q3')) as Promise<unknown>;
+    t.broker.decide('toolu_q3', { behavior: 'allow' });
+    expect(await empty).toBeUndefined();
+    expect(await t.handler.handle(pre('toolu_q4'))).toBeUndefined(); // timed out
+  });
+
+  it('a question is not held when the user is not away', () => {
+    const t = observed({ away: false });
+    expect(
+      t.handler.handle({
+        ...hook('PreToolUse'),
+        tool_name: 'AskUserQuestion',
+        tool_use_id: 'q',
+        tool_input: input,
+      }),
+    ).toBeUndefined();
   });
 });

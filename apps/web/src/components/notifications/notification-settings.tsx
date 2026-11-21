@@ -136,7 +136,7 @@ function PushThisDevice({ serverAvailable, onChanged }: { serverAvailable: boole
               disabled={busy}
               onClick={() => run(disablePush, 'Push turned off on this device.', false)}
             >
-              Turn off push on this device
+              Turn off notifications
             </Button>
           ) : (
             <Button
@@ -145,7 +145,7 @@ function PushThisDevice({ serverAvailable, onChanged }: { serverAvailable: boole
               data-testid="enable-push"
               onClick={() => run(enablePush, 'Push is on for this device.', true)}
             >
-              Enable push on this device
+              Turn on notifications
             </Button>
           ))}
       </div>

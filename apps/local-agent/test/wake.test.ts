@@ -124,6 +124,25 @@ describe('waking an idle session from Pocket Agent', () => {
     expect(h.registry.get('obs')!.status).toBe('WaitingForInput');
   });
 
+  it('runs a woken turn with the mode and effort chosen in the app', async () => {
+    const h = setup();
+    const c = createEvent(
+      'command.execute',
+      {
+        commandId: crypto.randomUUID(),
+        commandType: 'instruction',
+        text: 'plan it first',
+        permissionMode: 'plan',
+        effort: 'high',
+        expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      },
+      { sessionId: 'obs' },
+    ) as unknown as Exec;
+    await h.router.handle(c);
+    await h.tick();
+    expect(h.sdk.calls[0]!.options).toMatchObject({ permissionMode: 'plan', effort: 'high' });
+  });
+
   it('tells Claude once per session that the user is on the app, away from the PC', async () => {
     const h = setup();
     await h.router.handle(instruction('first'));

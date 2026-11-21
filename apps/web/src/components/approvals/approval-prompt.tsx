@@ -31,8 +31,12 @@ export function ApprovalPrompt() {
     <Modal
       open={!!next}
       onOpenChange={(open) => !open && next && dismiss(next.id)}
-      title="Permission needed"
-      description="Claude is waiting for your decision."
+      title={next?.toolName === 'AskUserQuestion' ? 'Claude is asking you' : 'Permission needed'}
+      description={
+        next?.toolName === 'AskUserQuestion'
+          ? 'Answer it here or in the chat.'
+          : 'Claude is waiting for your decision.'
+      }
     >
       {next && (
         <div className="flex flex-col gap-3" data-testid="approval-prompt">

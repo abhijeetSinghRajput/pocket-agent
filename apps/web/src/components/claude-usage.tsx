@@ -1,8 +1,8 @@
 'use client';
 
 import { DeviceListResponse, type ClaudeUsage } from '@pocket-agent/protocol';
+import Image from 'next/image';
 import { useCallback, useEffect, useState } from 'react';
-import { SleepingPc } from '@/components/illustrations';
 import { apiRequest } from '@/lib/api';
 import { timeAgo } from '@/lib/format';
 import { useLiveRefresh } from '@/lib/live';
@@ -109,7 +109,13 @@ export function ClaudeUsageCard() {
       )}
       {state.status === 'ready' && reporting.length === 0 && (
         <div className="flex flex-col items-center px-2 pt-1 pb-3 text-center" data-testid="no-usage">
-          <SleepingPc className="h-auto w-44" />
+          <Image
+            src="/illustrations/pc-offline.webp"
+            alt=""
+            width={768}
+            height={512}
+            className="h-auto w-60 rounded-2xl"
+          />
           <p className="mt-1 text-sm font-medium">{empty.title}</p>
           <p className="text-sm text-muted-foreground">{empty.hint}</p>
         </div>

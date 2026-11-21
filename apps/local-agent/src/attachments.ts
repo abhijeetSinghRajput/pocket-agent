@@ -3,6 +3,7 @@ import {
   AttachmentResponse,
   deviceAuthHeader,
   SignAttachmentResponse,
+  isPreviewable,
   type AttachmentRef,
 } from '@pocket-agent/protocol';
 import { mkdir, writeFile } from 'node:fs/promises';
@@ -36,8 +37,9 @@ export function safeFileName(name: string, mime: string): string {
     .basename(name.replace(/\\/g, '/'))
     .replace(/[^A-Za-z0-9._ -]/g, '_')
     .slice(0, 80);
-  const ext = EXT[mime] ?? 'bin';
-  const stem = base.replace(/\.[A-Za-z0-9]{1,5}$/, '') || 'file';
+  const own = /\.([A-Za-z0-9]{1,10})$/.exec(base)?.[1]?.toLowerCase();
+  const ext = EXT[mime] ?? own ?? 'bin';
+  const stem = base.replace(/\.[A-Za-z0-9]{1,10}$/, '') || 'file';
   return `${stem}.${ext}`;
 }
 
@@ -47,17 +49,90 @@ export function filesNote(files: LocalFile[]): string {
   const list = files.map((f) => `- ${f.path} (${f.ref.mime})`).join('\n');
   return `\n\nThe user attached ${files.length === 1 ? 'this file' : 'these files'} to the message. ${
     files.length === 1 ? 'It is' : 'They are'
-  } saved on this PC; open ${files.length === 1 ? 'it' : 'them'} with the Read tool:\n${list}`;
+  } saved on this PC; open ${files.length === 1 ? 'it' : 'them'} from there (Read works for text and code):\n${list}`;
 }
 
 /**
  * Message content for a turn Pocket Agent runs through the SDK: the files themselves (images as
  * images, PDFs as documents), then the text.
  */
+const TEXT_EXT = new Set([
+  'md',
+  'markdown',
+  'txt',
+  'csv',
+  'tsv',
+  'json',
+  'jsonl',
+  'yaml',
+  'yml',
+  'toml',
+  'ini',
+  'xml',
+  'html',
+  'htm',
+  'css',
+  'scss',
+  'js',
+  'jsx',
+  'ts',
+  'tsx',
+  'mjs',
+  'cjs',
+  'py',
+  'rb',
+  'go',
+  'rs',
+  'java',
+  'kt',
+  'swift',
+  'c',
+  'h',
+  'cpp',
+  'hpp',
+  'cs',
+  'php',
+  'sh',
+  'ps1',
+  'sql',
+  'graphql',
+  'vue',
+  'svelte',
+  'log',
+  'env',
+  'svg',
+]);
+/** Text files up to this size go into the message itself. */
+const INLINE_TEXT_MAX = 200_000;
+
+/** A file whose content is plain text (by type or extension), small enough to hand over as text. */
+export function inlineText(f: LocalFile): string | null {
+  const ext = /\.([A-Za-z0-9]{1,10})$/.exec(f.ref.name)?.[1]?.toLowerCase() ?? '';
+  const textual = f.ref.mime.startsWith('text/') || TEXT_EXT.has(ext);
+  if (!textual || f.data.length > INLINE_TEXT_MAX) return null;
+  const text = f.data.toString('utf8');
+  return text.includes('�') ? null : text; // not really text
+}
+
+/** The folder a message's files were saved in (granted to Claude for that turn). */
+export const filesDir = (files: LocalFile[] | undefined) =>
+  files?.length ? path.dirname(files[0]!.path) : undefined;
+
+/**
+ * Message content for a turn Pocket Agent runs through the SDK: pictures and PDFs as themselves,
+ * text and code as their content, and any other file (a spreadsheet, a document) saved on this PC
+ * and named, in a folder Claude may read for this turn.
+ */
 export function messageContent(text: string, files: LocalFile[] | undefined) {
   if (!files?.length) return text;
+  const shown = files.filter((f) => isPreviewable(f.ref.mime));
+  const inline = files
+    .filter((f) => !isPreviewable(f.ref.mime))
+    .map((f) => ({ f, content: inlineText(f) }))
+    .filter((x): x is { f: LocalFile; content: string } => x.content !== null);
+  const saved = files.filter((f) => !isPreviewable(f.ref.mime) && inlineText(f) === null);
   return [
-    ...files.map((f) =>
+    ...shown.map((f) =>
       f.ref.mime === 'application/pdf'
         ? ({
             type: 'document',
@@ -72,7 +147,16 @@ export function messageContent(text: string, files: LocalFile[] | undefined) {
             },
           } as const),
     ),
-    { type: 'text', text } as const,
+    ...inline.map(
+      ({ f, content }) =>
+        ({
+          type: 'text',
+          text: `<attached-file name="${f.ref.name.replace(/"/g, '')}">
+${content}
+</attached-file>`,
+        }) as const,
+    ),
+    { type: 'text', text: text + filesNote(saved) } as const,
   ];
 }
 

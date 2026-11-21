@@ -19,6 +19,8 @@ export const HOOK_EVENTS = [
 ] as const;
 
 const TOOL_EVENTS = new Set(['PreToolUse', 'PermissionRequest', 'PostToolUse', 'PostToolUseFailure']);
+/** Hooks that may wait for the phone. */
+const HOLDING_EVENTS = new Set(['PreToolUse', 'PermissionRequest']);
 /** Seconds Claude Code waits for the PermissionRequest hook (> the 5-minute remote wait + margin). */
 export const PERMISSION_HOOK_TIMEOUT_S = 330;
 
@@ -101,6 +103,23 @@ export interface InstallResult {
  * Adds Pocket Agent's observe-only hooks to Claude Code settings. Idempotent (re-running replaces our
  * entries), backs the file up first, and never touches permission settings or other hooks.
  */
+/** The command our hooks run, as found in the settings (to re-install with the same one). */
+export async function installedCommand(settingsPath: string): Promise<string | null> {
+  try {
+    const { settings } = await readSettings(settingsPath);
+    for (const groups of Object.values(settings.hooks ?? {})) {
+      if (!Array.isArray(groups)) continue;
+      for (const g of groups) {
+        const ours = (Array.isArray(g.hooks) ? g.hooks : []).find(isOurs);
+        if (ours && typeof ours['command'] === 'string') return ours['command'];
+      }
+    }
+  } catch {
+    /* unreadable: nothing to update */
+  }
+  return null;
+}
+
 export async function installHooks(settingsPath: string, command: string): Promise<InstallResult> {
   const { settings, existed } = await readSettings(settingsPath);
   let backupPath: string | null = null;
@@ -113,10 +132,11 @@ export async function installHooks(settingsPath: string, command: string): Promi
   for (const event of HOOK_EVENTS) {
     const group: HookGroup = {
       ...(TOOL_EVENTS.has(event) ? { matcher: '*' } : {}),
-      // The relay answers in milliseconds, except a PermissionRequest held for a decision from the
-      // phone (Away mode, ≤ 5 min) — its timeout is longer so Claude Code doesn't cut it off first.
+      // The relay answers in milliseconds, except a PermissionRequest, or a question from Claude
+      // (PreToolUse of AskUserQuestion), held for an answer from the phone (Away mode, ≤ 5 min):
+      // those timeouts are longer so Claude Code doesn't cut them off first.
       hooks: [
-        { type: 'command', command, timeout: event === 'PermissionRequest' ? PERMISSION_HOOK_TIMEOUT_S : 10 },
+        { type: 'command', command, timeout: HOLDING_EVENTS.has(event) ? PERMISSION_HOOK_TIMEOUT_S : 10 },
       ],
     };
     hooks[event] = [...(hooks[event] ?? []), group];
@@ -142,9 +162,13 @@ function countOurs(settings: Settings): number {
     .filter(isOurs).length;
 }
 
-export async function hooksStatus(
-  settingsPath: string,
-): Promise<{ installed: boolean; events: string[]; permissionTimeoutS: number | null }> {
+export async function hooksStatus(settingsPath: string): Promise<{
+  installed: boolean;
+  events: string[];
+  permissionTimeoutS: number | null;
+  /** Installed by an older version: re-installing updates our entries. */
+  outdated: boolean;
+}> {
   try {
     const { settings } = await readSettings(settingsPath);
     const events = Object.entries(settings.hooks ?? {})
@@ -154,8 +178,17 @@ export async function hooksStatus(
       .flatMap((g) => (Array.isArray(g.hooks) ? g.hooks : []))
       .find(isOurs);
     const t = permissionHook?.['timeout'];
-    return { installed: events.length > 0, events, permissionTimeoutS: typeof t === 'number' ? t : null };
+    const pre = (settings.hooks?.['PreToolUse'] ?? [])
+      .flatMap((g) => (Array.isArray(g.hooks) ? g.hooks : []))
+      .find(isOurs)?.['timeout'];
+    const installed = events.length > 0;
+    return {
+      installed,
+      events,
+      permissionTimeoutS: typeof t === 'number' ? t : null,
+      outdated: installed && !(typeof pre === 'number' && pre >= PERMISSION_HOOK_TIMEOUT_S),
+    };
   } catch {
-    return { installed: false, events: [], permissionTimeoutS: null };
+    return { installed: false, events: [], permissionTimeoutS: null, outdated: false };
   }
 }

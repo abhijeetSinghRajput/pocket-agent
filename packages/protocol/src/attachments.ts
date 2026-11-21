@@ -1,18 +1,74 @@
 import { z } from 'zod';
 
-/** Photos and PDFs sent with a message. Stored for 30 days; a small preview is kept after that. */
+/**
+ * Files sent with a message: photos, PDFs, documents, spreadsheets, code, anything a person would
+ * hand Claude. Stored for 30 days; photos and PDFs keep a small preview after that.
+ */
 export const ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024;
 export const ATTACHMENT_MAX_PER_MESSAGE = 4;
 export const ATTACHMENT_RETENTION_DAYS = 30;
-export const ATTACHMENT_MIME = [
+/** Shown as a picture (and handed to Claude as one); PDFs too, as documents. */
+export const PREVIEWABLE_MIME = [
   'image/png',
   'image/jpeg',
   'image/webp',
   'image/gif',
   'application/pdf',
 ] as const;
-export const AttachmentMime = z.enum(ATTACHMENT_MIME);
+/** Programs and installers are never accepted. */
+export const BLOCKED_EXTENSIONS = [
+  'exe',
+  'msi',
+  'bat',
+  'cmd',
+  'com',
+  'scr',
+  'pif',
+  'cpl',
+  'dll',
+  'sys',
+  'vbs',
+  'vbe',
+  'jse',
+  'wsf',
+  'wsh',
+  'hta',
+  'lnk',
+  'reg',
+  'apk',
+  'appx',
+  'msix',
+  'dmg',
+  'pkg',
+  'app',
+  'jar',
+  'deb',
+  'rpm',
+  'iso',
+  'img',
+] as const;
+export const AttachmentMime = z
+  .string()
+  .max(100)
+  .regex(/^[\w.+-]+\/[\w.+-]+$/);
 export type AttachmentMime = z.infer<typeof AttachmentMime>;
+
+export const isPreviewable = (mime: string) => (PREVIEWABLE_MIME as readonly string[]).includes(mime);
+
+/** The file's extension, lower case ('' if none). */
+export function fileExtension(name: string): string {
+  const m = /\.([A-Za-z0-9]{1,10})$/.exec(name.trim());
+  return m ? m[1]!.toLowerCase() : '';
+}
+
+/** Why this file can't be sent, or null if it can. */
+export function attachmentProblem(file: { name: string; size: number }): string | null {
+  if ((BLOCKED_EXTENSIONS as readonly string[]).includes(fileExtension(file.name)))
+    return 'Programs and installers can’t be attached.';
+  if (file.size > ATTACHMENT_MAX_BYTES) return 'That file is larger than 10 MB.';
+  if (file.size === 0) return 'That file is empty.';
+  return null;
+}
 
 /** A file name as shown in the chat: no path, no control characters. */
 export const AttachmentName = z
@@ -36,7 +92,10 @@ export const AttachmentRefs = z.array(AttachmentRef).max(ATTACHMENT_MAX_PER_MESS
 
 /** Step 1 of an upload: the API reserves the attachment and signs a direct upload to storage. */
 export const SignAttachmentRequest = z.object({
-  name: AttachmentName,
+  name: AttachmentName.refine(
+    (n) => !attachmentProblem({ name: n, size: 1 }),
+    'This kind of file can’t be attached',
+  ),
   mime: AttachmentMime,
   size: z.number().int().min(1).max(ATTACHMENT_MAX_BYTES),
 });

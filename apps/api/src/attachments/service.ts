@@ -1,16 +1,21 @@
 import {
   ATTACHMENT_MAX_BYTES,
   ATTACHMENT_RETENTION_DAYS,
+  fileExtension,
+  isPreviewable,
   type AttachmentRef,
   type SignAttachmentRequest,
 } from '@pocket-agent/protocol';
 import { randomUUID } from 'node:crypto';
 import type { AppContext } from '../context.js';
 import type { Attachment } from '../generated/prisma/client.js';
-import { ALLOWED_FORMATS, type AttachmentStorage } from './storage.js';
+import { ALLOWED_FORMATS, type AttachmentStorage, type StoredAs } from './storage.js';
 
 /** An upload that no message carries is deleted after this long. */
 export const UNUSED_AFTER_MS = 60 * 60 * 1000;
+
+/** How a file is stored: photos and PDFs as images, everything else as a plain file. */
+export const storedAs = (mime: string): StoredAs => (isPreviewable(mime) ? 'image' : 'raw');
 
 export type AttachmentServices = AppContext & { storage: AttachmentStorage | null };
 
@@ -46,8 +51,11 @@ function storageOf(ctx: AttachmentServices): AttachmentStorage {
 /** Reserves an attachment for `owner` and signs a direct upload for it. */
 export async function signAttachment(ctx: AttachmentServices, owner: Owner, input: SignAttachmentRequest) {
   const storage = storageOf(ctx);
-  // Random storage id: nothing about the user or the file name is in the URL.
-  const publicId = `pocket-agent/${randomUUID()}`;
+  // Random storage id: nothing about the user or the file name is in the URL. A plain file keeps
+  // its extension (storage serves it under its id).
+  const ext = fileExtension(input.name);
+  const as = storedAs(input.mime);
+  const publicId = `pocket-agent/${randomUUID()}${as === 'raw' && ext ? `.${ext}` : ''}`;
   const a = await ctx.prisma.attachment.create({
     data: {
       userId: owner.userId,
@@ -58,7 +66,7 @@ export async function signAttachment(ctx: AttachmentServices, owner: Owner, inpu
       publicId,
     },
   });
-  return { attachment: toRef(a), ...storage.signUpload(publicId) };
+  return { attachment: toRef(a), ...storage.signUpload(publicId, as) };
 }
 
 /** Confirms the upload with storage (signature, real size and type), then keeps a small preview. */
@@ -77,14 +85,15 @@ export async function completeAttachment(
   if (!storage.verifyUpload(a.publicId, result.version, result.signature))
     throw new AttachmentError('upload_not_verified', 'The upload could not be verified.');
 
-  const info = await storage.info(a.publicId);
+  const as = storedAs(a.mime);
+  const info = await storage.info(a.publicId, as);
   if (!info) throw new AttachmentError('upload_not_verified', 'The upload could not be verified.');
-  if (info.bytes > ATTACHMENT_MAX_BYTES || !ALLOWED_FORMATS.includes(info.format)) {
-    await storage.destroy(a.publicId).catch(() => undefined);
+  if (info.bytes > ATTACHMENT_MAX_BYTES || (as === 'image' && !ALLOWED_FORMATS.includes(info.format))) {
+    await storage.destroy(a.publicId, as).catch(() => undefined);
     await ctx.prisma.attachment.delete({ where: { id: a.id } });
     throw new AttachmentError('too_large', 'That file is too large or not a supported type.');
   }
-  const thumb = await storage.thumbnail(a.publicId, a.mime).catch(() => null);
+  const thumb = as === 'image' ? await storage.thumbnail(a.publicId, a.mime).catch(() => null) : null;
   const ready = await ctx.prisma.attachment.update({
     where: { id: a.id },
     data: { readyAt: ctx.now(), size: info.bytes, thumb: thumb ? new Uint8Array(thumb) : null },
@@ -122,7 +131,7 @@ export async function markUsed(ctx: AppContext, ids: string[]): Promise<void> {
 export async function discardAttachment(ctx: AttachmentServices, userId: string, id: string): Promise<void> {
   const a = await ctx.prisma.attachment.findFirst({ where: { id, userId, usedAt: null } });
   if (!a) return; // gone already, or in use: nothing to do
-  await ctx.storage?.destroy(a.publicId).catch(() => undefined);
+  await ctx.storage?.destroy(a.publicId, storedAs(a.mime)).catch(() => undefined);
   await ctx.prisma.attachment.deleteMany({ where: { id: a.id, usedAt: null } });
 }
 
@@ -137,7 +146,12 @@ export async function fileUrl(ctx: AttachmentServices, userId: string, id: strin
       `Files are kept for ${ATTACHMENT_RETENTION_DAYS} days. This one was removed; only its preview is left.`,
       410,
     );
-  return storage.downloadUrl(a.publicId, a.mime, new Date(ctx.now().getTime() + 5 * 60_000));
+  return storage.downloadUrl(
+    a.publicId,
+    a.mime,
+    storedAs(a.mime),
+    new Date(ctx.now().getTime() + 5 * 60_000),
+  );
 }
 
 /** Deletes files older than the retention period from storage (their previews stay). */
@@ -155,7 +169,7 @@ export async function removeExpiredAttachments(ctx: AttachmentServices): Promise
   let removed = 0;
   for (const a of expired) {
     try {
-      await ctx.storage.destroy(a.publicId);
+      await ctx.storage.destroy(a.publicId, storedAs(a.mime));
       await ctx.prisma.attachment.update({ where: { id: a.id }, data: { removedAt: ctx.now() } });
       removed++;
     } catch {
@@ -170,7 +184,7 @@ export async function removeExpiredAttachments(ctx: AttachmentServices): Promise
   });
   for (const a of unused) {
     try {
-      await ctx.storage.destroy(a.publicId);
+      await ctx.storage.destroy(a.publicId, storedAs(a.mime));
       await ctx.prisma.attachment.deleteMany({ where: { id: a.id, usedAt: null } });
       removed++;
     } catch {

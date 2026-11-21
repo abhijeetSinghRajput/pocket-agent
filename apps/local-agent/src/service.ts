@@ -8,7 +8,13 @@ import { Outbox } from './outbox.js';
 import { loadPolicy, type Policy } from './policy.js';
 import { ClaudeDiscovery } from './providers/claude-code/discovery.js';
 import { ClaudeHookHandler } from './providers/claude-code/hooks.js';
-import { claudeConfigDir, defaultSettingsPath, hooksStatus } from './providers/claude-code/install.js';
+import {
+  claudeConfigDir,
+  defaultSettingsPath,
+  hooksStatus,
+  installedCommand,
+  installHooks,
+} from './providers/claude-code/install.js';
 import { ObservedInstructions } from './providers/claude-code/instructions.js';
 import { ManagedSessions, type QueryFn } from './providers/claude-code/managed.js';
 import { IdleWake } from './providers/claude-code/wake.js';
@@ -78,6 +84,7 @@ export class AgentService {
       broker: this.approvals,
       enabled: () => this.policy.remoteApproval,
     });
+    this.managed.filesRoot = path.join(opts.home, 'attachments');
     this.observed = new ObservedInstructions(this.registry, ack);
     this.wake = new IdleWake(this.registry, opts.query, ack, opts.log, Date.now, {
       broker: this.approvals,
@@ -234,7 +241,16 @@ export class AgentService {
     const settings = this.opts.claudeDir
       ? path.join(this.opts.claudeDir, 'settings.json')
       : defaultSettingsPath();
-    this.hooksInstalled = (await hooksStatus(settings)).installed;
+    const hooks = await hooksStatus(settings);
+    this.hooksInstalled = hooks.installed;
+    if (hooks.outdated) {
+      // Installed by an older version: refresh our own entries (same command; others untouched).
+      const command = await installedCommand(settings);
+      if (command)
+        await installHooks(settings, command)
+          .then(() => this.opts.log('info', 'Updated the Pocket Agent hooks in Claude Code settings'))
+          .catch((err: Error) => this.opts.log('warn', `could not update the hooks: ${err.message}`));
+    }
     this.policy = await loadPolicy(this.opts.home);
     await this.ingest.start();
     this.discovery.start();

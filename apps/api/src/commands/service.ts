@@ -6,6 +6,8 @@ import {
   createEvent,
   type AttachmentRef,
   type CommandDto,
+  type TurnEffort,
+  type TurnMode,
   type CommandKind,
   type CommandStatus,
 } from '@pocket-agent/protocol';
@@ -20,6 +22,8 @@ interface CommandPayload {
   text?: string;
   projectPath?: string;
   model?: string;
+  permissionMode?: TurnMode;
+  effort?: TurnEffort;
   attachments?: AttachmentRef[];
 }
 
@@ -33,6 +37,8 @@ export function toCommandDto(c: Command): CommandDto {
     text: p.text ?? null,
     projectPath: p.projectPath ?? null,
     model: p.model ?? null,
+    permissionMode: p.permissionMode ?? null,
+    effort: p.effort ?? null,
     attachments: AttachmentRefs.catch([]).parse(p.attachments ?? []),
     status: c.status,
     error: c.error,
@@ -78,7 +84,11 @@ async function notifyCommand(ctx: Services, c: Command): Promise<void> {
 export function commandFrame(c: Command, externalSessionId: string | null) {
   const p = (c.payload ?? {}) as CommandPayload;
   const base = { commandId: c.id, expiresAt: c.expiresAt.toISOString() };
-  const model = p.model ? { model: p.model } : {};
+  const model = {
+    ...(p.model ? { model: p.model } : {}),
+    ...(p.permissionMode ? { permissionMode: p.permissionMode } : {}),
+    ...(p.effort ? { effort: p.effort } : {}),
+  };
   const payload =
     c.commandType === 'instruction'
       ? {
@@ -122,6 +132,8 @@ export interface CreateCommandInput {
   text?: string;
   projectPath?: string;
   model?: string;
+  permissionMode?: TurnMode;
+  effort?: TurnEffort;
   attachments?: AttachmentRef[];
   ip?: string;
 }
@@ -159,6 +171,8 @@ export async function createCommand(
           ...(input.text !== undefined ? { text: input.text } : {}),
           ...(input.projectPath !== undefined ? { projectPath: input.projectPath } : {}),
           ...(input.model !== undefined ? { model: input.model } : {}),
+          ...(input.permissionMode !== undefined ? { permissionMode: input.permissionMode } : {}),
+          ...(input.effort !== undefined ? { effort: input.effort } : {}),
           ...(input.attachments?.length ? { attachments: input.attachments } : {}),
         },
         idempotencyKey: input.idempotencyKey,
@@ -191,6 +205,8 @@ export async function createCommand(
       deviceId: input.deviceId,
       sessionId: input.session?.id ?? null,
       characters: input.text?.length ?? 0,
+      // A mode chosen in the app changes how Claude Code asks for permission: always on record.
+      ...(input.permissionMode ? { permissionMode: input.permissionMode } : {}),
       outcome: online ? 'sent' : 'device_offline',
     },
     ip: input.ip ?? null,

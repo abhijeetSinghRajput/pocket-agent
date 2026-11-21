@@ -19,6 +19,12 @@ export function useBackToClose(open: boolean, close: () => void) {
     const id = `overlay-${Date.now()}-${Math.random()}`;
     let pushed = false;
     let popped = false;
+    // A link inside the overlay navigates away while closing it: its history step must stay.
+    let leaving = false;
+    const onClick = (e: MouseEvent) => {
+      if ((e.target as Element | null)?.closest?.('a[href]')) leaving = true;
+    };
+    document.addEventListener('click', onClick, true);
     // Deferred, so an open that is undone at once (React's dev double-run) leaves history alone.
     const t = setTimeout(() => {
       // Keep the router's own state in the entry: only our marker is added.
@@ -34,9 +40,9 @@ export function useBackToClose(open: boolean, close: () => void) {
     return () => {
       clearTimeout(t);
       window.removeEventListener('popstate', onPop);
-      const top = (window.history.state as { pocketAgentOverlay?: string } | null)?.pocketAgentOverlay;
+      document.removeEventListener('click', onClick, true);
       // Closed with its button or a tap outside: take our entry off again.
-      if (pushed && !popped && top === id) window.history.back();
+      if (pushed && !popped && !leaving) window.history.back();
     };
   }, [open]);
 }

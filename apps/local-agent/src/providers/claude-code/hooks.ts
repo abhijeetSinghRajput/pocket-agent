@@ -2,7 +2,7 @@ import { APPROVAL_WAIT_MS, CLAUDE_CODE_CAPABILITIES, type SessionCapabilities } 
 import { createHash } from 'node:crypto';
 import { truncate, type SessionRegistry } from '../../sessions/registry.js';
 import type { AttachmentRef } from '@pocket-agent/protocol';
-import type { ApprovalBroker } from '../../approvals.js';
+import { answeredQuestionInput, type ApprovalBroker } from '../../approvals.js';
 import type { PastedFile } from '../../attachments.js';
 import type { ObservedInstructions } from './instructions.js';
 import type { IdleWake } from './wake.js';
@@ -14,6 +14,18 @@ export type HookOutput =
   | { decision: 'block'; reason: string }
   /** Stop the turn (an interrupt sent from Pocket Agent). */
   | { continue: false; stopReason: string }
+  /**
+   * Claude's question answered in Pocket Agent: its own questions plus the answers (documented way
+   * to answer AskUserQuestion from a hook; "allow" alone would run it with no answers).
+   */
+  | {
+      hookSpecificOutput: {
+        hookEventName: 'PreToolUse';
+        permissionDecision: 'allow' | 'deny';
+        permissionDecisionReason?: string;
+        updatedInput?: Record<string, unknown>;
+      };
+    }
   | {
       hookSpecificOutput: {
         hookEventName: 'UserPromptSubmit' | 'PostToolUse' | 'PostToolUseFailure';
@@ -177,6 +189,16 @@ export class ClaudeHookHandler {
           toolName,
           input: summarizeToolInput(toolName, p['tool_input']),
         });
+        // Claude asks the user something while they are away: ask it on the phone, and answer it
+        // from here. Not answered in time: nothing is returned and the editor shows it as usual.
+        if (
+          toolName === 'AskUserQuestion' &&
+          this.opts.approvals &&
+          this.opts.holdForRemote?.() &&
+          !s(p['agent_id'])
+        ) {
+          return this.askOnPhone(sessionId, id, p['tool_input']);
+        }
         break;
       }
 
@@ -338,6 +360,51 @@ export class ClaudeHookHandler {
       this.registry.event(sessionId, 'agent.permission.resolved', { requestId: id, outcome: 'local' });
       this.opts.approvals?.cancel(id); // stop waiting for the phone
     }
+  }
+
+  /** Holds Claude's question (PreToolUse) until it is answered in Pocket Agent, skipped, or times out. */
+  private async askOnPhone(
+    sessionId: string,
+    requestId: string,
+    toolInput: unknown,
+  ): Promise<HookOutput | undefined> {
+    const waitMs = this.opts.approvalWaitMs ?? APPROVAL_WAIT_MS.observed;
+    this.map(this.pendingPermissions, sessionId).set(requestId, requestId);
+    this.registry.event(sessionId, 'agent.permission.requested', {
+      toolUseId: requestId,
+      toolName: 'AskUserQuestion',
+      input: summarizeToolInput('AskUserQuestion', toolInput),
+      requestId,
+      awaitingRemote: true,
+      expiresAt: new Date((this.opts.now ?? Date.now)() + waitMs).toISOString(),
+    });
+    this.registry.setStatus(sessionId, 'WaitingForPermission');
+    const decision = await this.opts.approvals!.wait(requestId, waitMs);
+    const pending = this.pendingPermissions.get(sessionId);
+    if (!pending?.has(requestId)) return undefined; // the session moved on meanwhile
+    pending.delete(requestId);
+    const answered =
+      decision?.behavior === 'allow'
+        ? answeredQuestionInput('AskUserQuestion', toolInput, decision.answers)
+        : undefined;
+    if (!decision || (decision.behavior === 'allow' && !answered)) {
+      // No usable answer: say nothing, so the editor asks as usual.
+      this.registry.event(sessionId, 'agent.permission.resolved', { requestId, outcome: 'timeout' });
+      this.registry.setStatus(sessionId, 'Running');
+      return undefined;
+    }
+    this.registry.event(sessionId, 'agent.permission.resolved', { requestId, outcome: 'remote' });
+    this.registry.setStatus(sessionId, 'Running');
+    return {
+      hookSpecificOutput:
+        decision.behavior === 'allow'
+          ? { hookEventName: 'PreToolUse', permissionDecision: 'allow', updatedInput: answered! }
+          : {
+              hookEventName: 'PreToolUse',
+              permissionDecision: 'deny',
+              permissionDecisionReason: decision.message,
+            },
+    };
   }
 
   /** Holds a PermissionRequest hook until Pocket Agent decides, it times out, or the PC answers. */

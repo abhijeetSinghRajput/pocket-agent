@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { CommandStatus } from './enums.js';
 import { ATTACHMENT_MAX_PER_MESSAGE, AttachmentRefs } from './attachments.js';
-import { INSTRUCTION_MAX, ModelId } from './events.js';
+import { INSTRUCTION_MAX, ModelId, TurnEffort, TurnMode } from './events.js';
 
 const iso = z.iso.datetime({ offset: true });
 
@@ -16,8 +16,10 @@ export const CommandDto = z.object({
   /** Instruction text (instruction / session.start). */
   text: z.string().nullable(),
   projectPath: z.string().nullable(),
-  /** Model chosen for this turn, if any. */
+  /** Model, mode and effort chosen for this turn, if any. */
   model: z.string().nullable().optional(),
+  permissionMode: TurnMode.nullable().optional(),
+  effort: TurnEffort.nullable().optional(),
   /** Files sent with the message. */
   attachments: AttachmentRefs.default([]),
   status: CommandStatus,
@@ -42,6 +44,9 @@ export const SendInstructionRequest = z.object({
   text: z.string().trim().min(1, 'Type an instruction').max(INSTRUCTION_MAX),
   /** Model for this turn (one of the PC's models). Omit to keep the session's model. */
   model: ModelId.optional(),
+  /** Mode and effort for this turn (turns Pocket Agent runs; a turn in the editor keeps its own). */
+  permissionMode: TurnMode.optional(),
+  effort: TurnEffort.optional(),
   /** Uploaded attachments to send with it (see /attachments/sign). */
   attachmentIds: z.array(z.uuid()).max(ATTACHMENT_MAX_PER_MESSAGE).optional(),
   idempotencyKey,
@@ -52,6 +57,8 @@ export const StartSessionRequest = z.object({
   projectPath: z.string().min(1).max(1024),
   text: z.string().trim().min(1, 'Type the first instruction').max(INSTRUCTION_MAX),
   model: ModelId.optional(),
+  permissionMode: TurnMode.optional(),
+  effort: TurnEffort.optional(),
   idempotencyKey,
 });
 export type StartSessionRequest = z.infer<typeof StartSessionRequest>;

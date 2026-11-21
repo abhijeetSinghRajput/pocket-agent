@@ -194,6 +194,30 @@ describe('instructions', () => {
     s.agent.ws.close();
   });
 
+  it('passes the mode and effort chosen in the app, never "bypass permissions", and audits the mode', async () => {
+    const s = await setup();
+    const send = (extra: object) =>
+      post(`/sessions/${s.session.id}/instructions`, s.cookie, {
+        text: 'go',
+        idempotencyKey: randomUUID(),
+        ...extra,
+      });
+    expect((await send({ permissionMode: 'bypassPermissions' })).statusCode).toBe(400);
+    expect((await send({ effort: 'extreme' })).statusCode).toBe(400);
+
+    const res = await send({ permissionMode: 'plan', effort: 'high' });
+    expect(res.statusCode).toBe(201);
+    const { command } = CommandResponse.parse(res.json());
+    expect(command).toMatchObject({ permissionMode: 'plan', effort: 'high' });
+    const frame = await s.agent.next((m) => m['eventType'] === 'command.execute');
+    expect(frame['payload']).toMatchObject({ permissionMode: 'plan', effort: 'high' });
+    const audit = await t.ctx.prisma.auditLog.findFirstOrThrow({
+      where: { action: 'command.created', targetId: command.id },
+    });
+    expect(audit.metadata).toMatchObject({ permissionMode: 'plan' });
+    s.agent.ws.close();
+  });
+
   it('only sessions that can be stopped are interrupted or ended', async () => {
     const s = await setup({ ...OBSERVED_OFF, instructBetweenTurns: true }, 'observed');
     for (const action of ['interrupt', 'stop']) {

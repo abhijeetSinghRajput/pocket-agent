@@ -87,7 +87,29 @@ describe('files sent from the app', () => {
     ]);
     const note = filesNote(files);
     expect(note).toContain('C:\\pa\\1-shot.png (image/png)');
-    expect(note).toContain('Read tool');
+    expect(note).toContain('Read works for text and code');
+    // A file Claude can't take in directly (a spreadsheet, code) is saved and named in the text.
+    const sheet: LocalFile = {
+      ref: ref({ mime: 'text/csv', name: 'sales.csv' }),
+      path: 'C:/pa/3-sales.csv',
+      data: Buffer.from('a,b'),
+    };
+    const doc: LocalFile = {
+      ref: ref({
+        mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        name: 'brief.docx',
+      }),
+      path: 'C:/pa/4-brief.docx',
+      data: Buffer.from([0x50, 0x4b, 0x03, 0x04, 0xff, 0xfe]),
+    };
+    // Text and code go in as their content; a document is saved and named.
+    const mixed = messageContent('look', [files[0]!, sheet, doc]) as Array<{ type: string; text?: string }>;
+    expect(mixed.map((b) => b.type)).toEqual(['image', 'text', 'text']);
+    expect(mixed[1]!.text).toContain('<attached-file name="sales.csv">');
+    expect(mixed[1]!.text).toContain('a,b');
+    expect(mixed[2]!.text).toContain('4-brief.docx');
+    expect(mixed[2]!.text).not.toContain('sales.csv');
+    expect(safeFileName('notes.md', 'application/octet-stream')).toBe('notes.md');
   });
 });
 

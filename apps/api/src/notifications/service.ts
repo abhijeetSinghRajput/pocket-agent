@@ -11,7 +11,7 @@ import {
 import type { AppContext } from '../context.js';
 import { Prisma, type Notification } from '../generated/prisma/client.js';
 import { notifyUser, type Bus } from '../realtime/bus.js';
-import type { PushSender } from './push.js';
+import type { PushAction, PushSender } from './push.js';
 
 export type NotifyServices = AppContext & { bus: Bus; push: PushSender };
 
@@ -23,6 +23,8 @@ export interface NotifyInput {
   link: string;
   /** Same key → one notification (an event never notifies twice). */
   dedupeKey: string;
+  /** Buttons for a yes/no request (see `yesNoActions`). */
+  actions?: PushAction[];
 }
 
 export function toNotificationDto(n: Notification): NotificationDto {
@@ -103,6 +105,7 @@ export async function notify(ctx: NotifyServices, input: NotifyInput): Promise<N
           link: input.link,
           tag: input.dedupeKey.slice(0, 100),
           priority,
+          ...(input.actions?.length ? { actions: input.actions } : {}),
         })
         .catch(() => 'error' as const);
       if (r === 'ok') {

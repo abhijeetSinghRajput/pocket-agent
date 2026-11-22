@@ -312,6 +312,73 @@
     }
   }
 
+  /*
+   * A PC just connected (onboarding, once per account): the badge settles in, one ring breathes
+   * out behind it, the tick draws itself, then the words rise in. Rare moment, so it may take a
+   * little longer than UI feedback. Reduced motion: everything simply fades in, tick already drawn.
+   */
+  .success-badge {
+    animation: success-in 420ms var(--ease-out) both;
+  }
+  @keyframes success-in {
+    from {
+      opacity: 0;
+      transform: scale(0.9);
+    }
+  }
+  .success-ring {
+    animation: success-ring 900ms var(--ease-out) 260ms both;
+  }
+  @keyframes success-ring {
+    from {
+      opacity: 0.55;
+      transform: scale(1);
+    }
+    to {
+      opacity: 0;
+      transform: scale(1.55);
+    }
+  }
+  .success-tick {
+    stroke-dasharray: 1;
+    stroke-dashoffset: 1;
+    animation: tick-draw 380ms var(--ease-out) 240ms forwards;
+  }
+  @keyframes tick-draw {
+    to {
+      stroke-dashoffset: 0;
+    }
+  }
+  .rise-in {
+    animation: rise-in 380ms var(--ease-out) both;
+  }
+  /* A countdown: shrinks steadily, one step per second. */
+  .countdown-bar {
+    transform-origin: left;
+    transition: transform 1s linear;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .success-badge,
+    .rise-in {
+      animation-name: fade-in;
+    }
+    .success-ring {
+      display: none;
+    }
+    .success-tick {
+      animation: none;
+      stroke-dashoffset: 0;
+    }
+    .countdown-bar {
+      transition: none;
+    }
+  }
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+  }
+
   /* A group arriving: its items rise in one after another, in reading order. */
   .stagger > * {
     animation: rise-in 380ms var(--ease-out) both;

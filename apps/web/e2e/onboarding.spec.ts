@@ -1,22 +1,21 @@
 import { expect, test } from '@playwright/test';
 import { registerViaApi } from './helpers';
 
-// A fresh browser: nothing remembered, so the first-run setup screen is shown.
+// A fresh browser, and an account without a PC.
 test.use({ storageState: { cookies: [], origins: [] } });
 
-test('a new account without a PC sees the setup screen first, and can skip it', async ({ page }) => {
+test('an account without a PC only sees the setup screen, with one command to run', async ({ page }) => {
   await registerViaApi(page.request, 'Onboarding E2E');
-  await page.goto('/');
-  await expect(page.getByRole('heading', { name: 'Connect your PC' })).toBeVisible();
+  for (const path of ['/', '/devices', '/approvals']) {
+    await page.goto(path);
+    await expect(page.getByRole('heading', { level: 1 })).toContainText('Let’s connect your PC.');
+  }
+  await expect(page.getByTestId('onboarding-status')).toContainText('Not connected');
+  await page.getByTestId('onboarding-connect').click();
   const code = (await page.getByTestId('pairing-code').textContent())!.trim();
   expect(code).toMatch(/^[0-9A-Z]{4}-[0-9A-Z]{4}$/);
-  await expect(page.getByText(`pocket-agent connect ${code}`)).toBeVisible();
+  await expect(page.getByTestId('pairing-command')).toContainText(`pocket-agent connect ${code}`);
+  await expect(page.getByTestId('install-command')).toHaveText('npm install -g @mrcodium/pocket-agent');
   await expect(page.getByTestId('onboarding-status')).toContainText('Waiting for your PC');
-
-  await page.getByTestId('onboarding-skip').click();
-  await expect(page.getByRole('heading', { name: 'Connect your PC' })).toHaveCount(0);
-
-  // Remembered on this browser.
-  await page.reload();
-  await expect(page.getByRole('heading', { name: 'Connect your PC' })).toHaveCount(0);
+  await expect(page.getByText('Set up later')).toHaveCount(0);
 });

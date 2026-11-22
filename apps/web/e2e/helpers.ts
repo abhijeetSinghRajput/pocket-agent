@@ -20,6 +20,20 @@ export async function registerViaApi(request: APIRequestContext, name = 'E2E Use
   return { email, password: PASSWORD, name };
 }
 
+/**
+ * Pairs a stand-in PC to the signed-in user straight through the API (no agent process), so the
+ * app opens instead of the setup screen, which can't be skipped without a PC.
+ */
+export async function addFakePc(request: APIRequestContext, name = 'E2E Fake PC') {
+  const res = await request.post(`${API}/devices/pairing-codes`, { headers: { origin: WEB } });
+  expect(res.status(), await res.text()).toBe(201);
+  const { code } = (await res.json()) as { code: string };
+  const pair = await request.post(`${API}/devices/pair`, {
+    data: { code, name, platform: 'windows', agentVersion: '0.1.5' },
+  });
+  expect(pair.status(), await pair.text()).toBe(201);
+}
+
 /** The open chat's live status badge (the session list next to it on desktop has its own). */
 export const chatStatus = (page: import('@playwright/test').Page) =>
   page.getByTestId('chat-header').getByTestId('session-status');

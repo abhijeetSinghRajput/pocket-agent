@@ -84,7 +84,10 @@ export const AGENT_NPM_PACKAGE = process.env.NEXT_PUBLIC_AGENT_NPM_PACKAGE || '@
 /** The server the PC app uses when no `--api` is given (keep in sync with the agent's DEFAULT_API_URL). */
 export const AGENT_DEFAULT_API_URL = 'https://pocket-agent-api.onrender.com';
 
-/** The one command that connects a PC. `--api` only when this deployment isn't the default server. */
+/** Installs the PC app (once per computer). */
+export const installCommand = () => `npm install -g ${AGENT_NPM_PACKAGE}`;
+
+/** Connects a PC with a pairing code. `--api` only when this deployment isn't the default server. */
 export function connectCommand(code: string): string {
   const api = agentApiUrl();
   return `pocket-agent connect ${code}${api === AGENT_DEFAULT_API_URL ? '' : ` --api ${api}`}`;

@@ -3,6 +3,7 @@
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useRef, type ReactNode } from 'react';
 import { AppShell } from '@/components/app-shell';
+import { InAppToasts } from '@/components/notifications/in-app-toasts';
 import { OnboardingGate } from '@/components/onboarding/onboarding-gate';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/lib/auth';
@@ -33,6 +34,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
           <OnboardingGate>
             <AppShell user={state.user}>{children}</AppShell>
           </OnboardingGate>
+          <InAppToasts />
         </LiveProvider>
       </QueryProvider>
     );

@@ -140,3 +140,18 @@ export function useLiveRefresh(onChange: () => void, filter: (e: BackendToWeb) =
     };
   }, [subscribe]);
 }
+
+/** Calls `onEvent` with each live event as it arrives (no batching, unlike useLiveRefresh). */
+export function useLiveEvents(onEvent: (e: BackendToWeb) => void) {
+  const subscribe = useContext(LiveContext)?.subscribe;
+  const cb = useRef(onEvent);
+  useEffect(() => {
+    cb.current = onEvent;
+  });
+  useEffect(() => {
+    if (!subscribe) return;
+    return subscribe((e) => {
+      if (e) cb.current(e);
+    });
+  }, [subscribe]);
+}

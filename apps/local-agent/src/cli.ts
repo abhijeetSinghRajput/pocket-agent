@@ -2,7 +2,7 @@
 import { PROTOCOL_VERSION } from '@pocket-agent/protocol';
 import { Command } from 'commander';
 import { existsSync } from 'node:fs';
-import { stat } from 'node:fs/promises';
+import { readFile, rm, stat } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
@@ -25,7 +25,6 @@ import {
   writePidFile,
 } from './background.js';
 import { spawn } from 'node:child_process';
-import { rm } from 'node:fs/promises';
 import {
   currentPlatform,
   DEFAULT_API_URL,
@@ -215,6 +214,10 @@ async function addWorkspaces(policy: Policy, dirs: string[]): Promise<string[]> 
  * wait until the server actually sees this PC online. Safe to re-run: finished steps are skipped.
  */
 async function connectThisPc(codeArg: string | undefined, opts: ConnectOptions): Promise<void> {
+  // Run through npx (the one command the app shows): install for good, then continue with the
+  // installed copy, since hooks and start-at-sign-in must point at a path that stays.
+  if (isEphemeralInstall(CLI_PATH)) return installThenConnect();
+
   const ctx = setupContext();
   const ask_ = !opts.yes && interactive();
   heading('Connect this PC to Pocket Agent');
@@ -225,11 +228,6 @@ async function connectThisPc(codeArg: string | undefined, opts: ConnectOptions):
     fail('Update Node.js from https://nodejs.org, then run this again.');
   }
   line('ok', 'Node.js', `v${process.versions.node}`);
-  if (!stableInstall(ctx)) {
-    fail(
-      `Pocket Agent needs to be installed, not run through npx. Install it: npm install -g ${PACKAGE_NAME}`,
-    );
-  }
   const claude = claudeCodeDetected();
   line(
     claude ? 'ok' : 'warn',
@@ -379,6 +377,50 @@ async function disconnectThisPc(): Promise<void> {
     await createSecretStore(home).clear();
     await deleteConfig(home);
     return 'removed';
+  });
+}
+
+/** `npx … connect`: installs this version globally, then re-runs the same command from there. */
+async function installThenConnect(): Promise<never> {
+  const prefix = (await npmOutput(['prefix', '-g'])).trim();
+  const modules =
+    process.platform === 'win32'
+      ? path.join(prefix, 'node_modules')
+      : path.join(prefix, 'lib', 'node_modules');
+  const pkgDir = path.join(modules, ...PACKAGE_NAME.split('/'));
+  const installed = path.join(pkgDir, 'dist', 'cli.js');
+  const current = await readFile(path.join(pkgDir, 'package.json'), 'utf8')
+    .then((t) => (JSON.parse(t) as { version?: string }).version)
+    .catch(() => undefined);
+  if (!prefix || current !== version) {
+    console.log(`Installing Pocket Agent ${version} on this PC…`);
+    // A running older agent holds its files open; it is restarted by connect anyway.
+    await stopRunning(agentHome()).catch(() => false);
+    const code = await npmGlobal([
+      'install',
+      '-g',
+      `${PACKAGE_NAME}@${version}`,
+      '--no-fund',
+      '--no-audit',
+      '--loglevel=error',
+    ]);
+    if (code !== 0)
+      fail(`Could not install Pocket Agent (npm exited with ${code}). Try: npm install -g ${PACKAGE_NAME}`);
+  }
+  if (!existsSync(installed))
+    fail(`Installed, but not found at ${installed}. Run: pocket-agent connect <code>`);
+  const child = spawn(process.execPath, [installed, ...process.argv.slice(2)], { stdio: 'inherit' });
+  const exit = await new Promise<number>((r) => child.on('exit', (c) => r(c ?? 1)));
+  process.exit(exit);
+}
+
+function npmOutput(args: string[]): Promise<string> {
+  return new Promise((resolve) => {
+    let out = '';
+    const child = spawn('npm', args, { shell: process.platform === 'win32', windowsHide: true });
+    child.stdout.on('data', (d: Buffer) => (out += d.toString()));
+    child.on('error', () => resolve(''));
+    child.on('exit', () => resolve(out));
   });
 }
 

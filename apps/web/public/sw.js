@@ -29,7 +29,7 @@ self.addEventListener('push', (event) => {
   }
   event.waitUntil(
     appOnScreen().then((open) =>
-      // The app on screen already shows it (the chat, or the prompt that opens by itself).
+      // The app in the foreground shows it itself (a toast, or the open chat).
       open
         ? undefined
         : self.registration.showNotification(title, {
@@ -48,10 +48,15 @@ self.addEventListener('push', (event) => {
   );
 });
 
-/** True while a window of the app is visible to the user (not minimised, not a background tab, screen on). */
+/**
+ * True while the app is in the foreground: visible AND focused (a background tab, a minimised or
+ * backgrounded app, or a screen that is off doesn't count). Then the page shows its own toast
+ * instead, or nothing at all for the chat that is open. Both checks, because a backgrounded app
+ * can still report "visible" for a moment; a missed notification is worse than a duplicate.
+ */
 async function appOnScreen() {
   const tabs = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
-  return tabs.some((c) => c.visibilityState === 'visible');
+  return tabs.some((c) => c.visibilityState === 'visible' && c.focused);
 }
 
 /** Sends the decision a button stands for, with the signed-in browser's session. */

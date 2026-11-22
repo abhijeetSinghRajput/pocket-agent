@@ -7,7 +7,8 @@ import { apiRequest } from '@/lib/api';
 export type PairingStep =
   | { kind: 'creating' }
   | { kind: 'code'; code: string; expiresAt: number }
-  | { kind: 'expired' }
+  /** The code ran out before a PC used it (kept to show it crossed out). */
+  | { kind: 'expired'; code: string }
   /** The PC used the code. `device.status` turns Online once its background service connects. */
   | { kind: 'paired'; device: DeviceDto }
   | { kind: 'error'; message: string };
@@ -59,7 +60,7 @@ export function usePairing({
     if (!active || step.kind !== 'code') return;
     const tick = setInterval(() => {
       setNow(Date.now());
-      if (Date.now() >= step.expiresAt) setStep({ kind: 'expired' });
+      if (Date.now() >= step.expiresAt) setStep({ kind: 'expired', code: step.code });
     }, 1000);
     const watch = setInterval(async () => {
       try {

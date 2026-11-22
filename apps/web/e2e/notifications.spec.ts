@@ -1,10 +1,11 @@
 // M6: notification history, unread badge and settings, against the real API.
 import { expect, test, type Page } from '@playwright/test';
-import { API, registerViaApi, WEB } from './helpers';
+import { addFakePc, API, registerViaApi, WEB } from './helpers';
 
 async function freshUser(page: Page) {
   await page.context().clearCookies();
   await registerViaApi(page.request, 'Notify E2E');
+  await addFakePc(page.request);
 }
 
 const sendTest = (page: Page) => page.request.post(`${API}/notifications/test`, { headers: { origin: WEB } });
@@ -76,4 +77,23 @@ test('the app is installable: manifest and icons are served', async ({ request }
   }
   const sw = await request.get(`${WEB}/sw.js`);
   expect(sw.status()).toBe(200);
+});
+
+test('in the app, a new notification shows as a toast, except on the page it points to', async ({ page }) => {
+  await freshUser(page);
+  await page.goto('/devices');
+  await expect(page.getByRole('heading', { level: 1, name: 'Devices' })).toBeVisible();
+  expect((await sendTest(page)).status()).toBe(200);
+  const toast = page.getByTestId('in-app-toasts').getByRole('status');
+  await expect(toast).toContainText('Pocket Agent test notification');
+
+  // Tapping it opens where it points (the test notification: the history) and marks it read.
+  await toast.getByRole('button').first().click();
+  await expect(page).toHaveURL(/\/notifications$/);
+  await expect(page.getByTestId('notification').first()).not.toHaveAttribute('data-unread');
+
+  // Already on that page: no toast, the list itself updates.
+  expect((await sendTest(page)).status()).toBe(200);
+  await expect(page.getByTestId('notification')).toHaveCount(2);
+  await expect(page.getByTestId('in-app-toasts')).toHaveCount(0);
 });

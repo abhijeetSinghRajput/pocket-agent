@@ -203,10 +203,13 @@ export function AgentDetail({ id }: { id: string }) {
     },
     (e) => e.sessionId === id || e.eventType === 'device.status.changed',
   );
-  const items = useMemo(
-    () => buildChat(feed.events, commands.state.data ?? []),
-    [feed.events, commands.state.data],
-  );
+  const items = useMemo(() => {
+    // Messages you sent are listed separately; while older events aren't loaded yet, show only
+    // the ones from the loaded stretch, so your messages and Claude's replies always line up.
+    const all = commands.state.data ?? [];
+    const sent = feed.hasMore && feed.oldestAt ? all.filter((c) => c.createdAt >= feed.oldestAt!) : all;
+    return buildChat(feed.events, sent);
+  }, [feed.events, feed.hasMore, feed.oldestAt, commands.state.data]);
 
   if (state.status === 'loading') {
     return (

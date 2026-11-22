@@ -12,21 +12,22 @@ test('pair a real Local Agent, watch it go online/offline, then revoke it', asyn
   const deviceName = `E2E PC ${info.project.name}`;
   const env = agentEnv();
 
-  // 1. Dashboard issues a one-time code.
+  // 1. A new account without a PC gets the setup screen (on any page) with a one-time code.
   await page.goto('/devices');
-  await expect(page.getByText('No devices paired')).toBeVisible();
-  await page.getByRole('button', { name: 'Add device' }).first().click();
+  await expect(page.getByRole('heading', { level: 1 })).toContainText('Let’s connect your PC.');
+  await page.getByTestId('onboarding-connect').click();
   const code = (await page.getByTestId('pairing-code').textContent())!.trim();
   expect(code).toMatch(/^[0-9A-Z]{4}-[0-9A-Z]{4}$/);
 
-  // 2. The PC pairs with it; the dialog notices on its own.
+  // 2. The PC pairs with it; the setup screen notices on its own.
   const pairOut = execFileSync(process.execPath, [CLI, 'pair', code, '--api', API, '--name', deviceName], {
     env,
     encoding: 'utf8',
   });
   expect(pairOut).toContain('Paired');
-  await expect(page.getByText('is paired')).toBeVisible({ timeout: 10_000 });
-  await page.getByRole('button', { name: 'Done' }).click();
+  await expect(page.getByTestId('onboarding-status')).toContainText(`${deviceName} found`, {
+    timeout: 10_000,
+  });
 
   // The code is single-use — and the CLI reports that cleanly (exit 1, no crash; this used to
   // crash on Windows with a libuv assertion when exiting with an open fetch connection).
@@ -38,12 +39,12 @@ test('pair a real Local Agent, watch it go online/offline, then revoke it', asyn
   expect(reuse.stderr).toContain('invalid or has expired');
   expect(reuse.stderr).not.toContain('Assertion failed');
 
+  // 3. Agent connects → the setup screen says so, and the app opens.
+  let agent = startAgent(env);
+  await expect(page.getByTestId('onboarding-connected')).toBeVisible({ timeout: 20_000 });
+  await page.getByRole('button', { name: 'Set up your workspace' }).click();
   const row = page.getByTestId('device-row').filter({ hasText: deviceName });
   const status = row.getByTestId('device-status');
-  await expect(status).toHaveText('Offline');
-
-  // 3. Agent connects → Online.
-  let agent = startAgent(env);
   await expect(status).toHaveText('Online', { timeout: 20_000 });
 
   // 4. Agent process dies → Offline (well within the 45 s target).

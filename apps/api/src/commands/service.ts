@@ -25,6 +25,8 @@ interface CommandPayload {
   permissionMode?: TurnMode;
   effort?: TurnEffort;
   attachments?: AttachmentRef[];
+  /** session.start: continue the command's session instead of starting a new one. */
+  resume?: boolean;
 }
 
 export function toCommandDto(c: Command): CommandDto {
@@ -105,6 +107,7 @@ export function commandFrame(c: Command, externalSessionId: string | null) {
             commandType: 'session.start' as const,
             projectPath: p.projectPath!,
             text: p.text!,
+            ...(p.resume ? { resume: true } : {}),
           }
         : { ...base, commandType: c.commandType as 'interrupt' | 'session.stop' };
   return BackendToAgent.parse(
@@ -135,6 +138,8 @@ export interface CreateCommandInput {
   permissionMode?: TurnMode;
   effort?: TurnEffort;
   attachments?: AttachmentRef[];
+  /** session.start of an ended session (`session`) that the PC continues. */
+  resume?: boolean;
   ip?: string;
 }
 
@@ -174,6 +179,7 @@ export async function createCommand(
           ...(input.permissionMode !== undefined ? { permissionMode: input.permissionMode } : {}),
           ...(input.effort !== undefined ? { effort: input.effort } : {}),
           ...(input.attachments?.length ? { attachments: input.attachments } : {}),
+          ...(input.resume ? { resume: true } : {}),
         },
         idempotencyKey: input.idempotencyKey,
         status: online ? 'Pending' : 'Failed',
@@ -251,10 +257,20 @@ export async function applyCommandAck(
   await notifyCommand(ctx, await ctx.prisma.command.findUniqueOrThrow({ where: { id: c.id } }));
 }
 
-/** Commands still waiting when their time is up never run. */
+/**
+ * Commands still waiting when their time is up never run. An instruction the PC already has
+ * (Delivered / Accepted: queued behind Claude's current task) is the exception: it waits for as
+ * long as that task takes, and the PC reports when it runs, or fails if the session ends first.
+ */
 export async function expireCommands(ctx: Services): Promise<number> {
   const due = await ctx.prisma.command.findMany({
-    where: { status: { in: ['Pending', 'Delivered', 'Accepted'] }, expiresAt: { lt: ctx.now() } },
+    where: {
+      expiresAt: { lt: ctx.now() },
+      OR: [
+        { status: 'Pending' },
+        { status: { in: ['Delivered', 'Accepted'] }, commandType: { not: 'instruction' } },
+      ],
+    },
     take: 500,
   });
   let n = 0;

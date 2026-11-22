@@ -63,6 +63,13 @@ export const StartSessionRequest = z.object({
 });
 export type StartSessionRequest = z.infer<typeof StartSessionRequest>;
 
+/** Continue an ended session from the app: same conversation, reopened on the PC. */
+export const ResumeSessionRequest = StartSessionRequest.omit({ projectPath: true });
+export type ResumeSessionRequest = z.infer<typeof ResumeSessionRequest>;
+
+/** First Local Agent version that can continue an ended session. */
+export const RESUME_MIN_AGENT_VERSION = '0.1.4';
+
 export const SessionControlRequest = z.object({ idempotencyKey });
 export type SessionControlRequest = z.infer<typeof SessionControlRequest>;
 

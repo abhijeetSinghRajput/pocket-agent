@@ -29,6 +29,9 @@ export async function deleteConfig(home: string): Promise<void> {
   await rm(path.join(home, 'config.json'), { force: true });
 }
 
+/** The hosted Pocket Agent API. `--api` / POCKET_AGENT_API_URL point a PC at another deployment. */
+export const DEFAULT_API_URL = 'https://pocket-agent-api.onrender.com';
+
 const LOOPBACK = new Set(['localhost', '127.0.0.1', '[::1]', '::1']);
 
 /**

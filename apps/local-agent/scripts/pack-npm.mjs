@@ -74,15 +74,23 @@ sessions from your phone.
 
 \`\`\`bash
 npm install -g ${name}
-pocket-agent setup <CODE> --api <YOUR-API-URL>
+pocket-agent connect <CODE>
 \`\`\`
 
-Get the code and the exact command from the dashboard: **Devices → Add device**. \`setup\` pairs
-this PC, connects Claude Code, starts the agent in the background and (on Windows) at every
-sign-in.
+Get the code in the Pocket Agent app: **Add device**. \`connect\` pairs this PC, connects Claude
+Code, runs Pocket Agent in the background and (on Windows) at every sign-in, then checks that the
+PC is really online. It is safe to run again: finished steps are skipped.
 
-Other commands: \`pocket-agent status\`, \`stop\`, \`start --background\`, \`autostart disable\`,
-\`hooks uninstall\`, \`unpair\`. Requires Node.js ${published.engines.node}.
+| Command | |
+| --- | --- |
+| \`pocket-agent connect\` | Set up, or repair, the connection |
+| \`pocket-agent status\` | Is this PC online? |
+| \`pocket-agent doctor [--fix]\` | Find (and fix) what is wrong |
+| \`pocket-agent update\` | Update and restart |
+| \`pocket-agent disconnect\` | Disconnect this PC |
+| \`pocket-agent uninstall\` | Remove everything |
+
+Self-hosting? Add \`--api <YOUR-API-URL>\` to \`connect\`. Requires Node.js ${published.engines.node}.
 
 Remote approval and instructions to sessions you started yourself are **off by default**; turn
 them on with \`pocket-agent approvals enable\` / \`pocket-agent instructions enable\`.

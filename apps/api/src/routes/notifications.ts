@@ -38,7 +38,12 @@ export async function notificationRoutes(app: FastifyInstance, ctx: NotifyServic
     const body = MarkReadRequest.safeParse(req.body ?? {});
     if (!body.success) return reply.code(400).send({ error: 'invalid_request' });
     await ctx.prisma.notification.updateMany({
-      where: { userId: req.user!.id, readAt: null, ...(body.data.ids ? { id: { in: body.data.ids } } : {}) },
+      where: {
+        userId: req.user!.id,
+        readAt: null,
+        ...(body.data.ids ? { id: { in: body.data.ids } } : {}),
+        ...(body.data.link ? { data: { path: ['link'], equals: body.data.link } } : {}),
+      },
       data: { readAt: ctx.now() },
     });
     return reply.code(204).send();

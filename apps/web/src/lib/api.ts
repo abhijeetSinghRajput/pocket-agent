@@ -81,6 +81,15 @@ export function agentApiUrl(): string {
 /** npm package of the PC app (`npm install -g …`). Override per deployment if published elsewhere. */
 export const AGENT_NPM_PACKAGE = process.env.NEXT_PUBLIC_AGENT_NPM_PACKAGE || '@mrcodium/pocket-agent';
 
+/** The server the PC app uses when no `--api` is given (keep in sync with the agent's DEFAULT_API_URL). */
+export const AGENT_DEFAULT_API_URL = 'https://pocket-agent-api.onrender.com';
+
+/** The one command that connects a PC. `--api` only when this deployment isn't the default server. */
+export function connectCommand(code: string): string {
+  const api = agentApiUrl();
+  return `pocket-agent connect ${code}${api === AGENT_DEFAULT_API_URL ? '' : ` --api ${api}`}`;
+}
+
 export type HealthResult =
   { kind: 'ok' | 'degraded'; health: HealthResponse } | { kind: 'unreachable'; error: string };
 

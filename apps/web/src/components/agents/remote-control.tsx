@@ -5,7 +5,9 @@ import {
   CommandResponse,
   ATTACHMENT_MAX_PER_MESSAGE,
   DeviceListResponse,
+  RESUME_MIN_AGENT_VERSION,
   type AgentSessionDto,
+  type DeviceDto,
   type ModelOption,
 } from '@pocket-agent/protocol';
 import { ArrowUp, Check, ChevronDown, CircleStop, Hand, Lock, Plus, Power, Square, Zap } from 'lucide-react';
@@ -70,13 +72,36 @@ async function control(session: AgentSessionDto, action: 'interrupt' | 'stop'): 
 }
 
 /** Models the session's PC offers (Claude Code's own list), from the cached device list. */
-function useDeviceModels(deviceId: string): ModelOption[] {
+function useDevice(deviceId: string): DeviceDto | undefined {
   const fetcher = useCallback(
     (signal: AbortSignal) => apiRequest('/devices', DeviceListResponse, { signal }).then((r) => r.devices),
     [],
   );
   const { state } = usePoll(['devices'], fetcher, 60_000);
-  return state.data?.find((d) => d.id === deviceId)?.models ?? [];
+  return state.data?.find((d) => d.id === deviceId);
+}
+
+/** `a < b` for plain x.y.z versions. */
+function versionBelow(a: string, b: string): boolean {
+  const x = a.split('-')[0]!.split('.').map(Number);
+  const y = b.split('-')[0]!.split('.').map(Number);
+  for (let i = 0; i < 3; i++) if ((x[i] ?? 0) !== (y[i] ?? 0)) return (x[i] ?? 0) < (y[i] ?? 0);
+  return false;
+}
+
+/**
+ * An ended Claude Code session can be continued from here: the PC reopens the same conversation.
+ * Returns why not when it can't (shown in place of the message box), or null when it can.
+ */
+export function resumeBlocker(s: AgentSessionDto, device: DeviceDto | undefined): string | null {
+  const ended = 'This session has ended.';
+  if (s.provider !== 'claude-code' || !device || device.status === 'Revoked') return ended;
+  if (versionBelow(device.agentVersion, RESUME_MIN_AGENT_VERSION))
+    return `${ended} To continue it from here, update Pocket Agent on the PC: \`pocket-agent update\``;
+  const norm = (p: string) => p.replace(/[\\/]+$/, '').toLowerCase();
+  if (!device.projects.some((p) => norm(p.path) === norm(s.projectPath)))
+    return `${ended} To continue it from here, allow its folder on the PC: \`pocket-agent projects add "${s.projectPath}"\``;
+  return null;
 }
 
 /** A choice made for this chat, remembered on this device ('' = leave the session as it is). */
@@ -372,22 +397,30 @@ export function Composer({
 
   // The box is always there, like any chat app; when this session can't take messages it is
   // disabled and says why (never pretends a message could be delivered).
-  const locked = canInstruct(session)
-    ? null
-    : session.endedAt
-      ? 'This session has ended.'
-      : (capabilityRows(session).find((r) => r.label === 'Send instructions')?.detail ??
-        'Messages can’t be sent to this session.');
+  const device = useDevice(session.deviceId);
+  // Ended: sending continues the same conversation on the PC, when that's possible.
+  const resuming = !!session.endedAt && resumeBlocker(session, device) === null;
+  const locked =
+    canInstruct(session) || resuming
+      ? null
+      : session.endedAt
+        ? (resumeBlocker(session, device) ?? 'This session has ended.')
+        : (capabilityRows(session).find((r) => r.label === 'Send instructions')?.detail ??
+          'Messages can’t be sent to this session.');
   const showStop = !session.endedAt && isBusy(session);
   const canInterrupt = showStop && session.capabilities.interrupt;
-  const models = useDeviceModels(session.deviceId);
+  const models = device?.models ?? [];
   const [model, setModel] = useChosenModel(session.id, models);
   const [mode, setMode] = useStoredChoice(`pocket-agent:mode:${session.id}`);
   const [effort, setEffort] = useStoredChoice(`pocket-agent:effort:${session.id}`);
-  const modelLocked = modelLock(session);
+  const modelLocked = resuming ? null : modelLock(session);
 
   // Something typed or attached: the button sends. Nothing, and Claude is working: it stops Claude.
-  const hint = locked ? '' : deliveryHint(session);
+  const hint = locked
+    ? ''
+    : resuming
+      ? `This session has ended. Sending continues it on ${session.deviceName} with the whole conversation${device?.status === 'Online' ? '' : ' (your PC is offline right now)'}.`
+      : deliveryHint(session);
   const hasContent = !!text.trim() || ready.length > 0;
   const stopMode = !hasContent && showStop;
 
@@ -395,7 +428,7 @@ export function Composer({
   const [dragging, setDragging] = useState(false);
   const addRef = useRef<(files: Iterable<File>) => void>(() => undefined);
   useEffect(() => {
-    if (locked) return;
+    if (locked || resuming) return;
     let depth = 0;
     const hasFiles = (e: DragEvent) => !!e.dataTransfer && [...e.dataTransfer.types].includes('Files');
     const enter = (e: DragEvent) => {
@@ -431,7 +464,7 @@ export function Composer({
       window.removeEventListener('dragleave', leave);
       window.removeEventListener('drop', drop);
     };
-  }, [locked]);
+  }, [locked, resuming]);
 
   useEffect(() => {
     addRef.current = addFiles;
@@ -445,17 +478,26 @@ export function Composer({
     setPending(true);
     setError(null);
     try {
-      const { command } = await apiRequest(`/sessions/${session.id}/instructions`, CommandResponse, {
-        method: 'POST',
-        body: {
-          text: value,
-          idempotencyKey: key.current,
-          ...(model && !modelLocked ? { model } : {}),
-          ...(mode && !modelLocked ? { permissionMode: mode } : {}),
-          ...(effort && !modelLocked ? { effort } : {}),
-          ...(ready.length ? { attachmentIds: ready.map((d) => d.ref!.id) } : {}),
-        },
-      });
+      const choices = {
+        ...(model && !modelLocked ? { model } : {}),
+        ...(mode && !modelLocked ? { permissionMode: mode } : {}),
+        ...(effort && !modelLocked ? { effort } : {}),
+      };
+      const { command } = resuming
+        ? // Ended: the PC reopens this conversation and runs the message in it.
+          await apiRequest(`/sessions/${session.id}/resume`, CommandResponse, {
+            method: 'POST',
+            body: { text: value, idempotencyKey: key.current, ...choices },
+          })
+        : await apiRequest(`/sessions/${session.id}/instructions`, CommandResponse, {
+            method: 'POST',
+            body: {
+              text: value,
+              idempotencyKey: key.current,
+              ...choices,
+              ...(ready.length ? { attachmentIds: ready.map((d) => d.ref!.id) } : {}),
+            },
+          });
       key.current = crypto.randomUUID();
       setText('');
       setDrafts([]);
@@ -533,14 +575,20 @@ export function Composer({
             onPaste={(e) => {
               // A screenshot pasted from the clipboard is attached like a picked file.
               const files = [...e.clipboardData.files];
-              if (!files.length) return;
+              if (!files.length || resuming) return;
               e.preventDefault();
               addFiles(files);
             }}
             rows={1}
             maxLength={20_000}
             disabled={!!locked}
-            placeholder={locked ? 'Messaging is off for this session' : 'Message Claude…'}
+            placeholder={
+              locked
+                ? 'Messaging is off for this session'
+                : resuming
+                  ? 'Continue this session…'
+                  : 'Message Claude…'
+            }
             className="block disabled:cursor-not-allowed max-h-[200px] w-full resize-none bg-transparent px-4 pt-3 pb-1 text-base leading-relaxed outline-none placeholder:text-muted-foreground sm:text-[14.5px]"
           />
           {(locked || hint) && (
@@ -572,7 +620,8 @@ export function Composer({
           )}
           {/* Like the editor's input: what the message runs with on the left, stop and send on the right. */}
           <div className="pointer-events-none! flex items-center gap-2 px-2 pt-1 pb-2 *:pointer-events-auto">
-            {!locked && (
+            {/* Files can't be sent with the message that continues an ended session. */}
+            {!locked && !resuming && (
               <>
                 <input
                   ref={picker}

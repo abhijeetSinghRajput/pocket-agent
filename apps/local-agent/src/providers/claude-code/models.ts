@@ -1,5 +1,6 @@
 import { ModelOption } from '@pocket-agent/protocol';
 import type { SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
+import { helperSessionId } from './helper-sessions.js';
 import type { QueryFn } from './managed.js';
 
 /**
@@ -19,11 +20,15 @@ export async function listModels(query: QueryFn, cwd: string, timeoutMs = 20_000
     }),
   };
   const timer = setTimeout(() => abort.abort(), timeoutMs);
+  const helper = helperSessionId();
   try {
     const q = query({
       prompt: never,
       options: {
         cwd,
+        // A known id, so session discovery doesn't list this helper as a chat.
+        sessionId: helper.id,
+        persistSession: false,
         abortController: abort,
         permissionMode: 'default',
         // Not a session to report: the hook relay skips it.
@@ -47,5 +52,6 @@ export async function listModels(query: QueryFn, cwd: string, timeoutMs = 20_000
   } finally {
     clearTimeout(timer);
     abort.abort();
+    helper.release();
   }
 }

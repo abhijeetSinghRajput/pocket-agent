@@ -24,21 +24,46 @@ import {
   stopRunning,
   writePidFile,
 } from './background.js';
-import { currentPlatform, deleteConfig, loadConfig, saveConfig, validateApiUrl } from './config.js';
+import { spawn } from 'node:child_process';
+import { rm } from 'node:fs/promises';
+import {
+  currentPlatform,
+  DEFAULT_API_URL,
+  deleteConfig,
+  loadConfig,
+  saveConfig,
+  validateApiUrl,
+} from './config.js';
 import { callLocalAgent } from './local-client.js';
 import { agentHome } from './paths.js';
-import { isAllowedProject, loadPolicy, normalizeProjectPath, savePolicy } from './policy.js';
+import { isAllowedProject, loadPolicy, normalizeProjectPath, savePolicy, type Policy } from './policy.js';
 import {
   defaultSettingsPath,
   hooksStatus,
-  installHooks,
   PERMISSION_HOOK_TIMEOUT_S,
-  relayCommand,
   uninstallHooks,
 } from './providers/claude-code/install.js';
 import type { QueryFn } from './providers/claude-code/managed.js';
 import { createSecretStore } from './secret-store.js';
 import { AgentService } from './service.js';
+import {
+  autostartCurrent,
+  checkApi,
+  claudeCodeDetected,
+  ensureAutostart,
+  ensureHooks,
+  ensureRunning,
+  hooksCurrent,
+  liveStatus,
+  MIN_NODE,
+  missingWorkspaces,
+  nodeSupported,
+  pairingState,
+  stableInstall,
+  waitOnline,
+  type SetupContext,
+} from './setup.js';
+import { ask, bold, confirm, dim, green, heading, interactive, line, red, withSpinner } from './ui.js';
 
 const { name: PACKAGE_NAME, version } = createRequire(import.meta.url)('../package.json') as {
   name: string;
@@ -63,18 +88,26 @@ function fail(msg: string, code = 1): never {
   process.exit(code);
 }
 
+const CONNECT_HINT = 'Get a code in the Pocket Agent app (Add device), then run: pocket-agent connect <code>';
+
 async function requirePaired(home: string) {
   const config = await loadConfig(home);
-  if (!config) fail('This PC is not paired. Run: pocket-agent pair <code> --api <url>');
-  if (config.revokedAt)
-    fail('This device was revoked. Pair it again with a new code: pocket-agent pair <code> --api <url>');
+  if (!config) fail(`This PC is not connected. ${CONNECT_HINT}`);
+  if (config.revokedAt) fail(`This PC was removed from your account. ${CONNECT_HINT}`);
   const secret = await createSecretStore(home).load();
-  if (!secret) fail('Device credentials are missing. Pair again: pocket-agent pair <code> --api <url>');
+  if (!secret) fail(`This PC's credentials are missing. ${CONNECT_HINT}`);
   return { config, secret };
 }
 
-async function pairThisPc(code: string, apiUrl: string | undefined, name: string): Promise<void> {
-  if (!apiUrl) fail('Missing --api <url> (or set POCKET_AGENT_API_URL)');
+const setupContext = (): SetupContext => ({
+  home: agentHome(),
+  cliPath: CLI_PATH,
+  relayPath: RELAY_PATH,
+  nodePath: process.execPath,
+  version,
+});
+
+async function pairThisPc(code: string, apiUrl: string, name: string): Promise<void> {
   try {
     validateApiUrl(apiUrl);
   } catch (e) {
@@ -102,12 +135,12 @@ async function pairThisPc(code: string, apiUrl: string | undefined, name: string
 
 async function installClaudeHooks(settings?: string): Promise<void> {
   if (!existsSync(RELAY_PATH)) fail(`Hook relay not found at ${RELAY_PATH}. Build the agent first.`);
+  const file = settings ?? defaultSettingsPath();
   try {
-    const r = await installHooks(
-      settings ?? defaultSettingsPath(),
-      relayCommand(process.execPath, RELAY_PATH, agentHome()),
-    );
-    console.log(`Installed Pocket Agent hooks in ${r.settingsPath}`);
+    const r = await ensureHooks(setupContext(), file);
+    if (!r.changed)
+      return void console.log(`Pocket Agent hooks are already installed and up to date in ${file}`);
+    console.log(`Installed Pocket Agent hooks in ${file}`);
     if (r.backupPath) console.log(`Backup of the previous file: ${r.backupPath}`);
     console.log('The hooks only report activity; they never answer permission prompts.');
     console.log('Sessions that are already running pick this up after a restart.');
@@ -149,18 +182,527 @@ async function enableStartAtSignIn(): Promise<boolean> {
   return true;
 }
 
+interface ConnectOptions {
+  api?: string;
+  name: string;
+  workspace?: string[];
+  approvals?: boolean;
+  yes?: boolean;
+  hooks: boolean;
+  autostart: boolean;
+}
+
+/** Adds folders to the allowlist; returns the ones newly added. */
+async function addWorkspaces(policy: Policy, dirs: string[]): Promise<string[]> {
+  const added: string[] = [];
+  for (const dir of dirs) {
+    const full = path.resolve(dir);
+    const st = await stat(full).catch(() => null);
+    if (!st?.isDirectory()) {
+      line('warn', 'Workspace', `not a folder, skipped: ${full}`);
+      continue;
+    }
+    if (isAllowedProject(policy, full) || policy.projects.length >= 50) continue;
+    policy.projects.push({ name: path.basename(full).slice(0, 200) || full, path: full });
+    added.push(full);
+  }
+  return added;
+}
+
+/**
+ * The one command a user needs: pair (when given a code), connect Claude Code, configure the
+ * background service and start at sign-in, optionally allow a workspace and phone approvals, then
+ * wait until the server actually sees this PC online. Safe to re-run: finished steps are skipped.
+ */
+async function connectThisPc(codeArg: string | undefined, opts: ConnectOptions): Promise<void> {
+  const ctx = setupContext();
+  const ask_ = !opts.yes && interactive();
+  heading('Connect this PC to Pocket Agent');
+
+  // 1. Environment
+  if (!nodeSupported()) {
+    line('fail', 'Node.js', `v${process.versions.node} (needs ${MIN_NODE.join('.')} or newer)`);
+    fail('Update Node.js from https://nodejs.org, then run this again.');
+  }
+  line('ok', 'Node.js', `v${process.versions.node}`);
+  if (!stableInstall(ctx)) {
+    fail(
+      `Pocket Agent needs to be installed, not run through npx. Install it: npm install -g ${PACKAGE_NAME}`,
+    );
+  }
+  const claude = claudeCodeDetected();
+  line(
+    claude ? 'ok' : 'warn',
+    'Claude Code',
+    claude ? 'found' : 'not found yet; install it and Pocket Agent picks it up automatically',
+  );
+
+  // 2. Which server
+  const before = await pairingState(ctx.home);
+  const code = codeArg?.trim();
+  if (!code && before.kind !== 'paired') fail(`No pairing code. ${CONNECT_HINT}`);
+  const previousApi = before.kind === 'not-paired' ? undefined : before.apiUrl;
+  const apiUrl = opts.api ?? process.env['POCKET_AGENT_API_URL'] ?? previousApi ?? DEFAULT_API_URL;
+  try {
+    validateApiUrl(apiUrl);
+  } catch (e) {
+    fail((e as Error).message);
+  }
+  const reach = await withSpinner('Reaching the Pocket Agent server…', () => checkApi(apiUrl));
+  if (!reach.ok) {
+    line('fail', 'Server', reach.reason);
+    console.error(
+      `\n${red("Can't reach Pocket Agent.")} Check your internet connection, then run this again.`,
+    );
+    if (opts.api) console.error(dim(`Also check the server address: ${apiUrl}`));
+    process.exit(1);
+  }
+  line('ok', 'Server', new URL(apiUrl).host);
+
+  // 3. Pairing
+  let repaired = false;
+  if (code) {
+    // Re-pairing while an old agent runs would leave it on stale credentials.
+    await stopRunning(ctx.home).catch(() => false);
+    await withSpinner('Pairing…', () => pairThisPc(code, apiUrl, opts.name));
+    repaired = true;
+    line('ok', 'Paired', `as "${opts.name}"`);
+    if (before.kind === 'paired') {
+      line(
+        'info',
+        'Note',
+        `replaced the previous pairing; remove "${before.deviceName}" in the app if it's still listed`,
+      );
+    }
+  } else if (before.kind === 'paired') {
+    line('ok', 'Paired', `already, as "${before.deviceName}"`);
+  }
+
+  // 4. Claude Code integration
+  if (opts.hooks) {
+    try {
+      const r = await ensureHooks(ctx);
+      line('ok', 'Claude Code link', r.changed ? 'set up' : 'already set up');
+    } catch (e) {
+      line('warn', 'Claude Code link', (e as Error).message);
+    }
+  }
+
+  // 5. Workspace and phone approvals (asked once; re-runs keep what you chose)
+  const policy = await loadPolicy(ctx.home);
+  const policyBefore = JSON.stringify(policy);
+  const requested = opts.workspace ?? [];
+  if (!requested.length && !policy.projects.length && ask_) {
+    const cwd = process.cwd();
+    const suggestion = normalizeProjectPath(cwd) === normalizeProjectPath(os.homedir()) ? '' : cwd;
+    const answer = await ask(
+      'Folder where your phone may start Claude sessions (Enter to skip):',
+      suggestion,
+    );
+    if (answer) requested.push(answer);
+  }
+  const added = await addWorkspaces(policy, requested);
+  if (added.length) for (const p of added) line('ok', 'Workspace', p);
+  else if (policy.projects.length) line('ok', 'Workspaces', `${policy.projects.length} allowed`);
+  else line('info', 'Workspace', 'none yet (add one later: pocket-agent projects add <folder>)');
+
+  if (opts.approvals) policy.remoteApproval = true;
+  else if (!policy.remoteApproval && ask_) {
+    policy.remoteApproval = await confirm('Approve Claude’s permission requests from your phone?', true);
+  }
+  line(
+    policy.remoteApproval ? 'ok' : 'info',
+    'Phone approvals',
+    policy.remoteApproval ? 'on' : 'off (turn on later: pocket-agent approvals enable)',
+  );
+  const policyChanged = JSON.stringify(policy) !== policyBefore;
+  if (policyChanged) await savePolicy(ctx.home, policy);
+
+  // 6. Background service and start at sign-in
+  if (opts.autostart) {
+    try {
+      const a = await ensureAutostart(ctx);
+      if (a === 'unsupported') line('info', 'Start at sign-in', 'not supported on this OS yet');
+      else line('ok', 'Start at sign-in', a === 'enabled' ? 'on' : 'already on');
+    } catch (e) {
+      line('warn', 'Start at sign-in', (e as Error).message);
+    }
+  }
+  let run;
+  try {
+    run = await ensureRunning(ctx, repaired);
+  } catch (e) {
+    line('fail', 'Background service', (e as Error).message);
+    fail('Could not start Pocket Agent. Run: pocket-agent doctor');
+  }
+  if (run.state === 'already' && policyChanged) {
+    await callLocalAgent(ctx.home, 'POST', '/policy/reload').catch(() => undefined);
+  }
+  line('ok', 'Background service', run.state === 'already' ? 'already running' : 'running');
+
+  // 7. Verify: the server must actually see this PC.
+  const online = await withSpinner('Connecting…', () => waitOnline(ctx.home));
+  if (!online.ok) {
+    line('fail', 'Online', online.reason === 'exited' ? 'the agent stopped' : 'not connected yet');
+    console.error(`\n${red("Pocket Agent couldn't connect to the server.")}`);
+    if (online.logTail.length) console.error(dim(online.logTail.map((l) => `  ${l}`).join('\n')));
+    console.error(`\nCheck your internet connection, then run: ${bold('pocket-agent doctor --fix')}`);
+    process.exit(1);
+  }
+  line('ok', 'Online', 'connected');
+  console.log(`\n${green(bold('Your PC is connected!'))} Open Pocket Agent on your phone.`);
+  console.log(
+    dim(
+      'Pocket Agent runs in the background and starts with Windows. Check it any time: pocket-agent status',
+    ),
+  );
+}
+
+/** Undoes what `connect` set up on this PC. Each part is independent; failures are reported, not fatal. */
+async function disconnectThisPc(): Promise<void> {
+  const home = agentHome();
+  const step = async (label: string, work: () => Promise<string>) => {
+    try {
+      line('ok', label, await work());
+    } catch (e) {
+      line('warn', label, (e as Error).message);
+    }
+  };
+  await step('Background service', async () => ((await stopRunning(home)) ? 'stopped' : 'was not running'));
+  if (autostartSupported()) {
+    await step('Start at sign-in', async () => ((await disableAutostart()) ? 'off' : 'was off'));
+  }
+  await step('Claude Code link', async () =>
+    (await uninstallHooks(defaultSettingsPath())).removed ? 'removed' : 'was not set up',
+  );
+  await step('Credentials', async () => {
+    await createSecretStore(home).clear();
+    await deleteConfig(home);
+    return 'removed';
+  });
+}
+
+/** Runs npm (global install/uninstall) with its output shown; resolves with the exit code. */
+function npmGlobal(args: string[]): Promise<number> {
+  return new Promise((resolve) => {
+    const child = spawn('npm', args, { stdio: 'inherit', shell: process.platform === 'win32' });
+    child.on('error', () => resolve(1));
+    child.on('exit', (code) => resolve(code ?? 1));
+  });
+}
+
+interface Check {
+  label: string;
+  mark: 'ok' | 'warn' | 'fail' | 'info';
+  detail: string;
+  /** Safe automatic repair, run by `doctor --fix`. Returns what it did. */
+  fix?: () => Promise<string>;
+  /** What the user can do when there is no automatic repair. */
+  hint?: string;
+}
+
+/** Every piece of the setup, checked; used by `status` (no repairs) and `doctor`. */
+async function runChecks(full: boolean): Promise<Check[]> {
+  const ctx = setupContext();
+  const checks: Check[] = [];
+  const pairing = await pairingState(ctx.home);
+  const paired = pairing.kind === 'paired';
+
+  if (full) {
+    checks.push(
+      nodeSupported()
+        ? { label: 'Node.js', mark: 'ok', detail: `v${process.versions.node}` }
+        : {
+            label: 'Node.js',
+            mark: 'fail',
+            detail: `v${process.versions.node}, needs ${MIN_NODE.join('.')}+`,
+            hint: 'Update Node.js from https://nodejs.org',
+          },
+      stableInstall(ctx)
+        ? { label: 'Installation', mark: 'ok', detail: `${version}` }
+        : {
+            label: 'Installation',
+            mark: 'fail',
+            detail: 'running through npx',
+            hint: `Install it: npm install -g ${PACKAGE_NAME}`,
+          },
+      claudeCodeDetected()
+        ? { label: 'Claude Code', mark: 'ok', detail: 'found' }
+        : {
+            label: 'Claude Code',
+            mark: 'warn',
+            detail: 'not found',
+            hint: 'Install Claude Code (https://claude.com/claude-code)',
+          },
+    );
+  }
+
+  checks.push(
+    pairing.kind === 'paired'
+      ? { label: 'Paired', mark: 'ok', detail: `as "${pairing.deviceName}"` }
+      : {
+          label: 'Paired',
+          mark: 'fail',
+          detail:
+            pairing.kind === 'revoked'
+              ? 'this PC was removed from your account'
+              : pairing.kind === 'no-secret'
+                ? 'credentials missing'
+                : 'not connected',
+          hint: CONNECT_HINT,
+        },
+  );
+
+  if (full && pairing.kind !== 'not-paired') {
+    const reach = await withSpinner('Reaching the server…', () => checkApi(pairing.apiUrl, 20_000));
+    checks.push(
+      reach.ok
+        ? { label: 'Server', mark: 'ok', detail: `${new URL(pairing.apiUrl).host} (${reach.ms} ms)` }
+        : { label: 'Server', mark: 'fail', detail: reach.reason, hint: 'Check your internet connection.' },
+    );
+  }
+
+  const pid = await runningPid(ctx.home);
+  const startFix = async () => {
+    const r = await ensureRunning(ctx);
+    const online = await withSpinner('Connecting…', () => waitOnline(ctx.home, 45_000));
+    return `${r.state === 'already' ? 'was running' : 'started'}; ${online.ok ? 'online' : 'still not online'}`;
+  };
+  const restartFix = async () => {
+    await ensureRunning(ctx, true);
+    const online = await withSpinner('Connecting…', () => waitOnline(ctx.home, 45_000));
+    return online.ok ? 'restarted; online' : 'restarted; still not online (see the log)';
+  };
+  if (!pid) {
+    checks.push({
+      label: 'Background service',
+      mark: paired ? 'fail' : 'info',
+      detail: 'not running',
+      ...(paired ? { fix: startFix } : {}),
+    });
+  } else {
+    checks.push({ label: 'Background service', mark: 'ok', detail: `running (PID ${pid})` });
+    const live = await liveStatus(ctx.home);
+    checks.push(
+      live?.connected
+        ? { label: 'Online', mark: 'ok', detail: 'connected to the server' }
+        : {
+            label: 'Online',
+            mark: 'fail',
+            detail: !live
+              ? 'the agent is not responding'
+              : live.version === null
+                ? 'unknown (an older version is running; restart it)'
+                : 'not connected (retrying)',
+            fix: restartFix,
+            hint: `Log: ${logFile(ctx.home)}`,
+          },
+    );
+  }
+
+  const hooksOk = await hooksCurrent(ctx);
+  const st = await hooksStatus(defaultSettingsPath());
+  checks.push(
+    hooksOk
+      ? { label: 'Claude Code link', mark: 'ok', detail: 'set up' }
+      : {
+          label: 'Claude Code link',
+          mark: 'warn',
+          detail: st.installed ? 'outdated or pointing elsewhere' : 'not set up',
+          ...(stableInstall(ctx)
+            ? { fix: async () => ((await ensureHooks(ctx)).changed ? 'set up' : 'already set up') }
+            : {}),
+        },
+  );
+
+  if (autostartSupported()) {
+    const current = await autostartCurrent(ctx);
+    checks.push(
+      current
+        ? { label: 'Start at sign-in', mark: 'ok', detail: 'on' }
+        : {
+            label: 'Start at sign-in',
+            mark: 'warn',
+            detail: (await autostartCommandRegistered()) ? 'points to an old install' : 'off',
+            ...(stableInstall(ctx) && paired
+              ? { fix: async () => ((await ensureAutostart(ctx)) === 'enabled' ? 'turned on' : 'already on') }
+              : {}),
+          },
+    );
+  }
+
+  const policy = await loadPolicy(ctx.home);
+  const missing = await missingWorkspaces(ctx.home);
+  checks.push(
+    missing.length
+      ? {
+          label: 'Workspaces',
+          mark: 'warn',
+          detail: `${missing.length} folder(s) no longer exist`,
+          hint: missing.map((m) => `pocket-agent projects remove "${m}"`).join('\n'),
+        }
+      : policy.projects.length
+        ? { label: 'Workspaces', mark: 'ok', detail: `${policy.projects.length} allowed` }
+        : { label: 'Workspaces', mark: 'info', detail: 'none (pocket-agent projects add <folder>)' },
+    {
+      label: 'Phone approvals',
+      mark: policy.remoteApproval ? 'ok' : 'info',
+      detail: policy.remoteApproval ? 'on' : 'off (pocket-agent approvals enable)',
+    },
+  );
+  return checks;
+}
+
 export function buildCli(): Command {
   const program = new Command('pocket-agent')
     .description('Pocket Agent Local Agent: connect this PC to your Pocket Agent dashboard.')
-    .version(version, '-v, --version');
+    .version(version, '-v, --version')
+    .commandsGroup('Advanced:');
+
+  program
+    .command('connect')
+    .helpGroup('Commands:')
+    .alias('setup')
+    .description('Connect this PC to Pocket Agent: everything in one step (safe to run again)')
+    .argument('[code]', 'pairing code from the app (Add device); not needed to repair an existing setup')
+    .option('--api <url>', 'Pocket Agent server (default: the hosted one)')
+    .option('--name <name>', 'name shown in the app', os.hostname())
+    .option('--workspace <folders...>', 'folders where your phone may start Claude sessions')
+    .option('--approvals', 'answer permission requests from your phone')
+    .option('-y, --yes', "don't ask questions; keep defaults")
+    .option('--no-hooks', "don't connect Claude Code sessions you start yourself")
+    .option('--no-autostart', "don't start at sign-in")
+    .action((code: string | undefined, opts: ConnectOptions) => connectThisPc(code, opts));
+
+  program
+    .command('status')
+    .helpGroup('Commands:')
+    .description('Is this PC connected? Pairing, background service and connection at a glance')
+    .option('--json', 'machine-readable output')
+    .action(async (opts: { json?: boolean }) => {
+      const home = agentHome();
+      const config = await loadConfig(home);
+      if (opts.json) {
+        const pid = await runningPid(home);
+        const live = pid ? await liveStatus(home) : null;
+        return console.log(
+          JSON.stringify({
+            version,
+            protocolVersion: PROTOCOL_VERSION,
+            home,
+            paired: !!config && !config.revokedAt,
+            revoked: !!config?.revokedAt,
+            apiUrl: config?.apiUrl ?? null,
+            deviceId: config?.deviceId ?? null,
+            deviceName: config?.deviceName ?? null,
+            running: !!pid,
+            online: !!live?.connected,
+          }),
+        );
+      }
+      heading(`Pocket Agent ${version}`);
+      const checks = await runChecks(false);
+      for (const c of checks) line(c.mark, c.label, c.detail);
+      const online = checks.find((c) => c.label === 'Online')?.mark === 'ok';
+      console.log(
+        online
+          ? `\n${green('This PC is online.')} ${dim(config ? `Server: ${new URL(config.apiUrl).host}` : '')}`
+          : `\n${red('This PC is not online.')} Run ${bold('pocket-agent doctor')} to find out why.`,
+      );
+    });
+
+  program
+    .command('doctor')
+    .helpGroup('Commands:')
+    .description('Check every part of the setup and explain what is wrong')
+    .option('--fix', 'repair what can be repaired safely')
+    .action(async (opts: { fix?: boolean }) => {
+      heading('Pocket Agent doctor');
+      const checks = await runChecks(true);
+      for (const c of checks) line(c.mark, c.label, c.detail);
+      const broken = checks.filter((c) => c.mark === 'fail' || c.mark === 'warn');
+      if (!broken.length) return void console.log(`\n${green('Everything looks good.')}`);
+      const fixable = broken.filter((c) => c.fix);
+      if (opts.fix && fixable.length) {
+        heading('Repairing');
+        for (const c of fixable) {
+          try {
+            line('ok', c.label, await c.fix!());
+          } catch (e) {
+            line('fail', c.label, (e as Error).message);
+          }
+        }
+      }
+      const todo = opts.fix ? broken.filter((c) => !c.fix) : broken;
+      const hints = todo.filter((c) => c.hint);
+      if (hints.length) {
+        heading('What to do');
+        for (const c of hints) console.log(`  ${bold(c.label)}: ${c.hint!.split('\n').join('\n    ')}`);
+      }
+      if (!opts.fix && fixable.length) {
+        console.log(
+          `\nRun ${bold('pocket-agent doctor --fix')} to repair ${fixable.map((c) => c.label).join(', ')}.`,
+        );
+      }
+      process.exitCode = 1;
+    });
+
+  program
+    .command('disconnect')
+    .helpGroup('Commands:')
+    .description(
+      'Disconnect this PC: stop Pocket Agent, remove the Claude Code link, start-at-sign-in and credentials',
+    )
+    .option('-y, --yes', "don't ask for confirmation")
+    .action(async (opts: { yes?: boolean }) => {
+      if (!opts.yes && !(await confirm('Disconnect this PC from Pocket Agent?', false))) return;
+      await disconnectThisPc();
+      console.log(`\n${green('Disconnected.')} Remove this PC under Devices in the app as well.`);
+    });
+
+  program
+    .command('update')
+    .helpGroup('Commands:')
+    .description('Update Pocket Agent to the latest version and restart it')
+    .action(async () => {
+      requireStableInstall('Updating');
+      console.log(`Updating ${PACKAGE_NAME}…`);
+      const code = await npmGlobal(['install', '-g', `${PACKAGE_NAME}@latest`]);
+      if (code !== 0) fail(`npm exited with code ${code}. Try: npm install -g ${PACKAGE_NAME}@latest`);
+      const home = agentHome();
+      if (await runningPid(home)) {
+        // Same install path, new files: a restart runs the new version.
+        await ensureRunning(setupContext(), true);
+        const online = await withSpinner('Reconnecting…', () => waitOnline(home, 45_000));
+        console.log(
+          online.ok ? 'Updated and reconnected.' : 'Updated. Not connected yet: run pocket-agent doctor',
+        );
+      } else console.log('Updated.');
+    });
+
+  program
+    .command('uninstall')
+    .helpGroup('Commands:')
+    .description('Disconnect this PC and remove Pocket Agent and all its data')
+    .option('-y, --yes', "don't ask for confirmation")
+    .action(async (opts: { yes?: boolean }) => {
+      if (!opts.yes && !(await confirm('Remove Pocket Agent and all its data from this PC?', false))) return;
+      await disconnectThisPc();
+      await rm(agentHome(), { recursive: true, force: true }).catch(() => undefined);
+      line('ok', 'Data', `removed ${agentHome()}`);
+      const code = await npmGlobal(['uninstall', '-g', PACKAGE_NAME]);
+      if (code === 0) line('ok', 'Program', 'uninstalled');
+      else line('warn', 'Program', `npm failed; remove it with: npm uninstall -g ${PACKAGE_NAME}`);
+      console.log(`\n${green('Pocket Agent was removed.')} Remove this PC under Devices in the app as well.`);
+    });
 
   program
     .command('pair')
     .description('Pair this PC using the code shown in the dashboard (Devices → Add device)')
     .argument('<code>', 'pairing code, e.g. 7KQ2-M9XD')
-    .option('--api <url>', 'Pocket Agent API URL', process.env['POCKET_AGENT_API_URL'])
+    .option('--api <url>', 'Pocket Agent API URL', process.env['POCKET_AGENT_API_URL'] ?? DEFAULT_API_URL)
     .option('--name <name>', 'name shown in the dashboard', os.hostname())
-    .action(async (code: string, opts: { api?: string; name: string }) => {
+    .action(async (code: string, opts: { api: string; name: string }) => {
       await pairThisPc(code, opts.api, opts.name);
       console.log(`Paired as "${opts.name}". Start the agent with: pocket-agent start`);
     });
@@ -244,61 +786,6 @@ export function buildCli(): Command {
         );
       }
     });
-
-  program
-    .command('status')
-    .description('Show local agent configuration and pairing state')
-    .option('--json', 'machine-readable output')
-    .action(async (opts: { json?: boolean }) => {
-      const home = agentHome();
-      const config = await loadConfig(home);
-      const status = {
-        version,
-        protocolVersion: PROTOCOL_VERSION,
-        home,
-        paired: !!config && !config.revokedAt,
-        revoked: !!config?.revokedAt,
-        apiUrl: config?.apiUrl ?? null,
-        deviceId: config?.deviceId ?? null,
-        deviceName: config?.deviceName ?? null,
-      };
-      if (opts.json) return console.log(JSON.stringify(status));
-      console.log(`Pocket Agent Local Agent ${status.version} (protocol v${status.protocolVersion})`);
-      console.log(`State directory: ${status.home}`);
-      if (status.revoked) console.log('Paired: no (this device was revoked; pair again)');
-      else if (!status.paired) console.log('Paired: no (run: pocket-agent pair <code> --api <url>)');
-      else console.log(`Paired: yes, as "${status.deviceName}" with ${status.apiUrl}`);
-      const pid = await runningPid(home);
-      console.log(
-        pid ? `Running: yes (PID ${pid})` : 'Running: no (start with: pocket-agent start --background)',
-      );
-      if (autostartSupported()) {
-        console.log(`Start at sign-in: ${(await autostartCommandRegistered()) ? 'on' : 'off'}`);
-      }
-    });
-
-  program
-    .command('setup')
-    .description('One step: pair this PC, connect Claude Code, start now and at every sign-in')
-    .argument('<code>', 'pairing code from the dashboard (Devices → Add device)')
-    .option('--api <url>', 'Pocket Agent API URL', process.env['POCKET_AGENT_API_URL'])
-    .option('--name <name>', 'name shown in the dashboard', os.hostname())
-    .option('--no-hooks', "don't connect Claude Code sessions you start yourself")
-    .option('--no-autostart', "don't start at sign-in")
-    .action(
-      async (code: string, opts: { api?: string; name: string; hooks: boolean; autostart: boolean }) => {
-        requireStableInstall('Setup');
-        const home = agentHome();
-        // Re-pairing while an old agent runs would leave it on stale credentials.
-        if (await stopRunning(home).catch(() => false)) console.log('Stopped the running agent.');
-        await pairThisPc(code, opts.api, opts.name);
-        console.log(`Paired as "${opts.name}".`);
-        if (opts.hooks) await installClaudeHooks();
-        if (opts.autostart) await enableStartAtSignIn();
-        await startInBackground();
-        console.log('Done. Open the dashboard: this PC should show as Online.');
-      },
-    );
 
   program
     .command('stop')
@@ -528,6 +1015,7 @@ export function buildCli(): Command {
 
   hooks
     .command('uninstall')
+    .helpGroup('Commands:')
     .description('Remove Pocket Agent hooks (other hooks are left untouched)')
     .option('--settings <file>', settingsHelp)
     .action(async (opts: { settings?: string }) => {
@@ -545,6 +1033,7 @@ export function buildCli(): Command {
 
   hooks
     .command('status')
+    .helpGroup('Commands:')
     .description('Show whether Pocket Agent hooks are installed')
     .option('--settings <file>', settingsHelp)
     .action(async (opts: { settings?: string }) => {

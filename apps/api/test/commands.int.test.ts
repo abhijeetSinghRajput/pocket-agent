@@ -266,10 +266,9 @@ describe('command state machine on the server', () => {
     intruder.agent.ws.close();
   });
 
-  it('expires commands that did not start in time; a late report cannot revive them', async () => {
+  it('expires commands that never reached the PC in time; a late report cannot revive them', async () => {
     const s = await setup();
     const { command } = (await instruct(s, 'slow')).json() as { command: { id: string } };
-    await s.agent.send(ackCmd(command.id, 'Accepted'));
     await t.ctx.prisma.command.update({
       where: { id: command.id },
       data: { expiresAt: new Date(Date.now() - 1000) },
@@ -280,6 +279,23 @@ describe('command state machine on the server', () => {
     expect((await dbCommand(command.id)).status).toBe('Expired');
     await s.agent.send(ackCmd(command.id, 'Executing'));
     expect((await dbCommand(command.id)).status).toBe('Expired');
+    s.agent.ws.close();
+  });
+
+  it('never expires an instruction the PC has queued behind a long task', async () => {
+    const s = await setup();
+    const { command } = (await instruct(s, 'after the current task')).json() as { command: { id: string } };
+    await s.agent.send(ackCmd(command.id, 'Accepted'));
+    await t.ctx.prisma.command.update({
+      where: { id: command.id },
+      data: { expiresAt: new Date(Date.now() - 1000) },
+    });
+    const bus = createBus(t.ctx, t.app.log);
+    await expireCommands({ ...t.ctx, bus });
+    await bus.close();
+    expect((await dbCommand(command.id)).status).toBe('Accepted');
+    await s.agent.send(ackCmd(command.id, 'Executing'));
+    expect((await dbCommand(command.id)).status).toBe('Executing');
     s.agent.ws.close();
   });
 

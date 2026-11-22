@@ -246,6 +246,11 @@ export const CommandExecute = defineEvent(
       commandType: z.literal('session.start'),
       projectPath: z.string().max(1024),
       text: z.string().min(1).max(INSTRUCTION_MAX),
+      /**
+       * Continue the ended session named in the envelope's sessionId (same id, full history)
+       * instead of starting a new one.
+       */
+      resume: z.boolean().optional(),
       model: ModelId.optional(),
       permissionMode: TurnMode.optional(),
       effort: TurnEffort.optional(),

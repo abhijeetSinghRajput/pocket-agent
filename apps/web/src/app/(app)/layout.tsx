@@ -3,6 +3,7 @@
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useRef, type ReactNode } from 'react';
 import { AppShell } from '@/components/app-shell';
+import { OnboardingGate } from '@/components/onboarding/onboarding-gate';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/lib/auth';
 import { LiveProvider } from '@/lib/live';
@@ -29,7 +30,9 @@ export default function AppLayout({ children }: { children: ReactNode }) {
     return (
       <QueryProvider>
         <LiveProvider>
-          <AppShell user={state.user}>{children}</AppShell>
+          <OnboardingGate>
+            <AppShell user={state.user}>{children}</AppShell>
+          </OnboardingGate>
         </LiveProvider>
       </QueryProvider>
     );

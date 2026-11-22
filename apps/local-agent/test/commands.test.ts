@@ -244,3 +244,80 @@ describe('managed sessions: one instruction per turn', () => {
     expect(h.statuses(queued.payload.commandId).at(-1)).toBe('Failed');
   });
 });
+
+describe('continuing an ended session', () => {
+  function resumeHarness(exists: boolean) {
+    const dir = mkdtempSync(path.join(os.tmpdir(), 'pocket-agent-resume-'));
+    const acks: Array<{ id: string; status: string; extra?: Record<string, unknown> }> = [];
+    const ack = (id: string, status: string, extra?: Record<string, unknown>) =>
+      acks.push({ id, status, ...(extra ? { extra } : {}) });
+    const registry = new SessionRegistry(() => undefined);
+    const sdk = fakeSdk();
+    const options: Array<Record<string, unknown>> = [];
+    const fn: QueryFn = (args) => {
+      options.push(args.options as Record<string, unknown>);
+      return sdk.fn(args);
+    };
+    const managed = new ManagedSessions(registry, fn, () => undefined, ack as never);
+    const observed = new ObservedInstructions(registry, ack as never);
+    const policy: Policy = {
+      projects: [{ name: 'p', path: dir }],
+      observedInstructions: false,
+      wakeIdle: false,
+      shareAttachments: false,
+      remoteApproval: false,
+    };
+    const router = new CommandRouter({
+      registry,
+      managed,
+      observed,
+      policy: () => policy,
+      ack: ack as never,
+      conversationExists: async () => exists,
+    });
+    const statuses = (id: string) => acks.filter((a) => a.id === id).map((a) => a.status);
+    return { dir, acks, registry, sdk, options, router, statuses };
+  }
+  const OLD = '0b9d7c2e-1111-4a4a-9b9b-123456789abc';
+
+  it('reopens the same session id with its history and runs the new message', async () => {
+    const h = resumeHarness(true);
+    const c = cmd(
+      { commandType: 'session.start', projectPath: h.dir, text: 'More updates', resume: true },
+      OLD,
+    );
+    await h.router.handle(c);
+    await new Promise((r) => setTimeout(r, 30));
+    expect(h.statuses(c.payload.commandId)).toContain('Executing');
+    expect(h.acks.find((a) => a.status === 'Executing')?.extra).toEqual({ externalSessionId: OLD });
+    expect(h.options[0]).toMatchObject({ resume: OLD });
+    expect(h.options[0]).not.toHaveProperty('sessionId');
+    expect(h.registry.get(OLD)?.mode).toBe('managed');
+    expect(h.registry.get(OLD)?.metadata).toMatchObject({ startSource: 'resume' });
+    expect(h.sdk.turns).toEqual(['More updates']);
+  });
+
+  it('refuses when the conversation is gone or the session is still running', async () => {
+    const gone = resumeHarness(false);
+    const c1 = cmd({ commandType: 'session.start', projectPath: gone.dir, text: 'x', resume: true }, OLD);
+    await gone.router.handle(c1);
+    expect(gone.acks.at(-1)).toMatchObject({ status: 'Failed', extra: { error: 'conversation_not_found' } });
+
+    const busy = resumeHarness(true);
+    busy.registry.announce(
+      {
+        externalSessionId: OLD,
+        provider: 'claude-code',
+        mode: 'observed',
+        projectPath: busy.dir,
+        status: 'Running',
+        capabilities: {} as never,
+      },
+      'hooks',
+    );
+    const c2 = cmd({ commandType: 'session.start', projectPath: busy.dir, text: 'x', resume: true }, OLD);
+    await busy.router.handle(c2);
+    expect(busy.acks.at(-1)).toMatchObject({ status: 'Failed', extra: { error: 'session_running' } });
+    expect(busy.options).toHaveLength(0);
+  });
+});

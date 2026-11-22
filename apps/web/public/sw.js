@@ -38,7 +38,11 @@ self.addEventListener('push', (event) => {
             icon: '/icons/icon-192.png',
             requireInteraction: d.priority === 'critical',
             actions: actions.map((a) => ({ action: a.id, title: a.title })),
-            data: { link, actions },
+            data: {
+              link,
+              actions,
+              notificationId: typeof d.notificationId === 'string' ? d.notificationId : null,
+            },
           }),
     ),
   );
@@ -62,6 +66,17 @@ async function decide(a) {
   return !!res && res.ok;
 }
 
+/** Tapping a notification (or one of its buttons) means it has been seen: mark it read. */
+async function markRead(id) {
+  if (!API || typeof id !== 'string') return;
+  await fetch(`${API}/notifications/read`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ ids: [id] }),
+  }).catch(() => undefined);
+}
+
 async function openApp(link) {
   const url = new URL(link, self.location.origin).href;
   const tabs = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
@@ -77,11 +92,14 @@ async function openApp(link) {
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   const data = event.notification.data || {};
+  const read = markRead(data.notificationId);
   if (event.action) {
     const chosen = (data.actions || []).find((a) => a.id === event.action);
     // Answered from the notification; if that didn't work, the app opens to answer there.
-    event.waitUntil(decide(chosen).then((ok) => (ok ? undefined : openApp(data.link || '/approvals'))));
+    event.waitUntil(
+      Promise.all([read, decide(chosen).then((ok) => (ok ? undefined : openApp(data.link || '/approvals')))]),
+    );
     return;
   }
-  event.waitUntil(openApp(data.link || '/'));
+  event.waitUntil(Promise.all([read, openApp(data.link || '/')]));
 });

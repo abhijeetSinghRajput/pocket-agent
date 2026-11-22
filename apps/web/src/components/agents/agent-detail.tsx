@@ -28,6 +28,7 @@ import { useLiveRefresh } from '@/lib/live';
 import { useEventFeed } from '@/lib/use-event-feed';
 import { usePoll } from '@/lib/use-poll';
 import { cn } from '@/lib/utils';
+import { useMarkChatRead } from '@/lib/use-notifications';
 
 /** What the header says under the name, like a messenger's "online" / "typing…". */
 function presence(s: AgentSessionDto): { text: string; live: boolean } {
@@ -178,6 +179,7 @@ function pendingQuestion(list: ApprovalDto[] | null | undefined, sessionId: stri
 
 export function AgentDetail({ id }: { id: string }) {
   useVisibleHeight();
+  useMarkChatRead(id);
   const fetcher = useCallback(
     (signal: AbortSignal) =>
       apiRequest(`/sessions/${id}`, SessionResponse, { signal }).then((r) => r.session),

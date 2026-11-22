@@ -3,6 +3,8 @@ import {
   SessionCapabilities,
   SessionControlRequest,
   StartSessionRequest,
+  ResumeSessionRequest,
+  RESUME_MIN_AGENT_VERSION,
   type AttachmentRef,
   type CommandKind,
   type TurnEffort,
@@ -16,6 +18,24 @@ import { requireTrustedOrigin, requireUser } from '../auth/session.js';
 import { limit } from '../context.js';
 
 const IdParam = z.object({ id: z.uuid() });
+
+/** `a < b` for plain x.y.z versions (anything unparsable counts as older). */
+export function versionBelow(a: string, b: string): boolean {
+  const parse = (v: string) =>
+    v
+      .split('-')[0]!
+      .split('.')
+      .map((n) => Number.parseInt(n, 10));
+  const x = parse(a);
+  const y = parse(b);
+  for (let i = 0; i < 3; i++) {
+    const p = x[i] ?? 0;
+    const q = y[i] ?? 0;
+    if (Number.isNaN(p)) return true;
+    if (p !== q) return p < q;
+  }
+  return false;
+}
 
 function bad(reply: FastifyReply, error: string, message: string, code = 409) {
   return reply.code(code).send({ error, message });
@@ -160,6 +180,54 @@ export async function commandRoutes(app: FastifyInstance, ctx: Services): Promis
       idempotencyKey: body.data.idempotencyKey,
       text: body.data.text,
       projectPath: body.data.projectPath,
+      ...(body.data.model ? { model: body.data.model } : {}),
+      ...(body.data.permissionMode ? { permissionMode: body.data.permissionMode } : {}),
+      ...(body.data.effort ? { effort: body.data.effort } : {}),
+      ip: req.ip,
+    });
+    return reply.code(created ? 201 : 200).send({ command: toCommandDto(command) });
+  });
+
+  /**
+   * Continue an ended session: the PC reopens the same conversation (same session id, full
+   * history) as a session controlled from the app, and runs `text` as its next message.
+   */
+  app.post('/sessions/:id/resume', opts, async (req, reply) => {
+    const s = await ownedSession(req, reply);
+    if (!s) return;
+    const body = ResumeSessionRequest.safeParse(req.body);
+    if (!body.success)
+      return bad(reply, 'invalid_request', body.error.issues[0]?.message ?? 'Invalid request', 400);
+    if (!s.endedAt) return bad(reply, 'session_running', 'This session is still running. Send it a message.');
+    if (s.device.revokedAt) return bad(reply, 'device_revoked', 'This device was revoked.');
+    if (s.provider !== 'claude-code')
+      return bad(reply, 'not_supported', 'Only Claude Code sessions can be continued.');
+    if (versionBelow(s.device.agentVersion, RESUME_MIN_AGENT_VERSION)) {
+      return bad(
+        reply,
+        'agent_outdated',
+        `Continuing a session needs Pocket Agent ${RESUME_MIN_AGENT_VERSION} or newer on the PC. Run \`pocket-agent update\` there.`,
+      );
+    }
+    const projects = z.array(z.object({ path: z.string() })).safeParse(s.device.projects);
+    if (!projects.success || !projects.data.some((x) => x.path === s.projectPath)) {
+      return bad(
+        reply,
+        'project_not_allowed',
+        'This session’s folder is not on the PC’s project list. Add it on the PC with `pocket-agent projects add <folder>`.',
+        400,
+      );
+    }
+    if (!knownModel(s.device, body.data.model)) return unknownModel(reply);
+    const { command, created } = await createCommand(ctx, {
+      userId: req.user!.id,
+      deviceId: s.deviceId,
+      session: { id: s.id, externalSessionId: s.externalSessionId },
+      kind: 'session.start',
+      resume: true,
+      idempotencyKey: body.data.idempotencyKey,
+      text: body.data.text,
+      projectPath: s.projectPath,
       ...(body.data.model ? { model: body.data.model } : {}),
       ...(body.data.permissionMode ? { permissionMode: body.data.permissionMode } : {}),
       ...(body.data.effort ? { effort: body.data.effort } : {}),

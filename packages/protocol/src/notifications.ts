@@ -102,7 +102,11 @@ export const RegisterPushRequest = z.object({
 });
 export type RegisterPushRequest = z.infer<typeof RegisterPushRequest>;
 
-export const MarkReadRequest = z.object({ ids: z.array(z.uuid()).max(200).optional() });
+export const MarkReadRequest = z.object({
+  ids: z.array(z.uuid()).max(200).optional(),
+  /** Every notification that opens this in-app path (e.g. a chat, when it is opened). */
+  link: z.string().startsWith('/').max(500).optional(),
+});
 export type MarkReadRequest = z.infer<typeof MarkReadRequest>;
 
 /**

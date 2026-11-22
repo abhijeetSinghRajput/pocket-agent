@@ -40,7 +40,8 @@ pnpm dev:web               # http://localhost:3000
 
 ```bash
 npm install -g @mrcodium/pocket-agent
-pocket-agent setup <CODE> --api <API-URL>     # code and URL: dashboard → Devices → Add device
+pocket-agent connect <CODE>    # code: the app shows it on first sign-in (or Devices → Add device)
+pocket-agent status            # is this PC online? Something wrong: pocket-agent doctor --fix
 ```
 
 ### Pair this PC (local development)

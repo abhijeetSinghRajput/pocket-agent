@@ -16,6 +16,8 @@ export interface IngestHandlers {
     model?: string;
   }): Promise<{ externalSessionId: string }>;
   stopSession(externalSessionId: string): Promise<boolean>;
+  /** Live state for `pocket-agent status` / `connect` / `doctor`. */
+  status?(): { connected: boolean; version: string };
 }
 
 export class HttpError extends Error {
@@ -102,6 +104,9 @@ export class IngestServer {
       if (req.method === 'POST' && url.pathname === '/policy/reload') {
         await this.handlers.reloadPolicy();
         return send(204);
+      }
+      if (req.method === 'GET' && url.pathname === '/status') {
+        return this.handlers.status ? send(200, this.handlers.status()) : send(404, { error: 'not_found' });
       }
       if (req.method === 'GET' && url.pathname === '/sessions')
         return send(200, this.handlers.listSessions());

@@ -38,6 +38,16 @@ export function toApprovalDto(a: ApprovalRow): ApprovalDto {
 
 async function notifyApproval(ctx: Services, a: Approval, kind: 'approval.created' | 'approval.updated') {
   const extra = { deviceId: a.deviceId, sessionId: a.sessionId };
+  // Answered (here or on the PC), expired or cancelled: its "Permission needed" / "Claude is
+  // asking you" notification is done with, so it no longer counts as unread.
+  if (kind === 'approval.updated' && a.status !== 'Pending') {
+    await ctx.prisma.notification
+      .updateMany({
+        where: { userId: a.userId, dedupeKey: `approval:${a.id}`, readAt: null },
+        data: { readAt: ctx.now() },
+      })
+      .catch(() => undefined);
+  }
   await notifyUser(
     ctx.bus,
     a.userId,

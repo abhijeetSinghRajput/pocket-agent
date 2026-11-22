@@ -1,5 +1,6 @@
 import { ClaudeUsage } from '@pocket-agent/protocol';
 import type { SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
+import { helperSessionId } from './helper-sessions.js';
 import type { QueryFn } from './managed.js';
 
 type Window = { utilization?: unknown; resets_at?: unknown } | null | undefined;
@@ -35,11 +36,15 @@ export async function readUsage(
     }),
   };
   const timer = setTimeout(() => abort.abort(), timeoutMs);
+  const helper = helperSessionId();
   try {
     const q = query({
       prompt: never,
       options: {
         cwd,
+        // A known id, so session discovery doesn't list this helper as a chat.
+        sessionId: helper.id,
+        persistSession: false,
         abortController: abort,
         permissionMode: 'default',
         env: { ...process.env, POCKET_AGENT_MANAGED_SESSION: '1' },
@@ -74,5 +79,6 @@ export async function readUsage(
   } finally {
     clearTimeout(timer);
     abort.abort();
+    helper.release();
   }
 }

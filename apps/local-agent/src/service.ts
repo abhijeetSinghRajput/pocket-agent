@@ -2,6 +2,7 @@ import { createEvent, type Platform } from '@pocket-agent/protocol';
 import path from 'node:path';
 import { ApprovalBroker } from './approvals.js';
 import { CommandRouter, type FullAck } from './command-router.js';
+import { isHelperSession } from './providers/claude-code/helper-sessions.js';
 import { IngestServer } from './ingest-server.js';
 import { AgentLink, type LinkEvents } from './link.js';
 import { Outbox } from './outbox.js';
@@ -121,7 +122,8 @@ export class AgentService {
     this.wake.onTurnEnd = (id) => this.hooks.transcripts.skipToEnd(id);
     const claudeDir = opts.claudeDir ?? claudeConfigDir();
     this.discovery = new ClaudeDiscovery(path.join(claudeDir, 'sessions'), this.registry, {
-      isManaged: this.managed.isManaged,
+      // Neither the app's own sessions nor the agent's short helper sessions are "discovered".
+      isManaged: (id) => this.managed.isManaged(id) || isHelperSession(id),
       hooksInstalled: () => this.hooksInstalled,
       ...(opts.discoveryIntervalMs ? { intervalMs: opts.discoveryIntervalMs } : {}),
     });
@@ -158,6 +160,7 @@ export class AgentService {
       startSession: async (b) => ({ externalSessionId: await this.managed.start(b) }),
       stopSession: (id) => this.managed.stop(id),
       reloadPolicy: () => this.reloadPolicy(),
+      status: () => ({ connected: this.link.isOpen, version: opts.agentVersion }),
     });
 
     this.link.on('connected', () => this.flush());

@@ -7,6 +7,8 @@ export interface PushMessage {
   body: string;
   /** In-app path the notification opens. */
   link: string;
+  /** The stored notification: tapping it on the phone marks it read. */
+  notificationId?: string;
   /** Notifications with the same tag replace each other on the device. */
   tag: string;
   priority: NotificationPriority;
@@ -83,6 +85,7 @@ export function createFcmSender(
                 title: m.title,
                 body: m.body,
                 link: m.link,
+                ...(m.notificationId ? { notificationId: m.notificationId } : {}),
                 tag: m.tag,
                 priority: m.priority,
                 ...(m.actions?.length ? { actions: JSON.stringify(m.actions) } : {}),

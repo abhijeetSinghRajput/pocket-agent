@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import {
   HOOK_EVENTS,
   hooksStatus,
+  hooksUpToDate,
   installHooks,
   relayCommand,
   uninstallHooks,
@@ -92,5 +93,36 @@ describe('hooks installer', () => {
     await expect(installHooks(t.file, CMD)).rejects.toThrow(/Refusing to modify/);
     expect(readFileSync(t.file, 'utf8')).toContain('// comment'); // untouched
     expect(readdirSync(t.dir)).toEqual(['settings.json']); // no backup, no temp file
+  });
+});
+
+describe('hooksUpToDate (setup is safe to re-run)', () => {
+  it('is false before installing, true after, and false for another command', async () => {
+    const s = tempSettings(userSettings);
+    expect(await hooksUpToDate(s.file, CMD)).toBe(false);
+    await installHooks(s.file, CMD);
+    expect(await hooksUpToDate(s.file, CMD)).toBe(true);
+    expect(await hooksUpToDate(s.file, CMD.replace('hook-relay', 'other'))).toBe(false);
+  });
+
+  it('is false when an entry is duplicated, so a re-install cleans it up', async () => {
+    const s = tempSettings(userSettings);
+    await installHooks(s.file, CMD);
+    const settings = s.read();
+    settings.hooks.Stop.push(settings.hooks.Stop.at(-1));
+    writeFileSync(s.file, JSON.stringify(settings));
+    expect(await hooksUpToDate(s.file, CMD)).toBe(false);
+    await installHooks(s.file, CMD);
+    expect(await hooksUpToDate(s.file, CMD)).toBe(true);
+  });
+});
+
+describe('setup helpers', async () => {
+  const { nodeSupported } = await import('../src/setup.js');
+  it('checks the Node.js version', () => {
+    expect(nodeSupported('24.7.0')).toBe(true);
+    expect(nodeSupported('25.0.1')).toBe(true);
+    expect(nodeSupported('24.6.9')).toBe(false);
+    expect(nodeSupported('22.12.0')).toBe(false);
   });
 });

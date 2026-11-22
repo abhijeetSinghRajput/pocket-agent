@@ -208,13 +208,16 @@ export class ManagedSessions {
     permissionMode?: TurnMode;
     effort?: TurnEffort;
     commandId?: string;
+    /** Continue this ended session (same id, full history) instead of starting a new one. */
+    resumeSessionId?: string;
   }): Promise<string> {
     const projectPath = path.resolve(input.projectPath);
     const st = await stat(projectPath).catch(() => null);
     if (!st?.isDirectory()) throw new Error(`Not a directory: ${projectPath}`);
 
     // We choose the id up front so hooks and discovery recognise it as managed immediately.
-    const id = randomUUID();
+    const id = input.resumeSessionId ?? randomUUID();
+    if (this.sessions.has(id)) throw new Error('session_running');
     const m: Managed = {
       inbox: [],
       current: null,
@@ -236,7 +239,11 @@ export class ManagedSessions {
         projectPath,
         status: 'Starting',
         capabilities: this.capabilities(),
-        metadata: { entrypoint: 'pocket-agent', ...(input.model ? { model: input.model } : {}) },
+        metadata: {
+          entrypoint: 'pocket-agent',
+          ...(input.resumeSessionId ? { startSource: 'resume' } : {}),
+          ...(input.model ? { model: input.model } : {}),
+        },
       },
       'managed',
     );
@@ -247,7 +254,8 @@ export class ManagedSessions {
       prompt: this.messages(id, m),
       options: {
         cwd: projectPath,
-        sessionId: id,
+        // Resuming keeps the session id and loads its conversation from this PC.
+        ...(input.resumeSessionId ? { resume: id } : { sessionId: id }),
         canUseTool,
         permissionMode: input.permissionMode ?? 'default',
         abortController: m.abort,

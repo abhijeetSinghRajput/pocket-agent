@@ -104,7 +104,11 @@ export function PermissionSheet({
           >
             <X aria-hidden /> {busy === 'deny' ? 'Denying…' : 'Deny'}
           </Button>
-          <Button className="h-12 rounded-xl" disabled={!!busy || expired} onClick={() => void decide('allow')}>
+          <Button
+            className="h-12 rounded-xl"
+            disabled={!!busy || expired}
+            onClick={() => void decide('allow')}
+          >
             <Check aria-hidden /> {busy === 'allow' ? 'Allowing…' : 'Allow'}
           </Button>
         </div>

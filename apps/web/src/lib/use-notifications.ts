@@ -15,7 +15,8 @@ export function useNotifications(limit = 30) {
   const poll = usePoll(['notifications', limit], fetcher, 60_000);
   useLiveRefresh(
     () => void poll.refresh(),
-    (e) => e.eventType === 'notification.created',
+    // An answered request marks its notification read on the server.
+    (e) => e.eventType === 'notification.created' || e.eventType === 'approval.updated',
   );
   // Read state changed in this tab (e.g. the bell after "Mark all read").
   const { refresh } = poll;
@@ -28,6 +29,26 @@ export function useNotifications(limit = 30) {
 }
 
 const READ_EVENT = 'pocket-agent:notifications-read';
+
+/**
+ * While a chat is open, its notifications ("Claude finished", "Claude is asking you", …) count as
+ * seen: they are marked read when it opens, when the app comes back to it, and as new ones arrive.
+ */
+export function useMarkChatRead(sessionId: string) {
+  const link = `/agents/${sessionId}`;
+  const mark = useCallback(() => {
+    if (document.visibilityState !== 'visible') return;
+    void apiRequest('/notifications/read', null, { method: 'POST', body: { link } })
+      .then(() => window.dispatchEvent(new Event(READ_EVENT)))
+      .catch(() => undefined);
+  }, [link]);
+  useEffect(() => {
+    mark();
+    document.addEventListener('visibilitychange', mark);
+    return () => document.removeEventListener('visibilitychange', mark);
+  }, [mark]);
+  useLiveRefresh(mark, (e) => e.eventType === 'notification.created');
+}
 
 export async function markRead(ids?: string[]) {
   await apiRequest('/notifications/read', null, { method: 'POST', body: ids ? { ids } : {} });

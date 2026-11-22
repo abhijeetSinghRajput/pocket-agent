@@ -1,3 +1,4 @@
+import { conversationExists } from './providers/claude-code/conversation.js';
 import type { BackendToAgent } from '@pocket-agent/protocol';
 import { filesNote, type AttachmentClient, type LocalFile } from './attachments.js';
 import { isAllowedProject, type Policy } from './policy.js';
@@ -9,6 +10,12 @@ import type { SessionRegistry } from './sessions/registry.js';
 
 type CommandExecute = Extract<BackendToAgent, { eventType: 'command.execute' }>;
 
+/**
+ * An instruction that reached this PC waits in its session's queue until Claude is free, however
+ * long the current task takes: the user expects it to run next, not to be dropped after a timeout.
+ * (It still never runs if the session ends first; that is reported as failed.)
+ */
+const QUEUED_UNTIL_RUN = Number.POSITIVE_INFINITY;
 export type FullAck = (
   commandId: string,
   status: 'Delivered' | Parameters<CommandAck>[1],
@@ -28,6 +35,8 @@ export class CommandRouter {
     private readonly deps: {
       registry: SessionRegistry;
       managed: ManagedSessions;
+      /** Is an ended session's conversation still on this PC? (Tests replace it.) */
+      conversationExists?: (sessionId: string) => Promise<boolean>;
       observed: ObservedInstructions;
       wake?: IdleWake;
       /** Models Claude Code offers on this PC ([] = unknown: any well-formed id is passed on). */
@@ -70,10 +79,17 @@ export class CommandRouter {
         case 'session.start': {
           const allowed = isAllowedProject(this.deps.policy(), p.projectPath);
           if (!allowed) return fail('project_not_allowed');
+          // Continue an ended session: only one that isn't running on this PC right now.
+          const resume = p.resume ? msg.sessionId : undefined;
+          if (p.resume && !resume) return fail('session_not_found');
+          if (resume && this.deps.registry.get(resume)) return fail('session_running');
+          if (resume && !(await (this.deps.conversationExists ?? conversationExists)(resume)))
+            return fail('conversation_not_found');
           const id = await this.deps.managed.start({
             projectPath: allowed.path,
             prompt: p.text,
             commandId: p.commandId,
+            ...(resume ? { resumeSessionId: resume } : {}),
             ...(model ? { model } : {}),
             ...turn,
           });
@@ -101,7 +117,7 @@ export class CommandRouter {
             return void (
               this.deps.managed.send(sid, p.text, {
                 commandId: p.commandId,
-                expiresAt,
+                expiresAt: QUEUED_UNTIL_RUN,
                 ...(model ? { model } : {}),
                 ...turn,
                 ...withFiles,
@@ -110,7 +126,7 @@ export class CommandRouter {
           }
           if (!this.deps.policy().observedInstructions) return fail('instructions_disabled_on_pc');
           if (!s.sources.has('hooks')) return fail('hooks_not_connected');
-          const item = { commandId: p.commandId, text: p.text, expiresAt };
+          const item = { commandId: p.commandId, text: p.text, expiresAt: QUEUED_UNTIL_RUN };
           // Idle (or already woken): run it now instead of waiting for the next turn on the PC.
           const wake = this.deps.wake;
           if (

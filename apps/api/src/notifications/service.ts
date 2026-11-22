@@ -103,6 +103,7 @@ export async function notify(ctx: NotifyServices, input: NotifyInput): Promise<N
           title: n.title,
           body: n.body,
           link: input.link,
+          notificationId: n.id,
           tag: input.dedupeKey.slice(0, 100),
           priority,
           ...(input.actions?.length ? { actions: input.actions } : {}),

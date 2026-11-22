@@ -68,10 +68,10 @@ On any PC with Node.js 24+ (no repository or pnpm needed):
 
 ```bash
 npm install -g @mrcodium/pocket-agent
-pocket-agent setup <CODE> --api https://pocket-agent-api.onrender.com
+pocket-agent connect <CODE>   # the hosted API is the default; self-hosted: add --api <url>
 ```
 
-The **Add device** dialog shows these commands with the right code and URL. `setup` does four things:
+The **Add device** dialog shows these commands with the right code and URL. `connect` (alias: `setup`) first checks Node.js, Claude Code and the server, then does four things, skipping any already done, and finally waits until the PC is online:
 - pairs the PC;
 - connects Claude Code (installs the hooks);
 - starts the agent in the background;

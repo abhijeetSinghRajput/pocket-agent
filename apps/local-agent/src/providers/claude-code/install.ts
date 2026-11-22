@@ -145,6 +145,28 @@ export async function installHooks(settingsPath: string, command: string): Promi
   return { settingsPath, backupPath, events: [...HOOK_EVENTS] };
 }
 
+/**
+ * True when every Pocket Agent hook is present, current, and runs `command`. Callers skip
+ * re-installing then, so running setup twice neither rewrites settings.json nor piles up backups.
+ */
+export async function hooksUpToDate(settingsPath: string, command: string): Promise<boolean> {
+  const st = await hooksStatus(settingsPath);
+  if (!st.installed || st.outdated) return false;
+  if (HOOK_EVENTS.some((e) => !st.events.includes(e))) return false;
+  try {
+    const { settings } = await readSettings(settingsPath);
+    // Exactly one entry of ours per event, all with this command.
+    return HOOK_EVENTS.every((e) => {
+      const ours = (settings.hooks?.[e] ?? [])
+        .flatMap((g) => (Array.isArray(g.hooks) ? g.hooks : []))
+        .filter(isOurs);
+      return ours.length === 1 && ours[0]!.command === command;
+    });
+  } catch {
+    return false;
+  }
+}
+
 export async function uninstallHooks(settingsPath: string): Promise<{ removed: number }> {
   const { settings, existed } = await readSettings(settingsPath);
   if (!existed) return { removed: 0 };

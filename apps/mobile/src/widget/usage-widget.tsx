@@ -1,3 +1,7 @@
+// Not compiled by the React Compiler: the widget library calls these components as plain
+// functions, outside React, so the compiler's memo hooks would crash and the widget stay blank.
+'use no memo';
+
 import { FlexWidget, SvgWidget, TextWidget, type ColorProp } from 'react-native-android-widget';
 import type { WidgetUsage } from '@/widget/data';
 

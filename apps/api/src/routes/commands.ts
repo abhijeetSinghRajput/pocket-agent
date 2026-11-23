@@ -5,6 +5,7 @@ import {
   StartSessionRequest,
   ResumeSessionRequest,
   isWithinFolder,
+  attachmentLimit,
   RESUME_ANY_FOLDER_AGENT_VERSION,
   RESUME_MIN_AGENT_VERSION,
   type AttachmentRef,
@@ -107,6 +108,14 @@ export async function commandRoutes(app: FastifyInstance, ctx: Services): Promis
     // Only the user's own, fully uploaded files that still exist.
     let attachments: AttachmentRef[] | undefined;
     if (attachmentIds?.length) {
+      const max = attachmentLimit(s.device.agentVersion);
+      if (attachmentIds.length > max)
+        return bad(
+          reply,
+          'too_many_files',
+          `Pocket Agent on this PC takes at most ${max} files per message. Update it on the PC: \`pocket-agent update\``,
+          400,
+        );
       attachments = await ownedAttachments(ctx, req.user!.id, attachmentIds);
       if (!attachments)
         return bad(reply, 'attachment_not_found', 'An attached file is missing. Attach it again.', 400);

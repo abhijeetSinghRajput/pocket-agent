@@ -1,6 +1,6 @@
 import { commandError } from '@pocket-agent/core';
 import {
-  ATTACHMENT_MAX_PER_MESSAGE,
+  attachmentLimit,
   CommandResponse,
   isWithinFolder,
   RESUME_ANY_FOLDER_AGENT_VERSION,
@@ -230,8 +230,8 @@ export function Composer({
   /** Picked files start uploading at once; each can be removed before sending. */
   function addFiles(files: PickedFile[]) {
     setError(null);
-    const room = ATTACHMENT_MAX_PER_MESSAGE - drafts.length;
-    if (files.length > room) setError(`At most ${ATTACHMENT_MAX_PER_MESSAGE} files per message.`);
+    const room = maxFiles - drafts.length;
+    if (files.length > room) setError(`At most ${maxFiles} files per message.`);
     for (const file of files.slice(0, Math.max(0, room))) {
       const draftKey = newId();
       const problem = attachmentProblem(file);
@@ -265,6 +265,7 @@ export function Composer({
   // The box is always there, like any chat app; when this session can't take messages it is
   // disabled and says why (never pretends a message could be delivered).
   const device = useDevices().state.data?.find((d) => d.id === session.deviceId);
+  const maxFiles = attachmentLimit(device?.agentVersion);
   // Ended: sending continues the same conversation on the PC, when that's possible.
   const resuming = !!session.endedAt && resumeBlocker(session, device) === null;
   const locked =
@@ -476,7 +477,7 @@ export function Composer({
               accessibilityRole="button"
               accessibilityLabel="Attach files"
               testID="attach-button"
-              disabled={drafts.length >= ATTACHMENT_MAX_PER_MESSAGE}
+              disabled={drafts.length >= maxFiles}
               onPress={() => setAttachOpen(true)}
               scale={0.92}
               hitSlop={4}
@@ -532,7 +533,7 @@ export function Composer({
         open={attachOpen}
         onClose={() => setAttachOpen(false)}
         onPick={addFiles}
-        room={ATTACHMENT_MAX_PER_MESSAGE - drafts.length}
+        room={maxFiles - drafts.length}
       />
     </Animated.View>
   );

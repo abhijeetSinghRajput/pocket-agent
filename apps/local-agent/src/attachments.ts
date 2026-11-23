@@ -102,6 +102,8 @@ const TEXT_EXT = new Set([
   'env',
   'svg',
 ]);
+/** Pictures and PDFs, together, up to this size go into the message itself (base64 adds a third). */
+const INLINE_MEDIA_MAX = 18 * 1024 * 1024;
 /** Text files up to this size go into the message itself. */
 const INLINE_TEXT_MAX = 200_000;
 
@@ -125,12 +127,19 @@ export const filesDir = (files: LocalFile[] | undefined) =>
  */
 export function messageContent(text: string, files: LocalFile[] | undefined) {
   if (!files?.length) return text;
-  const shown = files.filter((f) => isPreviewable(f.ref.mime));
+  // Pictures and PDFs go in as themselves while the request stays well under the API's size
+  // limit; past that they are saved and named, and Claude opens them with Read.
+  let budget = INLINE_MEDIA_MAX;
+  const shown = files.filter((f) => {
+    if (!isPreviewable(f.ref.mime) || f.data.length > budget) return false;
+    budget -= f.data.length;
+    return true;
+  });
   const inline = files
-    .filter((f) => !isPreviewable(f.ref.mime))
+    .filter((f) => !shown.includes(f) && !isPreviewable(f.ref.mime))
     .map((f) => ({ f, content: inlineText(f) }))
     .filter((x): x is { f: LocalFile; content: string } => x.content !== null);
-  const saved = files.filter((f) => !isPreviewable(f.ref.mime) && inlineText(f) === null);
+  const saved = files.filter((f) => !shown.includes(f) && !inline.some((x) => x.f === f));
   return [
     ...shown.map((f) =>
       f.ref.mime === 'application/pdf'

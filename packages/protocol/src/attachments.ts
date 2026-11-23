@@ -5,7 +5,21 @@ import { z } from 'zod';
  * hand Claude. Stored for 30 days; photos and PDFs keep a small preview after that.
  */
 export const ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024;
-export const ATTACHMENT_MAX_PER_MESSAGE = 4;
+/** Files per message. PC agents before 0.1.5 take at most 4 (see `attachmentLimit`). */
+export const ATTACHMENT_MAX_PER_MESSAGE = 20;
+export const MANY_FILES_AGENT_VERSION = '0.1.5';
+const OLD_AGENT_MAX_FILES = 4;
+
+/** How many files one message to this PC may carry (older agents reject more than 4). */
+export function attachmentLimit(agentVersion: string | undefined): number {
+  if (!agentVersion) return OLD_AGENT_MAX_FILES;
+  const x = agentVersion.split('-')[0]!.split('.').map(Number);
+  const y = MANY_FILES_AGENT_VERSION.split('.').map(Number);
+  for (let i = 0; i < 3; i++)
+    if ((x[i] ?? 0) !== (y[i] ?? 0))
+      return (x[i] ?? 0) < (y[i] ?? 0) ? OLD_AGENT_MAX_FILES : ATTACHMENT_MAX_PER_MESSAGE;
+  return ATTACHMENT_MAX_PER_MESSAGE;
+}
 export const ATTACHMENT_RETENTION_DAYS = 30;
 /** Shown as a picture (and handed to Claude as one); PDFs too, as documents. */
 export const PREVIEWABLE_MIME = [

@@ -74,7 +74,7 @@ function Header({ user }: { user: UserDto | null }) {
         <Image src="/icons/logo-64.png" alt="" width={44} height={44} priority className="size-11" />
         <div className="min-w-0">
           <p className="text-lg leading-tight font-semibold tracking-tight">Pocket Agent</p>
-          <p className="truncate text-sm text-muted-foreground">Your PC, in your pocket.</p>
+          <p className="truncate text-sm text-muted-foreground">Access your agent from anywhere.</p>
         </div>
       </div>
       {user && <AccountMenu user={user} />}

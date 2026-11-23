@@ -98,7 +98,7 @@ function Header() {
         <View style={{ flex: 1, minWidth: 0 }}>
           <T variant="heading">Pocket Agent</T>
           <T variant="small" tone="muted" numberOfLines={1}>
-            Your PC, in your pocket.
+            Access your agent from anywhere.
           </T>
         </View>
       </View>

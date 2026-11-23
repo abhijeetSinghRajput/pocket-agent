@@ -100,7 +100,7 @@ export function AuthScreen({ mode }: { mode: Mode }) {
         <View>
           <T variant="heading">Pocket Agent</T>
           <T variant="small" tone="muted">
-            Your PC, in your pocket.
+            Access your agent from anywhere.
           </T>
         </View>
       </Animated.View>

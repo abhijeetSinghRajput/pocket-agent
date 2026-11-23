@@ -65,7 +65,16 @@ export function normalizeProjectPath(p: string, platform: NodeJS.Platform = proc
   return platform === 'win32' ? resolved.toLowerCase() : resolved;
 }
 
+/**
+ * The allowed project that covers `candidate`: the folder itself or any folder inside it (allowing
+ * a folder allows everything under it). The result's `path` is the candidate, resolved.
+ */
 export function isAllowedProject(policy: Policy, candidate: string): Policy['projects'][number] | undefined {
   const want = normalizeProjectPath(candidate);
-  return policy.projects.find((p) => normalizeProjectPath(p.path) === want);
+  const exact = policy.projects.find((p) => normalizeProjectPath(p.path) === want);
+  if (exact) return exact;
+  const parent = policy.projects.find((p) => want.startsWith(normalizeProjectPath(p.path) + path.sep));
+  return parent
+    ? { name: path.basename(path.resolve(candidate)) || parent.name, path: path.resolve(candidate) }
+    : undefined;
 }

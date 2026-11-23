@@ -104,7 +104,7 @@ describe('PC policy', () => {
     expect(await loadPolicy(home)).toMatchObject({ observedInstructions: true });
   });
 
-  it('matches project folders exactly (case-insensitive on Windows), not by prefix', () => {
+  it('allows a project folder and everything inside it (case-insensitive on Windows), never a sibling', () => {
     const policy: Policy = {
       projects: [{ name: 'api', path: 'C:\\Work\\API' }],
       observedInstructions: false,
@@ -119,6 +119,14 @@ describe('PC policy', () => {
     expect(isAllowedProject(policy, 'C:\\Work\\API\\..\\secrets')).toBeUndefined();
     expect(isAllowedProject(policy, 'C:\\Work\\API-other')).toBeUndefined();
     expect(isAllowedProject(policy, 'C:\\Work')).toBeUndefined();
+    if (process.platform === 'win32') {
+      // Inside the allowed folder: allowed, as itself (its own path and name).
+      expect(isAllowedProject(policy, 'C:\\Work\\API\\packages\\core')).toEqual({
+        name: 'core',
+        path: 'C:\\Work\\API\\packages\\core',
+      });
+      expect(isAllowedProject(policy, 'c:\\work\\api\\src')).toBeTruthy();
+    }
   });
 });
 
@@ -266,7 +274,8 @@ describe('continuing an ended session', () => {
     const managed = new ManagedSessions(registry, fn, () => undefined, ack as never);
     const observed = new ObservedInstructions(registry, ack as never);
     const policy: Policy = {
-      projects: [{ name: 'p', path: dir }],
+      // Continuing needs no allowed folder: it runs where the conversation ran.
+      projects: [],
       observedInstructions: false,
       wakeIdle: false,
       shareAttachments: false,
@@ -278,7 +287,7 @@ describe('continuing an ended session', () => {
       observed,
       policy: () => policy,
       ack: ack as never,
-      conversationExists: async () => exists,
+      findConversation: async () => (exists ? { cwd: dir } : null),
     });
     const statuses = (id: string) => acks.filter((a) => a.id === id).map((a) => a.status);
     return { dir, acks, registry, sdk, options, router, statuses };
@@ -295,7 +304,7 @@ describe('continuing an ended session', () => {
     await new Promise((r) => setTimeout(r, 30));
     expect(h.statuses(c.payload.commandId)).toContain('Executing');
     expect(h.acks.find((a) => a.status === 'Executing')?.extra).toEqual({ externalSessionId: OLD });
-    expect(h.options[0]).toMatchObject({ resume: OLD });
+    expect(h.options[0]).toMatchObject({ resume: OLD, cwd: h.dir });
     expect(h.options[0]).not.toHaveProperty('sessionId');
     expect(h.registry.get(OLD)?.mode).toBe('managed');
     expect(h.registry.get(OLD)?.metadata).toMatchObject({ startSource: 'resume' });
@@ -324,5 +333,30 @@ describe('continuing an ended session', () => {
     await busy.router.handle(c2);
     expect(busy.acks.at(-1)).toMatchObject({ status: 'Failed', extra: { error: 'session_running' } });
     expect(busy.options).toHaveLength(0);
+  });
+});
+
+describe('findConversation', async () => {
+  const { findConversation } = await import('../src/providers/claude-code/conversation.js');
+  const { mkdirSync, writeFileSync } = await import('node:fs');
+  it('finds the transcript and the folder it ran in; null when gone or the folder is gone', async () => {
+    const config = mkdtempSync(path.join(os.tmpdir(), 'pocket-agent-conv-'));
+    const work = mkdtempSync(path.join(os.tmpdir(), 'pocket-agent-work-'));
+    const id = '11111111-2222-4333-8444-555555555555';
+    mkdirSync(path.join(config, 'projects', 'C--some-project'), { recursive: true });
+    writeFileSync(
+      path.join(config, 'projects', 'C--some-project', `${id}.jsonl`),
+      [JSON.stringify({ type: 'summary' }), '{not json', JSON.stringify({ type: 'user', cwd: work })].join(
+        String.fromCharCode(10),
+      ),
+    );
+    expect(await findConversation(id, config)).toEqual({ cwd: work });
+    expect(await findConversation('22222222-2222-4333-8444-555555555555', config)).toBeNull();
+    expect(await findConversation('../escape', config)).toBeNull();
+    writeFileSync(
+      path.join(config, 'projects', 'C--some-project', `${id}.jsonl`),
+      JSON.stringify({ type: 'user', cwd: path.join(work, 'deleted') }),
+    );
+    expect(await findConversation(id, config)).toBeNull();
   });
 });

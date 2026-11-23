@@ -1,4 +1,4 @@
-import { conversationExists } from './providers/claude-code/conversation.js';
+import { findConversation } from './providers/claude-code/conversation.js';
 import type { BackendToAgent } from '@pocket-agent/protocol';
 import { filesNote, type AttachmentClient, type LocalFile } from './attachments.js';
 import { isAllowedProject, type Policy } from './policy.js';
@@ -35,8 +35,8 @@ export class CommandRouter {
     private readonly deps: {
       registry: SessionRegistry;
       managed: ManagedSessions;
-      /** Is an ended session's conversation still on this PC? (Tests replace it.) */
-      conversationExists?: (sessionId: string) => Promise<boolean>;
+      /** An ended session's conversation on this PC, with its folder (tests replace it). */
+      findConversation?: (sessionId: string) => Promise<{ cwd: string } | null>;
       observed: ObservedInstructions;
       wake?: IdleWake;
       /** Models Claude Code offers on this PC ([] = unknown: any well-formed id is passed on). */
@@ -77,16 +77,24 @@ export class CommandRouter {
       if (model && known.length && !known.some((m) => m.id === model)) return fail('model_not_available');
       switch (p.commandType) {
         case 'session.start': {
-          const allowed = isAllowedProject(this.deps.policy(), p.projectPath);
-          if (!allowed) return fail('project_not_allowed');
-          // Continue an ended session: only one that isn't running on this PC right now.
+          // Continue an ended session: any one whose conversation is still on this PC and that isn't
+          // running right now. It runs in the folder the conversation recorded (the PC owner already
+          // ran it there), so the project list, which is for starting new chats, doesn't apply.
           const resume = p.resume ? msg.sessionId : undefined;
           if (p.resume && !resume) return fail('session_not_found');
           if (resume && this.deps.registry.get(resume)) return fail('session_running');
-          if (resume && !(await (this.deps.conversationExists ?? conversationExists)(resume)))
-            return fail('conversation_not_found');
+          let projectPath: string;
+          if (resume) {
+            const saved = await (this.deps.findConversation ?? findConversation)(resume);
+            if (!saved) return fail('conversation_not_found');
+            projectPath = saved.cwd;
+          } else {
+            const allowed = isAllowedProject(this.deps.policy(), p.projectPath);
+            if (!allowed) return fail('project_not_allowed');
+            projectPath = allowed.path;
+          }
           const id = await this.deps.managed.start({
-            projectPath: allowed.path,
+            projectPath,
             prompt: p.text,
             commandId: p.commandId,
             ...(resume ? { resumeSessionId: resume } : {}),

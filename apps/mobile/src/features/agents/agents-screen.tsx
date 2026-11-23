@@ -1,15 +1,15 @@
 import { timeAgo, toolTarget } from '@pocket-agent/core';
-import type { AgentSessionDto, ApprovalDto } from '@pocket-agent/protocol';
+import type { ApprovalDto } from '@pocket-agent/protocol';
 import { useRouter } from 'expo-router';
-import { Bot, ChevronDown, ChevronRight, Plus } from 'lucide-react-native';
+import { Bot, ChevronDown, Plus } from 'lucide-react-native';
 import { Children, isValidElement, useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { View } from 'react-native';
 import Animated from 'react-native-reanimated';
 import { ApprovalCard } from '@/features/approvals/approval-card';
 import { APPROVAL_STATUS } from '@/features/approvals/shared';
-import { duration, SessionAvatar, SessionStatusBadge } from '@/features/sessions/badges';
 import { NewChatSheet } from '@/features/sessions/new-chat-sheet';
-import { useApprovals, useSessions } from '@/lib/data';
+import { useApprovals, useWorkers } from '@/lib/data';
+import { WorkerRow } from './worker-row';
 import { enter, exit, layout } from '@/lib/motion';
 import { alpha, fonts, radius, useTheme } from '@/lib/theme';
 import { Button, Card, Divider, Press, T, tap, toneColor } from '@/ui/core';
@@ -18,26 +18,6 @@ import { Screen } from '@/ui/screen';
 
 /** How long a decided request stays, showing its result, before the list closes over its place. */
 const SETTLE_MS = 1400;
-
-const isWorking = (s: AgentSessionDto) =>
-  !s.endedAt && (s.status === 'Running' || s.status === 'Starting' || s.status === 'WaitingForPermission');
-
-/** What a working agent is doing, in a line. */
-function activity(s: AgentSessionDto): string {
-  if (s.currentTask) return s.currentTask;
-  switch (s.status) {
-    case 'Starting':
-      return 'Starting…';
-    case 'WaitingForPermission':
-      return 'Waiting for your permission';
-    case 'WaitingForInput':
-      return 'Finished, waiting for your next message';
-    case 'Disconnected':
-      return 'PC offline';
-    default:
-      return 'Working…';
-  }
-}
 
 /** Re-renders every `ms`, so "for 12 min" stays true while the screen is open. */
 function useTick(ms: number) {
@@ -61,57 +41,6 @@ function SectionTitle({ children, count }: { children: string; count?: number })
         </T>
       )}
     </View>
-  );
-}
-
-/** One agent: who, what it is doing, where and for how long. Tap opens its chat. */
-function AgentRow({ s, onPress }: { s: AgentSessionDto; onPress: () => void }) {
-  const { c } = useTheme();
-  const working = isWorking(s);
-  return (
-    <Press
-      accessibilityRole="button"
-      accessibilityLabel={`${s.projectName}: ${activity(s)}. Open chat`}
-      testID="agent-row"
-      onPress={onPress}
-      scale={0.99}
-      style={{
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 12,
-        paddingHorizontal: 14,
-        paddingVertical: 12,
-      }}
-    >
-      <SessionAvatar session={s} />
-      <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-        <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 8 }}>
-          <T variant="subheading" numberOfLines={1} style={{ flex: 1, fontSize: 15, lineHeight: 21 }}>
-            {s.projectName}
-          </T>
-          <T
-            variant="caption"
-            style={{ fontVariant: ['tabular-nums'], color: working ? c.primary : c.mutedForeground }}
-          >
-            {working ? duration(s.startedAt, null) : timeAgo(s.lastActivityAt)}
-          </T>
-        </View>
-        <T
-          variant="small"
-          numberOfLines={2}
-          style={{ color: s.currentTask ? alpha(c.foreground, 0.85) : c.mutedForeground }}
-        >
-          {activity(s)}
-        </T>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 }}>
-          <SessionStatusBadge status={s.status} />
-          <T variant="caption" tone="muted" numberOfLines={1} style={{ flexShrink: 1 }}>
-            {s.deviceName}
-          </T>
-        </View>
-      </View>
-      <ChevronRight size={18} color={alpha(c.mutedForeground, 0.6)} strokeWidth={2} />
-    </Press>
   );
 }
 
@@ -226,15 +155,16 @@ function RecentDecisions({ items }: { items: ApprovalDto[] }) {
 }
 
 /**
- * Every agent that is running, at a glance: what needs you first (permission requests and Claude's
- * questions, decided right here), then the agents working now, then the ones waiting for you.
- * Tap an agent to open its chat.
+ * The agents working for you behind your chats: what needs you first (permission requests and
+ * Claude's questions, decided right here), then the background workers (sub-agents and workflows a
+ * chat started) running now, then the ones that finished in the last 24 hours. Chats themselves live
+ * on the Chats tab. Tap a worker to open the chat it runs in.
  */
 export function AgentsScreen() {
   const router = useRouter();
   const { c } = useTheme();
   useTick(30_000);
-  const sessions = useSessions('active');
+  const workers = useWorkers();
   const pending = useApprovals('pending');
   const history = useApprovals('all');
   const [creating, setCreating] = useState(false);
@@ -248,8 +178,8 @@ export function AgentsScreen() {
     return () => map.forEach((t) => clearTimeout(t));
   }, []);
   const refreshAll = useCallback(
-    () => Promise.all([sessions.refresh(), pending.refresh(), history.refresh()]),
-    [sessions, pending, history],
+    () => Promise.all([workers.refresh(), pending.refresh(), history.refresh()]),
+    [workers, pending, history],
   );
   const decided = (a: ApprovalDto, index: number) => {
     setSettling((s) => (s.some((x) => x.approval.id === a.id) ? s : [...s, { approval: a, index }]));
@@ -268,21 +198,19 @@ export function AgentsScreen() {
     if (!needs.some((a) => a.id === s.approval.id))
       needs.splice(Math.min(s.index, needs.length), 0, s.approval);
   }
-  const all = [...(sessions.state.data ?? [])]
-    .filter((s) => !s.endedAt)
-    .sort((a, b) => Date.parse(b.lastActivityAt) - Date.parse(a.lastActivityAt));
-  const working = all.filter(isWorking);
-  const waiting = all.filter((s) => !isWorking(s));
+  const list = workers.state.data ?? [];
+  const running = list.filter((w) => w.status === 'running');
+  const finished = list.filter((w) => w.status !== 'running');
   const recent = (history.state.data ?? []).filter((a) => a.status !== 'Pending' || a.decision).slice(0, 20);
 
-  const loading = sessions.state.status === 'loading' || pending.state.status === 'loading';
-  const empty = !loading && !needs.length && !all.length;
+  const loading = workers.state.status === 'loading' || pending.state.status === 'loading';
+  const empty = !loading && !needs.length && !list.length;
   const summary = loading
     ? undefined
     : [
-        working.length ? `${working.length} working` : null,
+        running.length ? `${running.length} running` : null,
         needs.length ? `${needs.length} need${needs.length === 1 ? 's' : ''} you` : null,
-        waiting.length ? `${waiting.length} waiting` : null,
+        finished.length ? `${finished.length} finished today` : null,
       ]
         .filter(Boolean)
         .join(' · ') || 'Nothing running right now';
@@ -315,7 +243,7 @@ export function AgentsScreen() {
           <Skeleton height={168} round={radius.xl} />
         </Animated.View>
       )}
-      {sessions.state.status === 'error' && <Notice>{sessions.state.error}</Notice>}
+      {workers.state.status === 'error' && <Notice>{workers.state.error}</Notice>}
       {pending.state.status === 'error' && <Notice>{pending.state.error}</Notice>}
 
       {needs.length > 0 && (
@@ -341,33 +269,33 @@ export function AgentsScreen() {
         </Animated.View>
       )}
 
-      {working.length > 0 && (
+      {running.length > 0 && (
         <Animated.View
           entering={enter.rise(step++)}
           layout={layout}
           style={{ gap: 8 }}
-          testID="agents-working"
+          testID="workers-running"
         >
-          <SectionTitle count={working.length}>WORKING</SectionTitle>
+          <SectionTitle count={running.length}>RUNNING</SectionTitle>
           <Group>
-            {working.map((s) => (
-              <AgentRow key={s.id} s={s} onPress={() => openChat(s.id)} />
+            {running.map((w) => (
+              <WorkerRow key={w.id} w={w} onPress={() => openChat(w.sessionId)} />
             ))}
           </Group>
         </Animated.View>
       )}
 
-      {waiting.length > 0 && (
+      {finished.length > 0 && (
         <Animated.View
           entering={enter.rise(step++)}
           layout={layout}
           style={{ gap: 8 }}
-          testID="agents-waiting"
+          testID="workers-finished"
         >
-          <SectionTitle count={waiting.length}>WAITING FOR YOU</SectionTitle>
+          <SectionTitle count={finished.length}>FINISHED TODAY</SectionTitle>
           <Group>
-            {waiting.map((s) => (
-              <AgentRow key={s.id} s={s} onPress={() => openChat(s.id)} />
+            {finished.map((w) => (
+              <WorkerRow key={w.id} w={w} onPress={() => openChat(w.sessionId)} />
             ))}
           </Group>
         </Animated.View>
@@ -377,8 +305,8 @@ export function AgentsScreen() {
         <View testID="no-agents">
           <EmptyState
             icon={Bot}
-            title="No agents running"
-            body="Start Claude on your PC from here, or in your editor. Running agents and anything that needs you show up on this tab."
+            title="No background agents"
+            body="When a chat sends sub-agents or a workflow to work in the background, they show up here while they run and for a day after they finish. Anything that needs you shows up here too."
             action="New chat"
             onAction={() => setCreating(true)}
           />

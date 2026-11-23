@@ -4,7 +4,9 @@ import {
   type AgentEventDto,
   type AgentSessionDto,
   type OverviewResponse,
+  type WorkerListResponse,
 } from '@pocket-agent/protocol';
+import { buildWorkers, WORKER_TOOL_NAMES } from '@pocket-agent/core';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { requireUser } from '../auth/session.js';
@@ -12,6 +14,8 @@ import type { AppContext } from '../context.js';
 import type { AgentEvent, AgentSession, Device, Prisma } from '../generated/prisma/client.js';
 
 const IdParam = z.object({ id: z.uuid() });
+/** Finished workers stay listed for a day. */
+const WORKER_WINDOW_MS = 24 * 60 * 60 * 1000;
 const PageQuery = z.object({
   before: z.uuid().optional(),
   limit: z.coerce.number().int().min(1).max(100).default(50),
@@ -136,6 +140,61 @@ export async function sessionRoutes(app: FastifyInstance, ctx: AppContext): Prom
     const q = PageQuery.safeParse(req.query ?? {});
     if (!q.success) return reply.code(400).send({ error: 'invalid_request' });
     return eventPage(ctx, { sessionId: s.id }, req.query, false);
+  });
+
+  /**
+   * Background workers Claude started in your chats: sub-agents and workflows, the ones still
+   * running and the ones that finished in the last day. Worked out from the sessions' events, the
+   * same way the apps read them (`buildWorkers` in @pocket-agent/core).
+   */
+  app.get('/workers', { preHandler: user }, async (req): Promise<WorkerListResponse> => {
+    const now = ctx.now().getTime();
+    const day = new Date(now - WORKER_WINDOW_MS);
+    const sessions = await ctx.prisma.agentSession.findMany({
+      where: { ...owned(req.user!.id), OR: [{ endedAt: null }, { lastActivityAt: { gte: day } }] },
+      orderBy: { lastActivityAt: 'desc' },
+      take: 50,
+      include: { device: { select: { name: true } } },
+    });
+    if (!sessions.length) return { workers: [] };
+    const events = await ctx.prisma.agentEvent.findMany({
+      where: {
+        sessionId: { in: sessions.map((s) => s.id) },
+        createdAt: { gte: new Date(now - 7 * WORKER_WINDOW_MS) },
+        OR: [
+          {
+            eventType: { in: ['agent.tool.started', 'agent.tool.completed', 'agent.tool.failed'] },
+            OR: WORKER_TOOL_NAMES.map((name) => ({ payload: { path: ['toolName'], equals: name } })),
+          },
+          // A background worker reports back through a task notification in the conversation.
+          { eventType: 'agent.output', payload: { path: ['text'], string_contains: '<task-notification>' } },
+          { eventType: 'agent.worker.updated' },
+          { eventType: 'agent.session.ended' },
+        ],
+      },
+      orderBy: { createdAt: 'asc' },
+      take: 5000,
+    });
+    const bySession = new Map<string, AgentEvent[]>();
+    for (const e of events) {
+      if (!e.sessionId) continue;
+      bySession.set(e.sessionId, [...(bySession.get(e.sessionId) ?? []), e]);
+    }
+    const workers: WorkerListResponse['workers'] = [];
+    for (const s of sessions) {
+      const list = bySession.get(s.id);
+      if (!list) continue;
+      for (const w of buildWorkers(list.map((e) => toEventDto(e)))) {
+        if (w.status !== 'running' && Date.parse(w.finishedAt ?? w.startedAt) < day.getTime()) continue;
+        workers.push({ ...w, sessionId: s.id, projectName: s.projectName, deviceName: s.device.name });
+      }
+    }
+    workers.sort(
+      (a, b) =>
+        Number(b.status === 'running') - Number(a.status === 'running') ||
+        Date.parse(b.startedAt) - Date.parse(a.startedAt),
+    );
+    return { workers: workers.slice(0, 100) };
   });
 
   app.get('/activity', { preHandler: user }, async (req, reply) => {

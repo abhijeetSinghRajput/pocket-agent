@@ -366,3 +366,34 @@ describe('starting managed sessions remotely', () => {
     s.agent.ws.close();
   });
 });
+
+describe('continuing an ended session', () => {
+  async function ended(agentVersion: string) {
+    const s = await setup();
+    // An ended session whose folder is NOT on the PC's project list.
+    await t.ctx.prisma.agentSession.update({
+      where: { id: s.session.id },
+      data: { endedAt: new Date(), status: 'Stopped', projectPath: 'C:/not/on/the/list' },
+    });
+    await t.ctx.prisma.device.update({ where: { id: s.deviceId }, data: { agentVersion, projects: [] } });
+    return s;
+  }
+  const resume = (s: { session: { id: string }; cookie: string }) =>
+    post(`/sessions/${s.session.id}/resume`, s.cookie, { text: 'More work', idempotencyKey: randomUUID() });
+
+  it('needs no project-list entry with a current agent (it runs where the conversation ran)', async () => {
+    const s = await ended('0.1.5');
+    const res = await resume(s);
+    expect(res.statusCode).toBe(201);
+    expect(CommandResponse.parse(res.json()).command).toMatchObject({ commandType: 'session.start' });
+    s.agent.ws.close();
+  });
+
+  it('an older agent still needs the folder on the list', async () => {
+    const s = await ended('0.1.4');
+    const res = await resume(s);
+    expect(res.statusCode).toBe(400);
+    expect(res.json()).toMatchObject({ error: 'project_not_allowed' });
+    s.agent.ws.close();
+  });
+});

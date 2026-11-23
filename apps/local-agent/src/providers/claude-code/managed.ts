@@ -397,9 +397,19 @@ export class ManagedSessions {
 
   private onMessage(id: string, m: Managed, msg: SDKMessage): void {
     switch (msg.type) {
-      case 'system':
+      case 'system': {
         if (msg.subtype === 'init') this.registry.setStatus(id, 'Running');
+        // A sub-agent or workflow running in the background: its start and its end.
+        const task = msg as { subtype: string; tool_use_id?: string; status?: string; summary?: string };
+        if ((task.subtype === 'task_started' || task.subtype === 'task_notification') && task.tool_use_id) {
+          this.registry.event(id, 'agent.worker.updated', {
+            toolUseId: task.tool_use_id,
+            status: task.subtype === 'task_started' ? 'running' : workerStatus(task.status),
+            ...(task.summary ? { summary: truncate(task.summary, 500) } : {}),
+          });
+        }
         return;
+      }
       case 'assistant':
       case 'user':
         reportSdkMessage(this.registry, id, m.toolNames, msg);
@@ -421,4 +431,11 @@ export class ManagedSessions {
       default:
     }
   }
+}
+
+/** A task's end, in the words of Pocket Agent's worker list. */
+export function workerStatus(status: string | undefined): 'done' | 'failed' | 'stopped' {
+  if (status === 'failed' || status === 'error') return 'failed';
+  if (status === 'stopped' || status === 'killed' || status === 'cancelled') return 'stopped';
+  return 'done';
 }

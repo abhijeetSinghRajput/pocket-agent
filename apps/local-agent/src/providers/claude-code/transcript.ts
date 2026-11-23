@@ -5,7 +5,9 @@ import type { PastedFile } from '../../attachments.js';
 export type TranscriptEntry =
   | { kind: 'text' | 'thought'; text: string }
   /** Photos/PDFs the user attached to a prompt in the editor (only read when sharing is on). */
-  | { kind: 'files'; files: PastedFile[] };
+  | { kind: 'files'; files: PastedFile[] }
+  /** A background sub-agent or workflow ended (Claude Code's task notification). */
+  | { kind: 'worker'; toolUseId: string; status: string; summary: string | null };
 
 /** "Thought for 2s", as Claude Code shows it. */
 export function thoughtLabel(ms: number): string {
@@ -85,6 +87,15 @@ export class TranscriptTail {
     t.rest = lines.pop() ?? '';
     const out: TranscriptEntry[] = [];
     for (const line of lines) {
+      if (line.includes('<task-notification>')) {
+        for (const n of taskNotifications(line)) {
+          const key = `task:${n.toolUseId}:${n.status}`;
+          if (t.seen.has(key)) continue;
+          t.seen.add(key);
+          out.push({ kind: 'worker', ...n });
+        }
+        continue;
+      }
       const thought = thinkingTime(line);
       if (thought) {
         // One "Thought for …" per reply: its thinking can span several lines; the first has the time.
@@ -221,4 +232,38 @@ function assistantText(line: string): { id: string | undefined; text: string } |
     .trim();
   if (!text) return undefined;
   return { id: typeof o['uuid'] === 'string' ? o['uuid'] : undefined, text };
+}
+
+/**
+ * The task notifications in a transcript line: Claude Code queues one when a background task ends
+ * (an `attachment` of type `queued_command`, then the `user` turn it starts). Each names the tool
+ * call that started the task and how it ended.
+ */
+export function taskNotifications(
+  line: string,
+): { toolUseId: string; status: string; summary: string | null }[] {
+  let entry: Record<string, unknown>;
+  try {
+    entry = JSON.parse(line) as Record<string, unknown>;
+  } catch {
+    return [];
+  }
+  const attachment = entry['attachment'] as { type?: string; prompt?: unknown } | undefined;
+  const message = entry['message'] as { role?: string; content?: unknown } | undefined;
+  const text =
+    attachment?.type === 'queued_command' && typeof attachment.prompt === 'string'
+      ? attachment.prompt
+      : entry['type'] === 'user' && message?.role === 'user' && typeof message.content === 'string'
+        ? message.content
+        : '';
+  const out: { toolUseId: string; status: string; summary: string | null }[] = [];
+  for (const block of text.matchAll(/<task-notification>([\s\S]*?)<\/task-notification>/g)) {
+    const body = block[1] ?? '';
+    const field = (name: string) =>
+      new RegExp(`<${name}>([\\s\\S]*?)</${name}>`).exec(body)?.[1]?.trim() ?? '';
+    const toolUseId = field('tool-use-id');
+    if (toolUseId)
+      out.push({ toolUseId, status: field('status').toLowerCase(), summary: field('summary') || null });
+  }
+  return out;
 }

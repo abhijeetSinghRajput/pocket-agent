@@ -76,7 +76,15 @@ export function summarizeToolInput(toolName: string, raw: unknown): string {
       break;
     case 'Task':
     case 'Agent':
-      out = { description: str(i['description']), subagent_type: str(i['subagent_type'], 100) };
+      out = {
+        description: str(i['description']),
+        subagent_type: str(i['subagent_type'], 100),
+        // The app's Agents tab: a background sub-agent keeps running after its tool call.
+        ...(i['run_in_background'] === true ? { run_in_background: true } : {}),
+      };
+      break;
+    case 'Workflow':
+      out = { name: str(i['name'], 100), description: str(i['description']) };
       break;
     case 'AskUserQuestion':
       // Claude's question to the user is conversation (like its replies), so the text is forwarded.

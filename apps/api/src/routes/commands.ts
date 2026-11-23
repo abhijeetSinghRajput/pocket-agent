@@ -4,6 +4,8 @@ import {
   SessionControlRequest,
   StartSessionRequest,
   ResumeSessionRequest,
+  isWithinFolder,
+  RESUME_ANY_FOLDER_AGENT_VERSION,
   RESUME_MIN_AGENT_VERSION,
   type AttachmentRef,
   type CommandKind,
@@ -163,7 +165,7 @@ export async function commandRoutes(app: FastifyInstance, ctx: Services): Promis
     if (!body.success)
       return bad(reply, 'invalid_request', body.error.issues[0]?.message ?? 'Invalid request', 400);
     const projects = z.array(z.object({ path: z.string() })).safeParse(device.projects);
-    if (!projects.success || !projects.data.some((x) => x.path === body.data.projectPath)) {
+    if (!projects.success || !projects.data.some((x) => isWithinFolder(body.data.projectPath, x.path))) {
       return bad(
         reply,
         'project_not_allowed',
@@ -209,8 +211,11 @@ export async function commandRoutes(app: FastifyInstance, ctx: Services): Promis
         `Continuing a session needs Pocket Agent ${RESUME_MIN_AGENT_VERSION} or newer on the PC. Run \`pocket-agent update\` there.`,
       );
     }
+    // From 0.1.5 the PC continues the session in the folder its conversation ran in, whatever the
+    // project list says (that list is for starting new chats). Older agents still require it.
     const projects = z.array(z.object({ path: z.string() })).safeParse(s.device.projects);
-    if (!projects.success || !projects.data.some((x) => x.path === s.projectPath)) {
+    const listed = projects.success && projects.data.some((x) => isWithinFolder(s.projectPath, x.path));
+    if (versionBelow(s.device.agentVersion, RESUME_ANY_FOLDER_AGENT_VERSION) && !listed) {
       return bad(
         reply,
         'project_not_allowed',

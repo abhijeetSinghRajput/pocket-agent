@@ -2,6 +2,8 @@ import { commandError } from '@pocket-agent/core';
 import {
   ATTACHMENT_MAX_PER_MESSAGE,
   CommandResponse,
+  isWithinFolder,
+  RESUME_ANY_FOLDER_AGENT_VERSION,
   RESUME_MIN_AGENT_VERSION,
   type AgentSessionDto,
   type DeviceDto,
@@ -87,8 +89,11 @@ export function resumeBlocker(s: AgentSessionDto, device: DeviceDto | undefined)
   if (s.provider !== 'claude-code' || !device || device.status === 'Revoked') return ended;
   if (versionBelow(device.agentVersion, RESUME_MIN_AGENT_VERSION))
     return `${ended} To continue it from here, update Pocket Agent on the PC: \`pocket-agent update\``;
-  const norm = (p: string) => p.replace(/[\\/]+$/, '').toLowerCase();
-  if (!device.projects.some((p) => norm(p.path) === norm(s.projectPath)))
+  // Agents from 0.1.5 continue any session in its own folder; older ones need it on the list.
+  if (
+    versionBelow(device.agentVersion, RESUME_ANY_FOLDER_AGENT_VERSION) &&
+    !device.projects.some((p) => isWithinFolder(s.projectPath, p.path))
+  )
     return `${ended} To continue it from here, allow its folder on the PC: \`pocket-agent projects add "${s.projectPath}"\``;
   return null;
 }

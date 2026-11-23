@@ -19,6 +19,7 @@
     "db:new": "node scripts/new-migration.mjs"
   },
   "dependencies": {
+    "@pocket-agent/core": "workspace:*",
     "@pocket-agent/protocol": "workspace:*",
     "@fastify/cookie": "11.1.5",
     "@fastify/cors": "11.4.0",

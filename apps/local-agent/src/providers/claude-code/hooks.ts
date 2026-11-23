@@ -7,6 +7,7 @@ import type { PastedFile } from '../../attachments.js';
 import type { ObservedInstructions } from './instructions.js';
 import type { IdleWake } from './wake.js';
 import { summarizeToolInput, summarizeToolOutput, toolKey } from './summarize.js';
+import { workerStatus } from './managed.js';
 import { TranscriptTail } from './transcript.js';
 
 /** JSON a hook may print to answer Claude Code: Stop (deliver an instruction) or PermissionRequest (remote decision). */
@@ -313,6 +314,14 @@ export class ClaudeHookHandler {
   private flushText(sessionId: string): void {
     const share = this.opts.shareFiles && this.opts.shareFilesAllowed?.() ? this.opts.shareFiles : undefined;
     for (const entry of this.transcripts.read(sessionId, !!share)) {
+      if (entry.kind === 'worker') {
+        this.registry.event(sessionId, 'agent.worker.updated', {
+          toolUseId: entry.toolUseId,
+          status: workerStatus(entry.status),
+          ...(entry.summary ? { summary: truncate(entry.summary, 500) } : {}),
+        });
+        continue;
+      }
       if (entry.kind === 'files') {
         // Uploaded in the background; the chat attaches them to the message they came with.
         void share!(entry.files)

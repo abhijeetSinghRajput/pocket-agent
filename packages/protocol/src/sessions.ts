@@ -68,3 +68,34 @@ export const OverviewResponse = z.object({
   recent: z.array(AgentEventDto),
 });
 export type OverviewResponse = z.infer<typeof OverviewResponse>;
+
+/**
+ * A worker Claude started inside a session: a sub-agent (the Agent/Task tool) or a workflow. Running
+ * until it reports back; background ones report through a task notification.
+ */
+export const WorkerKind = z.enum(['subagent', 'workflow']);
+export type WorkerKind = z.infer<typeof WorkerKind>;
+export const WorkerStatus = z.enum(['running', 'done', 'failed', 'stopped']);
+export type WorkerStatus = z.infer<typeof WorkerStatus>;
+
+export const WorkerDto = z.object({
+  /** The tool call that started it. */
+  id: z.string(),
+  sessionId: z.string(),
+  projectName: z.string(),
+  deviceName: z.string(),
+  kind: WorkerKind,
+  /** What it was asked to do ("Find the upload code"), or the workflow's description. */
+  title: z.string(),
+  /** The sub-agent's type ("Explore") or the workflow's name. */
+  label: z.string().nullable(),
+  background: z.boolean(),
+  status: WorkerStatus,
+  startedAt: iso,
+  finishedAt: iso.nullable(),
+  /** How it ended, in Claude Code's words ("Agent completed"), when it said. */
+  summary: z.string().nullable(),
+});
+export type WorkerDto = z.infer<typeof WorkerDto>;
+export const WorkerListResponse = z.object({ workers: z.array(WorkerDto) });
+export type WorkerListResponse = z.infer<typeof WorkerListResponse>;

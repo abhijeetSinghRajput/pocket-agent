@@ -6,6 +6,7 @@ import {
   NotificationPage,
   SessionListResponse,
   SessionResponse,
+  WorkerListResponse,
   type AgentEventDto,
 } from '@pocket-agent/protocol';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -189,4 +190,20 @@ export function useEventFeed(path: string) {
   // The oldest event loaded so far: anything older isn't on screen yet.
   const oldestAt = events.length ? events[events.length - 1]!.createdAt : null;
   return { events, status, error, hasMore: !!cursor, loadMore, loadingMore, refreshHead, oldestAt };
+}
+
+/** Background workers (sub-agents, workflows) running in your chats, and the ones that finished today. */
+export function useWorkers() {
+  const fetcher = useCallback(
+    (signal: AbortSignal) => apiRequest('/workers', WorkerListResponse, { signal }).then((r) => r.workers),
+    [],
+  );
+  const poll = usePoll(['workers'], fetcher, 30_000);
+  useLiveRefresh(
+    () => void poll.refresh(),
+    (e) =>
+      e.eventType === 'agent.event.created' &&
+      /^agent\.(tool\.|worker\.|session\.ended|output)/.test(e.payload.eventType),
+  );
+  return poll;
 }

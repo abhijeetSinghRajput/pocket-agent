@@ -97,6 +97,19 @@ export const AgentOutput = defineEvent(
 );
 export const AgentError = defineEvent('agent.error', z.object({ message: text }));
 /**
+ * A worker Claude started in the session (a sub-agent or workflow, by its tool call) moved on: it
+ * went to the background (`running`), or it ended. Background workers end after their tool call,
+ * so this is how their end is known.
+ */
+export const AgentWorkerUpdated = defineEvent(
+  'agent.worker.updated',
+  z.object({
+    toolUseId: id,
+    status: z.enum(['running', 'done', 'failed', 'stopped']),
+    summary: text.optional(),
+  }),
+);
+/**
  * Sent after every (re)connect: the complete set of sessions the PC currently knows are live.
  * The backend restores their status and ends any other open session of this device.
  */
@@ -195,6 +208,7 @@ export const AgentToBackend = z.discriminatedUnion('eventType', [
   AgentPermissionResolved,
   AgentOutput,
   AgentError,
+  AgentWorkerUpdated,
   AgentSessionsSnapshot,
   CommandAck,
   DeviceSettings,
@@ -214,6 +228,7 @@ export const SESSION_SCOPED_EVENTS = new Set<AgentToBackend['eventType']>([
   'agent.permission.resolved',
   'agent.output',
   'agent.error',
+  'agent.worker.updated',
 ]);
 
 // ───────────────────────────── Backend → Local Agent ─────────────────────────────

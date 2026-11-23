@@ -70,6 +70,13 @@ export type ResumeSessionRequest = z.infer<typeof ResumeSessionRequest>;
 /** First Local Agent version that can continue an ended session. */
 export const RESUME_MIN_AGENT_VERSION = '0.1.4';
 
+/**
+ * From this Local Agent version an ended session continues in the folder its conversation ran in,
+ * whatever the PC's project list says (the list is for starting new chats). Older agents still
+ * require the folder to be on it.
+ */
+export const RESUME_ANY_FOLDER_AGENT_VERSION = '0.1.5';
+
 export const SessionControlRequest = z.object({ idempotencyKey });
 export type SessionControlRequest = z.infer<typeof SessionControlRequest>;
 
@@ -82,3 +89,21 @@ export const COMMAND_TTL_MS: Record<CommandKind, number> = {
   interrupt: 5 * 60 * 1000,
   'session.stop': 60 * 1000,
 };
+
+/** A folder path in one form for comparing: forward slashes, no trailing slash, Windows case-folded. */
+function comparablePath(p: string): string {
+  const slashes = p.trim().replace(/\\/g, '/').replace(/\/+$/, '');
+  // Windows paths (a drive letter or a UNC share) don't care about case.
+  return /^[a-z]:(\/|$)/i.test(slashes) || p.startsWith('\\\\') ? slashes.toLowerCase() : slashes;
+}
+
+/**
+ * Whether `candidate` is `folder` itself or anywhere inside it. A folder allowed on the PC allows
+ * everything under it. (`..` must already be resolved: the PC resolves paths before checking.)
+ */
+export function isWithinFolder(candidate: string, folder: string): boolean {
+  const c = comparablePath(candidate);
+  const f = comparablePath(folder);
+  if (!f) return false;
+  return c === f || c.startsWith(`${f}/`);
+}

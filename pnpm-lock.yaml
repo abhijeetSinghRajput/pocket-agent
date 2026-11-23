@@ -190,6 +190,9 @@ importers:
       '@fastify/websocket':
         specifier: 11.3.6
         version: 11.3.6
+      '@pocket-agent/core':
+        specifier: workspace:*
+        version: link:../../packages/core
       '@pocket-agent/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol

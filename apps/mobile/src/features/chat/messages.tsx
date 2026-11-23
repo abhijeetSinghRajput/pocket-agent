@@ -400,6 +400,8 @@ const TOOL_STATE: Record<Of<'tool'>['state'], string> = {
 
 const SHELL = new Set(['Bash', 'PowerShell', 'BashOutput']);
 
+const ioRow = { flexDirection: 'row', gap: 12, paddingHorizontal: 10, paddingVertical: 6 } as const;
+
 function IoLabel({ children }: { children: string }) {
   return (
     <T
@@ -449,7 +451,9 @@ function ToolStep({ item, ...join }: { item: Of<'tool'> } & Join) {
         )}
       </View>
       {block && (
-        <View style={{ marginTop: 4 }}>
+        // The open output scrolls on its own, so it sits outside the tap area: on Android a
+        // pressable around a ScrollView takes the touch and the output never scrolls.
+        <View style={{ marginTop: 4, borderRadius: radius.sm, backgroundColor: c.card, overflow: 'hidden' }}>
           <Press
             accessibilityRole="button"
             accessibilityState={more ? { expanded: open } : undefined}
@@ -458,7 +462,7 @@ function ToolStep({ item, ...join }: { item: Of<'tool'> } & Join) {
             onPress={() => setOpen(!open)}
             scale={0.99}
             dim={false}
-            style={{ borderRadius: radius.sm, backgroundColor: c.card, overflow: 'hidden', opacity: 1 }}
+            style={{ opacity: 1 }}
           >
             {shell && target && (
               <View style={{ flexDirection: 'row', gap: 12, paddingHorizontal: 10, paddingVertical: 6 }}>
@@ -472,38 +476,64 @@ function ToolStep({ item, ...join }: { item: Of<'tool'> } & Join) {
                 </Text>
               </View>
             )}
-            {output && (
+            {output && !open && (
               <View
-                style={{
-                  flexDirection: 'row',
-                  gap: 12,
-                  paddingHorizontal: 10,
-                  paddingVertical: 6,
-                  borderTopWidth: shell && target ? StyleSheet.hairlineWidth : 0,
-                  borderTopColor: c.border,
-                }}
+                style={[
+                  ioRow,
+                  {
+                    borderTopWidth: shell && target ? StyleSheet.hairlineWidth : 0,
+                    borderTopColor: c.border,
+                  },
+                ]}
               >
                 <IoLabel>OUT</IoLabel>
-                {open ? (
-                  <ScrollView nestedScrollEnabled style={{ flex: 1, maxHeight: 320 }}>
-                    {outText}
-                  </ScrollView>
-                ) : (
-                  <View style={{ flex: 1 }}>
-                    {outText}
-                    {output.split('\n').length > 3 && (
-                      // The fold fades out at its foot (tap shows all).
-                      <LinearGradient
-                        pointerEvents="none"
-                        colors={[alpha(c.card, 0), c.card]}
-                        style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 26 }}
-                      />
-                    )}
-                  </View>
-                )}
+                <View style={{ flex: 1 }}>
+                  {outText}
+                  {output.split('\n').length > 3 && (
+                    // The fold fades out at its foot (tap shows all).
+                    <LinearGradient
+                      pointerEvents="none"
+                      colors={[alpha(c.card, 0), c.card]}
+                      style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 26 }}
+                    />
+                  )}
+                </View>
               </View>
             )}
           </Press>
+          {output && open && (
+            <Animated.View
+              entering={enter.fade}
+              style={[
+                ioRow,
+                { borderTopWidth: shell && target ? StyleSheet.hairlineWidth : 0, borderTopColor: c.border },
+              ]}
+            >
+              <IoLabel>OUT</IoLabel>
+              <ScrollView nestedScrollEnabled style={{ flex: 1, maxHeight: 320 }}>
+                {outText}
+              </ScrollView>
+            </Animated.View>
+          )}
+          {output && open && (
+            <Press
+              accessibilityRole="button"
+              accessibilityState={{ expanded: true }}
+              onPress={() => setOpen(false)}
+              scale={0.99}
+              dim={false}
+              style={{
+                alignItems: 'center',
+                paddingVertical: 6,
+                borderTopWidth: StyleSheet.hairlineWidth,
+                borderTopColor: c.border,
+              }}
+            >
+              <T variant="caption" tone="muted">
+                Show less
+              </T>
+            </Press>
+          )}
         </View>
       )}
     </Step>

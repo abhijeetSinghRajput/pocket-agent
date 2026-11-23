@@ -86,7 +86,7 @@ const config: ExpoConfig = {
             label: 'Claude usage',
             description: 'Your Claude plan usage: the session and weekly limits of your PC.',
             minWidth: '250dp',
-            minHeight: '110dp',
+            minHeight: '210dp',
             targetCellWidth: 4,
             targetCellHeight: 3,
             // Taller than its meters need only looks empty: stops a little past the roomy layout.

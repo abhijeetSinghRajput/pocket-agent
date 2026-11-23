@@ -9,8 +9,7 @@ import type { UsageMeter, WidgetUsage } from '@/widget/data';
  * The home-screen widget: Claude plan usage of your PC, the same meters as the Profile screen
  * (the 5-hour session, the week, and model limits such as Fable), each with when it resets.
  * Drawn by Android from this description: no hooks, no animation, only the widget primitives.
- * Its content sits at the top at any height; when the widget is short the reset times fold into
- * one line at the foot.
+ * Its content sits at the top; the foot says when the PC's Claude sign-in ends.
  */
 
 interface Palette {
@@ -51,11 +50,6 @@ const refreshSvg = (color: string) =>
 const SEMIBOLD = 'Geist_600SemiBold';
 const MEDIUM = 'Geist_500Medium';
 const REGULAR = 'Geist_400Regular';
-
-/** Heights (dp) a full meter needs; below what all of them need, the reset lines fold away. */
-const CHROME = 32 + 24 + 22; // padding, header, footer
-const METER = 42;
-const RESET_LINE = 16;
 
 function time(d: Date) {
   return d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
@@ -236,13 +230,11 @@ function Usage({
   p,
   now,
   refreshing,
-  height,
 }: {
   usage: WidgetUsage;
   p: Palette;
   now: number;
   refreshing: boolean;
-  height: number;
 }) {
   if (usage.state === 'signed-out') {
     return (
@@ -260,17 +252,13 @@ function Usage({
     );
   }
   const list = meters(usage);
-  // Each meter says when it resets when there is room for every line; otherwise the session's
-  // reset moves to the foot (the one that matters most) and the meters stay readable.
-  const roomy =
-    height >= CHROME + list.length * (METER + RESET_LINE) + (usage.loginExpiresAt ? RESET_LINE : 0);
-  const sessionReset = usage.session ? resetText(usage.session.resetsAt, now) : null;
+  // As on Profile: every meter says when it resets; the foot says when the PC's sign-in ends.
   const login = loginText(usage.loginExpiresAt ?? null, now);
   return (
     <Frame p={p}>
       <Header p={p} refreshing={refreshing} plan={usage.plan} />
       {list.map((m) => (
-        <Meter key={m.label} m={m} p={p} reset={roomy ? resetText(m.resetsAt, now) : null} />
+        <Meter key={m.label} m={m} p={p} reset={resetText(m.resetsAt, now)} />
       ))}
       <FlexWidget
         style={{
@@ -282,13 +270,7 @@ function Usage({
         }}
       >
         <TextWidget
-          text={
-            roomy
-              ? (login ?? usage.deviceName)
-              : sessionReset
-                ? `Session ${sessionReset.charAt(0).toLowerCase()}${sessionReset.slice(1)}`
-                : usage.deviceName
-          }
+          text={login ?? usage.deviceName}
           style={{ fontSize: 11, fontFamily: REGULAR, color: p.muted }}
           maxLines={1}
           truncate="END"
@@ -308,8 +290,7 @@ function Usage({
 }
 
 /**
- * Light and dark versions; Android shows the one that matches the system theme. `height` is the
- * widget's height in dp (Android passes it); `refreshing` draws the moment between a tap on
+ * Light and dark versions; Android shows the one that matches the system theme. `refreshing` draws the moment between a tap on
  * refresh and the new numbers.
  */
 export function usageWidget(
@@ -321,7 +302,7 @@ export function usageWidget(
   }: { height?: number; now?: number; refreshing?: boolean } = {},
 ) {
   return {
-    light: <Usage usage={usage} p={LIGHT} now={now} refreshing={refreshing} height={height} />,
-    dark: <Usage usage={usage} p={DARK} now={now} refreshing={refreshing} height={height} />,
+    light: <Usage usage={usage} p={LIGHT} now={now} refreshing={refreshing} />,
+    dark: <Usage usage={usage} p={DARK} now={now} refreshing={refreshing} />,
   };
 }

@@ -8,8 +8,8 @@ import {
   type ModelOption,
 } from '@pocket-agent/protocol';
 import { ArrowUp, CircleStop, Hand, Lock, Plus, Power, Square } from 'lucide-react-native';
-import { useEffect, useRef, useState, type ComponentRef } from 'react';
-import { Pressable, TextInput, View } from 'react-native';
+import { useEffect, useEffectEvent, useRef, useState, type ComponentRef } from 'react';
+import { findNodeHandle, Pressable, TextInput, View } from 'react-native';
 import Animated, {
   cancelAnimation,
   interpolateColor,
@@ -35,6 +35,7 @@ import { dur, ease, enter, exit, layout } from '@/lib/motion';
 import { alpha, fonts, radius, useTheme } from '@/lib/theme';
 import { useStored } from '@/lib/storage';
 import { Button, IconButton, Press, T, buzz, thud } from '@/ui/core';
+import { enableImagePaste, type PastedImage } from '../../../modules/image-paste';
 import { Notice } from '@/ui/feedback';
 import { Sheet } from '@/ui/sheet';
 
@@ -268,6 +269,15 @@ export function Composer({
         ? (resumeBlocker(session, device) ?? 'This session has ended.')
         : (capabilityRows(session).find((r) => r.label === 'Send instructions')?.detail ??
           'Messages can’t be sent to this session.');
+  // Images from the keyboard (Gboard's clipboard, stickers) join the message like picked files,
+  // wherever files can be attached.
+  const canAttach = !locked && !resuming;
+  const onPasted = useEffectEvent((files: PastedImage[]) => addFiles(files));
+  useEffect(() => {
+    const tag = canAttach && box.current ? findNodeHandle(box.current) : null;
+    if (tag == null) return;
+    return enableImagePaste(tag, onPasted);
+  }, [canAttach]);
   const showStop = !session.endedAt && isBusy(session);
   const canInterrupt = showStop && session.capabilities.interrupt;
   const models = device?.models ?? [];

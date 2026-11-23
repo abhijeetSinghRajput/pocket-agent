@@ -21,19 +21,37 @@ export const Policy = z.object({
    * them (kept 30 days). Off by default: they are the user's files, leaving the PC.
    */
   shareAttachments: z.boolean().default(false),
-  /** Permission requests may be decided in Pocket Agent. Off by default. */
-  remoteApproval: z.boolean().default(false),
+  /**
+   * Permission requests may be decided in Pocket Agent. On by default (the app is for deciding
+   * when away from the PC); `pocket-agent approvals disable` turns it off, and that choice is kept.
+   */
+  remoteApproval: z.boolean().default(true),
 });
 export type Policy = z.infer<typeof Policy>;
+
+/** Nothing allowed: what an unreadable policy file means. */
+const RESTRICTIVE: Policy = {
+  projects: [],
+  observedInstructions: false,
+  wakeIdle: false,
+  shareAttachments: false,
+  remoteApproval: false,
+};
 
 const file = (home: string) => path.join(home, 'policy.json');
 
 export async function loadPolicy(home: string): Promise<Policy> {
   const raw = await readFile(file(home), 'utf8').catch(() => null);
   if (!raw) return Policy.parse({});
-  const parsed = Policy.safeParse(JSON.parse(raw));
-  // A corrupt policy must not silently grant anything: fall back to the restrictive default.
-  return parsed.success ? parsed.data : Policy.parse({});
+  let json: unknown;
+  try {
+    json = JSON.parse(raw);
+  } catch {
+    json = null;
+  }
+  const parsed = Policy.safeParse(json);
+  // A corrupt policy must not silently grant anything: fall back to everything off.
+  return parsed.success ? parsed.data : RESTRICTIVE;
 }
 
 export async function savePolicy(home: string, policy: Policy): Promise<void> {

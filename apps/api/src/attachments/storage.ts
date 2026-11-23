@@ -26,7 +26,8 @@ const FORMAT: Record<string, string> = {
   'application/pdf': 'pdf',
 };
 export const ALLOWED_FORMATS = ['png', 'jpg', 'jpeg', 'webp', 'gif', 'pdf'];
-const THUMB_MAX_BYTES = 60_000;
+/** A sharp phone-size preview (a single photo fills ~670 px on a 3x screen) still fits easily. */
+const THUMB_MAX_BYTES = 220_000;
 
 /**
  * Cloudinary, over its REST API (no SDK). Files are uploaded as `authenticated`: they can only be
@@ -82,7 +83,7 @@ export function cloudinaryStorage(url: string, now: () => number = Date.now): At
     },
 
     async thumbnail(publicId, mime) {
-      const transform = `${mime === 'application/pdf' ? 'pg_1/' : ''}c_limit,h_480,w_480/f_jpg,q_auto:low`;
+      const transform = `${mime === 'application/pdf' ? 'pg_1/' : ''}c_limit,h_960,w_960/f_jpg,q_auto:good`;
       const signature = createHash('sha1')
         .update(`${transform}/${publicId}${secret}`)
         .digest('base64url')

@@ -8,7 +8,8 @@ export function routeForLink(link: string | null | undefined): Href {
   if (!link) return '/';
   const chat = /^\/agents\/([^/?#]+)/.exec(link);
   if (chat) return { pathname: '/chat/[id]', params: { id: chat[1]! } };
-  if (link.startsWith('/approvals')) return '/approvals';
+  // Requests waiting for a decision are on the Agents tab (under "Needs you").
+  if (link.startsWith('/approvals')) return '/agents';
   if (link.startsWith('/notifications')) return '/alerts';
   if (link.startsWith('/devices')) return '/devices';
   if (link.startsWith('/profile') || link.startsWith('/settings')) return '/profile';

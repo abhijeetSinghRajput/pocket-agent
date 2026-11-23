@@ -1,5 +1,5 @@
 import { Tabs } from 'expo-router';
-import { Bell, MessageCircle, MonitorSmartphone, ShieldCheck, type LucideIcon } from 'lucide-react-native';
+import { Bell, Bot, MessageCircle, MonitorSmartphone, type LucideIcon } from 'lucide-react-native';
 import { useEffect, useState, type ComponentProps } from 'react';
 import { Pressable, View, type LayoutChangeEvent } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
@@ -15,7 +15,7 @@ type TabBarProps = Parameters<NonNullable<ComponentProps<typeof Tabs>['tabBar']>
 
 const TABS: Record<string, { label: string; icon?: LucideIcon }> = {
   index: { label: 'Chats', icon: MessageCircle },
-  approvals: { label: 'Approvals', icon: ShieldCheck },
+  agents: { label: 'Agents', icon: Bot },
   alerts: { label: 'Alerts', icon: Bell },
   devices: { label: 'Devices', icon: MonitorSmartphone },
   profile: { label: 'Profile' },
@@ -23,7 +23,7 @@ const TABS: Record<string, { label: string; icon?: LucideIcon }> = {
 
 /**
  * The bottom bar: four sections and your avatar. A soft pill slides (on a spring) to the section
- * you are in; counts sit on Approvals (waiting for you) and Alerts (unread).
+ * you are in; counts sit on Agents (requests waiting for you) and Alerts (unread).
  */
 export function TabBar({ state, emitter, navigateToTab }: TabBarProps) {
   const { c } = useTheme();
@@ -71,7 +71,7 @@ export function TabBar({ state, emitter, navigateToTab }: TabBarProps) {
         {state.routes.map((route, i) => {
           const tab = TABS[route.name] ?? { label: route.name };
           const focused = state.index === i;
-          const badge = route.name === 'approvals' ? waiting : route.name === 'alerts' ? unread : 0;
+          const badge = route.name === 'agents' ? waiting : route.name === 'alerts' ? unread : 0;
           return (
             <Pressable
               key={route.key}

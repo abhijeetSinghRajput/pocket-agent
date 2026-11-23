@@ -2,8 +2,8 @@ import { parseQuestions, timeAgo, toolTarget, type AskedQuestion } from '@pocket
 import type { ApprovalDto } from '@pocket-agent/protocol';
 import { useRouter } from 'expo-router';
 import { MessageCircleQuestion, ShieldAlert } from 'lucide-react-native';
-import { useState } from 'react';
-import { Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { useState, type ReactNode } from 'react';
+import { Pressable, ScrollView, StyleSheet, TextInput, useWindowDimensions, View } from 'react-native';
 import Animated, { interpolateColor, useAnimatedStyle, withTiming } from 'react-native-reanimated';
 import { dur, ease, layout } from '@/lib/motion';
 import { alpha, fonts, radius, useTheme } from '@/lib/theme';
@@ -211,8 +211,22 @@ function QuestionForm({
 }
 
 /** One pending permission request, with everything needed to decide on a phone. */
-export function ApprovalCard({ approval, onDecided }: { approval: ApprovalDto; onDecided: () => void }) {
+/**
+ * A pending request and its decision. On the Approvals tab it is a card; in the pop-up sheet
+ * (`inSheet`) the same parts sit flat on the sheet: no card inside the sheet, only the request's
+ * content scrolls, and the decision buttons always stay in view under it.
+ */
+export function ApprovalCard({
+  approval,
+  onDecided,
+  inSheet = false,
+}: {
+  approval: ApprovalDto;
+  onDecided: () => void;
+  inSheet?: boolean;
+}) {
   const { c } = useTheme();
+  const { height } = useWindowDimensions();
   const router = useRouter();
   const left = useCountdown(approval.expiresAt);
   const [busy, setBusy] = useState<Decision | null>(null);
@@ -259,7 +273,7 @@ export function ApprovalCard({ approval, onDecided }: { approval: ApprovalDto; o
 
   return (
     <View testID="approval-card">
-      <Card style={{ overflow: 'hidden' }}>
+      <Frame inSheet={inSheet}>
         <Animated.View
           layout={layout}
           style={[
@@ -267,12 +281,18 @@ export function ApprovalCard({ approval, onDecided }: { approval: ApprovalDto; o
               flexDirection: 'row',
               alignItems: 'flex-start',
               gap: 12,
-              paddingHorizontal: 16,
-              paddingVertical: 12,
-              borderBottomWidth: StyleSheet.hairlineWidth,
-              borderBottomColor: c.border,
             },
-            headerTint,
+            inSheet
+              ? { paddingTop: 4, paddingBottom: 14 }
+              : [
+                  {
+                    paddingHorizontal: 16,
+                    paddingVertical: 12,
+                    borderBottomWidth: StyleSheet.hairlineWidth,
+                    borderBottomColor: c.border,
+                  },
+                  headerTint,
+                ],
           ]}
         >
           <View
@@ -288,7 +308,11 @@ export function ApprovalCard({ approval, onDecided }: { approval: ApprovalDto; o
             <HeaderIcon size={18} color={accent} strokeWidth={2.1} />
           </View>
           <View style={{ flex: 1, minWidth: 0 }}>
-            <T variant="subheading" style={{ fontSize: 15, lineHeight: 20 }}>
+            <T
+              variant={inSheet ? 'heading' : 'subheading'}
+              accessibilityRole={inSheet ? 'header' : undefined}
+              style={inSheet ? undefined : { fontSize: 15, lineHeight: 20 }}
+            >
               {answering ? 'Claude is asking you' : `Claude wants to ${what.verb}`}
             </T>
             <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2, minWidth: 0 }}>
@@ -313,13 +337,24 @@ export function ApprovalCard({ approval, onDecided }: { approval: ApprovalDto; o
         </Animated.View>
 
         {answering ? (
-          <View style={{ paddingHorizontal: 16, paddingVertical: 12, gap: 8 }} testID="approval-questions">
-            <QuestionForm
-              questions={questions}
-              picks={picks}
-              onPick={(q, pick) => setPicks((prev) => ({ ...prev, [q]: pick }))}
-              disabled={!!busy || !!sent || expired}
-            />
+          <View
+            style={inSheet ? { gap: 8 } : { paddingHorizontal: 16, paddingVertical: 12, gap: 8 }}
+            testID="approval-questions"
+          >
+            {/* In the sheet only the options scroll; the answer buttons stay under them. */}
+            <ScrollView
+              scrollEnabled={inSheet}
+              style={inSheet ? { maxHeight: Math.round(height * 0.42) } : undefined}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+            >
+              <QuestionForm
+                questions={questions}
+                picks={picks}
+                onPick={(q, pick) => setPicks((prev) => ({ ...prev, [q]: pick }))}
+                disabled={!!busy || !!sent || expired}
+              />
+            </ScrollView>
             <T variant="caption" tone="muted">
               Your answer goes straight to Claude on your PC. Not answered in time: Claude carries on without
               it.
@@ -327,7 +362,7 @@ export function ApprovalCard({ approval, onDecided }: { approval: ApprovalDto; o
           </View>
         ) : (
           // Exactly what will run: the decision applies to this, unchanged.
-          <View style={{ paddingHorizontal: 16, paddingVertical: 12, gap: 6 }}>
+          <View style={inSheet ? { gap: 6 } : { paddingHorizontal: 16, paddingVertical: 12, gap: 6 }}>
             <T
               variant="overline"
               tone="muted"
@@ -352,7 +387,12 @@ export function ApprovalCard({ approval, onDecided }: { approval: ApprovalDto; o
                 </T>
               </View>
             ) : (
-              <CodeBlock text={shown} shell={what.shell} maxHeight={224} />
+              <CodeBlock
+                text={shown}
+                shell={what.shell}
+                // In the sheet the command scrolls inside its block, so Deny / Allow stay in view.
+                maxHeight={inSheet ? Math.round(height * 0.3) : 224}
+              />
             )}
             <T variant="caption" tone="muted">
               {timeoutText(approval.sessionMode)}
@@ -362,14 +402,18 @@ export function ApprovalCard({ approval, onDecided }: { approval: ApprovalDto; o
 
         <Animated.View
           layout={layout}
-          style={{
-            borderTopWidth: StyleSheet.hairlineWidth,
-            borderTopColor: c.border,
-            backgroundColor: alpha(c.muted, 0.3),
-            paddingHorizontal: 16,
-            paddingVertical: 12,
-            gap: 8,
-          }}
+          style={
+            inSheet
+              ? { paddingTop: 14, gap: 8 }
+              : {
+                  borderTopWidth: StyleSheet.hairlineWidth,
+                  borderTopColor: c.border,
+                  backgroundColor: alpha(c.muted, 0.3),
+                  paddingHorizontal: 16,
+                  paddingVertical: 12,
+                  gap: 8,
+                }
+          }
         >
           {sent ? (
             <SentNote text={sentText(sent, answering)} />
@@ -389,7 +433,12 @@ export function ApprovalCard({ approval, onDecided }: { approval: ApprovalDto; o
           )}
           {error && <Notice>{error}</Notice>}
         </Animated.View>
-      </Card>
+      </Frame>
     </View>
   );
+}
+
+/** A card on the Approvals tab; nothing extra inside the pop-up sheet, which is already a surface. */
+function Frame({ inSheet, children }: { inSheet: boolean; children: ReactNode }) {
+  return inSheet ? <View>{children}</View> : <Card style={{ overflow: 'hidden' }}>{children}</Card>;
 }

@@ -49,13 +49,16 @@ import {
   type TextStyle,
 } from 'react-native';
 import Animated, {
+  cancelAnimation,
   Easing,
   FadeInUp,
   interpolateColor,
   useAnimatedStyle,
   useReducedMotion,
   useSharedValue,
+  withDelay,
   withRepeat,
+  withSequence,
   withTiming,
   type SharedValue,
 } from 'react-native-reanimated';
@@ -866,7 +869,44 @@ function ShimmerLetter({
 }
 
 /** A word with a soft highlight sweeping through it (the web's .shimmer-text). */
-function ShimmerText({ text }: { text: string }) {
+/**
+ * A terminal's block cursor: a solid rounded rectangle in the accent. Solid while typing; resting,
+ * it blinks softly (still when motion is reduced).
+ */
+function BlockCursor({ blink }: { blink: boolean }) {
+  const { c } = useTheme();
+  const reduce = useReducedMotion();
+  const on = useSharedValue(1);
+  useEffect(() => {
+    if (!blink || reduce) {
+      cancelAnimation(on);
+      on.set(1);
+      return;
+    }
+    on.set(
+      withRepeat(
+        withSequence(
+          withDelay(450, withTiming(0.15, { duration: 160, easing: Easing.out(Easing.quad) })),
+          withDelay(300, withTiming(1, { duration: 160, easing: Easing.out(Easing.quad) })),
+        ),
+        -1,
+      ),
+    );
+    return () => cancelAnimation(on);
+  }, [blink, reduce, on]);
+  const style = useAnimatedStyle(() => ({ opacity: on.value }));
+  return (
+    <Animated.View
+      style={[
+        { width: 7.5, height: 15, borderRadius: 1.5, marginHorizontal: 1, backgroundColor: c.primary },
+        style,
+      ]}
+    />
+  );
+}
+
+/** Shimmering letters, with the block cursor at `cursor` (a letter index; the end when null). */
+function ShimmerText({ text, cursor }: { text: string; cursor: number | null }) {
   const { c } = useTheme();
   const reduce = useReducedMotion();
   const progress = useSharedValue(0);
@@ -876,19 +916,23 @@ function ShimmerText({ text }: { text: string }) {
   }, [reduce, progress]);
   const light = lighten(c.primary, 0.65);
   const letters = [...text];
+  const at = cursor === null ? letters.length : Math.min(cursor, letters.length);
+  const letter = (ch: string, i: number) => (
+    <ShimmerLetter
+      key={i}
+      char={ch}
+      index={i}
+      count={letters.length}
+      progress={progress}
+      base={c.primary}
+      light={light}
+    />
+  );
   return (
-    <View aria-hidden style={{ flexDirection: 'row' }}>
-      {letters.map((ch, i) => (
-        <ShimmerLetter
-          key={i}
-          char={ch}
-          index={i}
-          count={letters.length}
-          progress={progress}
-          base={c.primary}
-          light={light}
-        />
-      ))}
+    <View aria-hidden style={{ flexDirection: 'row', alignItems: 'center' }}>
+      {letters.slice(0, at).map((ch, i) => letter(ch, i))}
+      <BlockCursor blink={cursor === null} />
+      {letters.slice(at).map((ch, i) => letter(ch, at + i))}
     </View>
   );
 }
@@ -905,6 +949,8 @@ export function TypingIndicator({ kind, since }: { kind: 'working' | 'starting';
   const [shown, setShown] = useState(() => VERBS[Math.floor(Math.random() * VERBS.length)]!);
   /** The verb being shown or typed towards. */
   const current = useRef(shown);
+  /** Where the cursor is while a word is being typed; null when it rests at the end. */
+  const [cursor, setCursor] = useState<number | null>(null);
 
   useEffect(() => {
     const clock = setInterval(() => setNow(Date.now()), 1000);
@@ -921,7 +967,10 @@ export function TypingIndicator({ kind, since }: { kind: 'working' | 'starting';
       clearInterval(typing);
       typing = setInterval(() => {
         i += 1;
-        setShown(typeOver(from, to, i));
+        const next = typeOver(from, to, i);
+        setShown(next);
+        // Over the old letters it stands where it types; deleting the rest, at the end.
+        setCursor(i >= steps ? null : i <= to.length ? i : next.length);
         if (i >= steps) clearInterval(typing);
       }, TYPE_STEP_MS);
     }, 3500);
@@ -941,7 +990,7 @@ export function TypingIndicator({ kind, since }: { kind: 'working' | 'starting';
       style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 4 }}
     >
       <ClaudeSpinner />
-      <ShimmerText text={`${word}…`} />
+      <ShimmerText text={word} cursor={kind === 'starting' ? null : cursor} />
       <T variant="caption" tone="muted" style={{ fontVariant: ['tabular-nums'] }}>
         ({elapsed(now - start)})
       </T>

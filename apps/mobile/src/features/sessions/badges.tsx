@@ -1,7 +1,17 @@
 import type { AgentSessionDto, AgentStatus, ProviderId } from '@pocket-agent/protocol';
 import { Bot, Code, EyeOff, SquareTerminal } from 'lucide-react-native';
+import { useEffect } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { Path, Svg } from 'react-native-svg';
+import Animated, {
+  cancelAnimation,
+  Easing,
+  useAnimatedStyle,
+  useReducedMotion,
+  useSharedValue,
+  withRepeat,
+  withTiming,
+} from 'react-native-reanimated';
+import { Circle, Path, Svg } from 'react-native-svg';
 import { alpha, radius, useTheme, type Colors } from '@/lib/theme';
 import { Dot, T, type Tone } from '@/ui/core';
 import { Roll } from '@/ui/feedback';
@@ -81,7 +91,47 @@ const AVATAR = {
   lg: { box: 64, logo: 32, dot: 14 },
 };
 
-/** Round chat avatar: the agent's own logo, with a presence dot for the live status. */
+/** A small ring turning in place: Claude is working. Still (a full ring) when motion is reduced. */
+function PresenceSpinner({ color, size }: { color: string; size: number }) {
+  const reduce = useReducedMotion();
+  const turn = useSharedValue(0);
+  useEffect(() => {
+    if (reduce) return;
+    turn.set(withRepeat(withTiming(1, { duration: 900, easing: Easing.linear }), -1));
+    return () => cancelAnimation(turn);
+  }, [reduce, turn]);
+  const spin = useAnimatedStyle(() => ({ transform: [{ rotate: `${turn.value * 360}deg` }] }));
+  const stroke = 2;
+  const r = (size - stroke) / 2;
+  const length = 2 * Math.PI * r;
+  return (
+    <Animated.View style={[{ width: size, height: size }, spin]}>
+      <Svg width={size} height={size}>
+        <Circle
+          cx={size / 2}
+          cy={size / 2}
+          r={r}
+          stroke={alpha(color, 0.25)}
+          strokeWidth={stroke}
+          fill="none"
+        />
+        <Circle
+          cx={size / 2}
+          cy={size / 2}
+          r={r}
+          stroke={color}
+          strokeWidth={stroke}
+          strokeLinecap="round"
+          fill="none"
+          // A third of the ring, so the turning reads at this size.
+          strokeDasharray={reduce ? undefined : [length / 3, length]}
+        />
+      </Svg>
+    </Animated.View>
+  );
+}
+
+/** Round chat avatar: the agent's own logo, with a presence mark for the live status. */
 export function SessionAvatar({
   session,
   size = 'md',
@@ -93,6 +143,7 @@ export function SessionAvatar({
   const s = STATUS[session.status];
   const logo = AGENT_LOGOS[session.provider];
   const d = AVATAR[size];
+  const working = session.status === 'Running' || session.status === 'Starting';
   return (
     <View
       accessibilityElementsHidden
@@ -107,27 +158,31 @@ export function SessionAvatar({
       }}
     >
       <AgentLogo provider={session.provider} size={d.logo} />
-      {/* The presence dot sits in a ring of the card colour, as on the web. */}
+      {/* The presence mark sits in a ring of the card colour; while Claude works it spins. */}
       <View
         style={{
           position: 'absolute',
-          right: 0,
-          bottom: 0,
-          width: d.dot,
-          height: d.dot,
-          borderRadius: d.dot / 2,
+          right: working ? -1 : 0,
+          bottom: working ? -1 : 0,
+          width: working ? d.dot + 2 : d.dot,
+          height: working ? d.dot + 2 : d.dot,
+          borderRadius: (working ? d.dot + 2 : d.dot) / 2,
           backgroundColor: c.card,
           alignItems: 'center',
           justifyContent: 'center',
         }}
       >
-        <Dot color={dotColor(c, s.variant)} size={d.dot - 4} pulse={s.pulse} />
+        {working ? (
+          <PresenceSpinner color={dotColor(c, s.variant)} size={d.dot - 2} />
+        ) : (
+          <Dot color={dotColor(c, s.variant)} size={d.dot - 4} pulse={s.pulse} />
+        )}
       </View>
     </View>
   );
 }
 
-/** The session's status as a pill; the word rolls when it changes and breathes while Claude works. */
+/** The session's status as a coloured pill (no dot: the avatar shows presence); the word rolls when it changes. */
 export function SessionStatusBadge({ status }: { status: AgentStatus }) {
   const { c } = useTheme();
   const s = STATUS[status];
@@ -140,7 +195,6 @@ export function SessionStatusBadge({ status }: { status: AgentStatus }) {
       style={{
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 6,
         paddingHorizontal: 9,
         height: 24,
         borderRadius: radius.full,
@@ -148,7 +202,6 @@ export function SessionStatusBadge({ status }: { status: AgentStatus }) {
         alignSelf: 'flex-start',
       }}
     >
-      <Dot color={color} size={6} pulse={s.pulse} />
       <Roll text={s.label} variant="captionMedium" color={text} />
     </View>
   );

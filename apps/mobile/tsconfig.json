@@ -11,5 +11,12 @@
       "zod": ["./node_modules/zod"]
     }
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx", "app.config.ts", ".expo/types/**/*.ts", "expo-env.d.ts"]
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "modules/**/*.ts",
+    "app.config.ts",
+    ".expo/types/**/*.ts",
+    "expo-env.d.ts"
+  ]
 }

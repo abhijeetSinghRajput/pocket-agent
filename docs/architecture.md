@@ -72,8 +72,9 @@ Agent tray). Otherwise the hook returns immediately with no decision, and the lo
    capability set. The UI renders controls only for capabilities the session has, and explains why the
    others are missing. It never implies that observed sessions can be interrupted or prompted on demand.
 3. **Remote approval is opt-in and never weakens local settings.**
-   - Remote approval is **off by default** for each device. The user turns it on explicitly; for observed
-     sessions, Away mode must also be on.
+   - Remote approval and Away mode are **on by default**: the app exists for deciding while away from the
+     PC. The PC owner can turn remote approval off (`pocket-agent approvals disable`, kept in the PC's
+     policy and enforced there) and Away mode off in the app; for observed sessions both must be on.
    - Pocket Agent never changes allow/deny rules or any other Claude Code permission setting, and never
      returns `updatedPermissions` or `updatedInput` (one exception below). The hook installer adds only
      Pocket Agent hook entries.
@@ -217,8 +218,8 @@ hook it reads the lines appended since the last one and reports each main-thread
 
 ### M5 implementation notes (as built)
 
-- **Two switches, both needed.** `pocket-agent approvals enable` on the PC (off by default, enforced there) allows remote
-  decisions at all. **Away mode**, set from the dashboard, applies only to sessions the user started. Without it Claude
+- **Two switches, both needed, both on by default.** `pocket-agent approvals` on the PC (enforced there; `disable` turns
+  it off) allows remote decisions at all. **Away mode**, set from the dashboard, applies only to sessions the user started. Without it Claude
   Code asks on the PC as usual. Managed sessions use remote approval whenever the PC allows it, because no person is at their prompt.
 - **Lifecycle.** The decision is stored once (compare-and-set), sent to the PC, and becomes `Approved`/`Denied` only on the PC's
   `applied` ack. A late decision becomes `Cancelled`. Every decision and application is in `AuditLog`.

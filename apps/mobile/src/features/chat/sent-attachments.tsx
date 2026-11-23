@@ -60,11 +60,25 @@ const ON_BUBBLE_DEEP = 'rgba(0, 0, 0, 0.2)';
 /** One sent photo or PDF: its preview; tapping opens the original (while it still exists). */
 function SentFile({ file, single, fg }: { file: AttachmentRef; single: boolean; fg: string }) {
   const [broken, setBroken] = useState(false);
+  // A photo shown large swaps its preview for the original once that arrives, so it is sharp;
+  // the preview shows meanwhile (and stays if the original is gone).
+  const [sharp, setSharp] = useState<string | null>(null);
   const [opening, setOpening] = useState(false);
   const [viewing, setViewing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const pdf = isPdf(file);
   const image = isPreviewable(file.mime) && !pdf;
+
+  useEffect(() => {
+    if (!image || !single) return;
+    let live = true;
+    attachmentLink(file.id)
+      .then((url) => live && setSharp(url))
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [image, single, file.id]);
 
   async function open() {
     tap();
@@ -169,7 +183,9 @@ function SentFile({ file, single, fg }: { file: AttachmentRef; single: boolean; 
           </View>
         ) : (
           <Image
-            source={thumbSource(file.id)}
+            source={sharp ? { uri: sharp } : thumbSource(file.id)}
+            placeholder={sharp ? thumbSource(file.id) : undefined}
+            placeholderContentFit="cover"
             recyclingKey={file.id}
             contentFit="cover"
             transition={{ duration: dur.enter, effect: 'cross-dissolve' }}

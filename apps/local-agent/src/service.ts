@@ -66,8 +66,8 @@ export class AgentService {
     shareAttachments: false,
     remoteApproval: false,
   };
-  /** Set from the dashboard (config.update). Only matters for sessions the user started. */
-  private awayMode = false;
+  /** Set from the dashboard (config.update), on by default. Only matters for sessions the user started. */
+  private awayMode = true;
   /** Models Claude Code offers on this PC (read once after start). */
   private models: ModelOption[] = [];
   readonly approvals = new ApprovalBroker();

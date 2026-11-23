@@ -137,7 +137,7 @@ model Device {
   pendingSecretHash String?    @unique
   /// Remote approval is opt-in per device (architecture: Approved constraints #3).
   remoteApprovalEnabled Boolean @default(false)
-  awayMode        Boolean      @default(false)
+  awayMode        Boolean      @default(true)
   /// Reported by the PC (device.settings), which also enforces them. Display-only on the server.
   projects        Json         @default("[]")
   /// Models the PC's Claude Code offers ([{id,name,description}]), as reported by the PC.

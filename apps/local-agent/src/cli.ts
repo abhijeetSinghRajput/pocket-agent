@@ -1006,7 +1006,7 @@ export function buildCli(): Command {
 
   const approvals = program
     .command('approvals')
-    .description('Answer Claude Code permission requests from the dashboard (off by default)');
+    .description('Answer Claude Code permission requests from the dashboard (on by default)');
   const setApprovals = async (on: boolean) => {
     const home = agentHome();
     await savePolicy(home, { ...(await loadPolicy(home)), remoteApproval: on });
@@ -1037,7 +1037,7 @@ export function buildCli(): Command {
   approvals.command('disable').action(() => setApprovals(false));
   approvals.command('status').action(async () => {
     const { remoteApproval } = await loadPolicy(agentHome());
-    console.log(remoteApproval ? 'Enabled' : 'Disabled (default)');
+    console.log(remoteApproval ? 'Enabled (default)' : 'Disabled');
   });
 
   // ── Claude Code integration ────────────────────────────────────────────────

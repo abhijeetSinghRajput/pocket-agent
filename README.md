@@ -82,7 +82,7 @@ pnpm pocket-agent instructions wake enable          # optional: run them at once
 To answer Claude Code's permission requests from your phone:
 
 ```bash
-pnpm pocket-agent approvals enable    # off by default; `approvals disable` turns it off again
+pnpm pocket-agent approvals disable   # on by default; `approvals enable` turns it back on
 pnpm pocket-agent hooks install       # re-run after upgrading, so the permission hook gets its longer timeout
 ```
 

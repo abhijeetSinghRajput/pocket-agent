@@ -1,7 +1,7 @@
 import { usePathname, useRouter } from 'expo-router';
 import { MessageSquare } from 'lucide-react-native';
 import { useState } from 'react';
-import { ScrollView, useWindowDimensions, View } from 'react-native';
+import { View } from 'react-native';
 import { useApprovals } from '@/lib/data';
 import { Button } from '@/ui/core';
 import { Sheet } from '@/ui/sheet';
@@ -14,19 +14,18 @@ function openChatId(pathname: string): string | null {
 
 /**
  * A permission request pops up wherever you are. Inside that session's chat it is asked inline
- * instead, and on the Approvals tab it is already listed — so no sheet there.
- * "Later" only hides it here; it stays pending in Approvals until decided or expired.
+ * instead, and on the Agents tab it is already listed (under "Needs you") — so no sheet there.
+ * "Later" only hides it here; it stays pending on the Agents tab until decided or expired.
  */
 export function ApprovalPrompt() {
   const pathname = usePathname();
   const router = useRouter();
-  const { height } = useWindowDimensions();
   const { state, refresh } = useApprovals('pending');
   const [dismissed, setDismissed] = useState<ReadonlySet<string>>(new Set());
   const chatId = openChatId(pathname);
-  const onApprovalsPage = pathname === '/approvals';
+  const onAgentsTab = pathname === '/agents';
 
-  const next = onApprovalsPage
+  const next = onAgentsTab
     ? undefined
     : (state.data ?? []).find((a) => !dismissed.has(a.id) && a.sessionId !== chatId);
   const dismiss = (id: string) => setDismissed((d) => new Set(d).add(id));
@@ -34,37 +33,41 @@ export function ApprovalPrompt() {
   const [shown, setShown] = useState(next);
   if (next && next !== shown) setShown(next);
 
-  const asking = shown?.toolName === 'AskUserQuestion';
   return (
-    <Sheet
-      open={!!next}
-      onClose={() => next && dismiss(next.id)}
-      title={asking ? 'Claude is asking you' : 'Permission needed'}
-      description={asking ? 'Answer it here or in the chat.' : 'Claude is waiting for your decision.'}
-    >
+    // No sheet title: the request's own header ("Claude wants to run a command") is the title.
+    <Sheet open={!!next} onClose={() => next && dismiss(next.id)}>
       {shown && (
-        <View style={{ gap: 12 }} testID="approval-prompt">
-          <ScrollView
-            style={{ maxHeight: height * 0.55 }}
-            showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"
-            contentContainerStyle={{ paddingBottom: 2 }}
+        <View testID="approval-prompt">
+          <ApprovalCard
+            key={shown.id}
+            approval={shown}
+            inSheet
+            onDecided={() => {
+              dismiss(shown.id);
+              void refresh();
+            }}
+          />
+          {/* The decision is the main thing; putting it off or going to the chat is quieter. */}
+          <View
+            style={{
+              flexDirection: 'row',
+              justifyContent: 'space-between',
+              marginTop: 8,
+              marginHorizontal: -8,
+            }}
           >
-            <ApprovalCard
-              key={shown.id}
-              approval={shown}
-              onDecided={() => {
-                dismiss(shown.id);
-                void refresh();
-              }}
+            <Button
+              label="Later"
+              variant="ghost"
+              size="sm"
+              onPress={() => dismiss(shown.id)}
+              testID="later"
             />
-          </ScrollView>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 8 }}>
-            <Button label="Later" variant="outline" onPress={() => dismiss(shown.id)} testID="later" />
             <Button
               label="Open chat"
               icon={MessageSquare}
-              variant="outline"
+              variant="ghost"
+              size="sm"
               onPress={() => {
                 dismiss(shown.id);
                 router.push({ pathname: '/chat/[id]', params: { id: shown.sessionId } });

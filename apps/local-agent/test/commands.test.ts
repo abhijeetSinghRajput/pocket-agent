@@ -77,18 +77,23 @@ function harness(policy: Partial<Policy> = {}) {
 }
 
 describe('PC policy', () => {
-  it('defaults to nothing allowed and survives a corrupt file', async () => {
+  it('defaults to phone approvals only, and a corrupt file allows nothing', async () => {
     const home = mkdtempSync(path.join(os.tmpdir(), 'pocket-agent-policy-'));
     expect(await loadPolicy(home)).toEqual({
       projects: [],
       observedInstructions: false,
       wakeIdle: false,
       shareAttachments: false,
-      remoteApproval: false,
+      remoteApproval: true,
     });
     const { writeFile } = await import('node:fs/promises');
     await writeFile(path.join(home, 'policy.json'), '{"observedInstructions": "yes please"}');
-    expect((await loadPolicy(home)).observedInstructions).toBe(false);
+    expect(await loadPolicy(home)).toMatchObject({ observedInstructions: false, remoteApproval: false });
+    await writeFile(path.join(home, 'policy.json'), '{ not json');
+    expect((await loadPolicy(home)).remoteApproval).toBe(false);
+    // Turned off by the PC owner: stays off.
+    await writeFile(path.join(home, 'policy.json'), '{"remoteApproval": false}');
+    expect((await loadPolicy(home)).remoteApproval).toBe(false);
     await savePolicy(home, {
       projects: [{ name: 'api', path: 'C:\\Work\\API' }],
       observedInstructions: true,

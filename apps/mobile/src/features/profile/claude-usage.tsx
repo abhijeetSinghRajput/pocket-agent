@@ -21,6 +21,18 @@ export function resetLabel(iso: string | null, now = new Date()): string | null 
   return `Resets ${day} at ${time}`;
 }
 
+/** "Max 5x plan · Claude login on this PC valid until Dec 20, 2026". */
+export function planLine(plan: string | null, loginExpiresAt: string | null): string {
+  const d = loginExpiresAt ? new Date(loginExpiresAt) : null;
+  const until =
+    d && !Number.isNaN(d.getTime())
+      ? d.getTime() <= Date.now()
+        ? 'PC sign-in to Claude has expired'
+        : `PC sign-in to Claude valid until ${d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}`
+      : null;
+  return [plan ? `${plan} plan` : null, until].filter(Boolean).join(' · ');
+}
+
 function Meter({ label, percent, resetsAt }: { label: string; percent: number; resetsAt: string | null }) {
   const { c } = useTheme();
   const value = Math.round(Math.max(0, Math.min(100, percent)));
@@ -157,6 +169,11 @@ export function ClaudeUsageCard() {
                   <T variant="caption" tone="muted" style={{ marginTop: 12 }}>
                     {reporting.length === 1 && `${d.name} · `}Updated {timeAgo(d.usage!.updatedAt)}
                   </T>
+                  {(d.usage!.plan || d.usage!.loginExpiresAt) && (
+                    <T variant="caption" tone="muted" style={{ marginTop: 2 }} testID="usage-plan">
+                      {planLine(d.usage!.plan ?? null, d.usage!.loginExpiresAt ?? null)}
+                    </T>
+                  )}
                 </Animated.View>
               ))}
             </View>

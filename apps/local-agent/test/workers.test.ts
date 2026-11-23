@@ -67,3 +67,12 @@ describe('background workers on the PC', () => {
     expect(workerStatus('killed')).toBe('stopped');
   });
 });
+
+describe('Claude plan name', () => {
+  it('reads the plan and its tier the way Claude shows them', async () => {
+    const { planName } = await import('../src/providers/claude-code/usage.js');
+    expect(planName('max', 'default_claude_max_5x')).toBe('Max 5x');
+    expect(planName('pro', 'default_claude_ai')).toBe('Pro');
+    expect(planName(undefined, 'x')).toBeNull();
+  });
+});

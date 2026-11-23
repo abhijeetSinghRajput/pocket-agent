@@ -167,6 +167,13 @@ export const ClaudeUsage = z.object({
   weekly: UsageWindow.nullable(),
   /** 7-day limits of single models. */
   models: z.array(UsageWindow.extend({ name: z.string().min(1).max(60) })).max(8),
+  /** The Claude plan, e.g. "Max 5x" (PC agents from 0.1.5). */
+  plan: z.string().min(1).max(40).nullable().optional(),
+  /**
+   * When the PC's Claude sign-in ends for good (it then has to sign in again). Claude Code doesn't
+   * share the subscription's renewal date, so this is the closest date there is.
+   */
+  loginExpiresAt: z.iso.datetime({ offset: true }).nullable().optional(),
   updatedAt: z.iso.datetime({ offset: true }),
 });
 export type ClaudeUsage = z.infer<typeof ClaudeUsage>;

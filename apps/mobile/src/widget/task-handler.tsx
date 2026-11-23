@@ -9,17 +9,18 @@ import { REFRESH_ACTION, usageWidget } from '@/widget/usage-widget';
  */
 export async function widgetTaskHandler(props: WidgetTaskHandlerProps): Promise<void> {
   if (props.widgetInfo.widgetName !== USAGE_WIDGET) return;
+  const { height } = props.widgetInfo;
   switch (props.widgetAction) {
     case 'WIDGET_ADDED':
     case 'WIDGET_UPDATE':
     case 'WIDGET_RESIZED':
-      props.renderWidget(usageWidget(await freshWidgetUsage()));
+      props.renderWidget(usageWidget(await freshWidgetUsage(), { height }));
       break;
     case 'WIDGET_CLICK':
       if (props.clickAction !== REFRESH_ACTION) break;
       // At once: the last numbers, marked as updating; then the fresh ones.
-      props.renderWidget(usageWidget(await cachedWidgetUsage(), Date.now(), true));
-      props.renderWidget(usageWidget(await freshWidgetUsage()));
+      props.renderWidget(usageWidget(await cachedWidgetUsage(), { height, refreshing: true }));
+      props.renderWidget(usageWidget(await freshWidgetUsage(), { height }));
       break;
     default:
       break;

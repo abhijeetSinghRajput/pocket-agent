@@ -3,12 +3,14 @@
 'use no memo';
 
 import { FlexWidget, SvgWidget, TextWidget, type ColorProp } from 'react-native-android-widget';
-import type { WidgetUsage } from '@/widget/data';
+import type { UsageMeter, WidgetUsage } from '@/widget/data';
 
 /**
- * The home-screen widget: Claude plan usage of your PC (the 5-hour session and the 7-day limit),
- * the same numbers as the Profile screen. Drawn by Android from this description: no hooks, no
- * animation, only the widget primitives.
+ * The home-screen widget: Claude plan usage of your PC, the same meters as the Profile screen
+ * (the 5-hour session, the week, and model limits such as Fable), each with when it resets.
+ * Drawn by Android from this description: no hooks, no animation, only the widget primitives.
+ * Its content sits at the top at any height; when the widget is short the reset times fold into
+ * one line at the foot.
  */
 
 interface Palette {
@@ -42,19 +44,38 @@ const DARK: Palette = {
 /** The click action of the refresh button (handled in task-handler). */
 export const REFRESH_ACTION = 'REFRESH';
 
-/** Lucide's rotate-cw, drawn in `color`. */
+/** Lucide's rotate-cw in `color`, with room around it so the arrow head is never clipped. */
 const refreshSvg = (color: string) =>
-  `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>`;
+  `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="-2 -2 28 28" fill="none" stroke="${color}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>`;
 
 const SEMIBOLD = 'Geist_600SemiBold';
 const MEDIUM = 'Geist_500Medium';
 const REGULAR = 'Geist_400Regular';
 
-function Meter({ label, percent, p }: { label: string; percent: number; p: Palette }) {
-  const value = Math.round(Math.max(0, Math.min(100, percent)));
+/** Heights (dp) a full meter needs; below what all of them need, the reset lines fold away. */
+const CHROME = 32 + 24 + 22; // padding, header, footer
+const METER = 42;
+const RESET_LINE = 16;
+
+function time(d: Date) {
+  return d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+}
+
+/** "Resets at 11:09 PM" today, "Resets Fri, Nov 27 at 1:29 AM" otherwise (as on Profile). */
+function resetText(iso: string | null, now: number): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime()) || d.getTime() <= now) return null;
+  if (d.toDateString() === new Date(now).toDateString()) return `Resets at ${time(d)}`;
+  const day = d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+  return `Resets ${day} at ${time(d)}`;
+}
+
+function Meter({ m, p, reset }: { m: UsageMeter; p: Palette; reset: string | null }) {
+  const value = Math.round(Math.max(0, Math.min(100, m.percent)));
   const color = value >= 90 ? p.danger : value >= 75 ? p.warning : p.primary;
   return (
-    <FlexWidget style={{ width: 'match_parent', flexDirection: 'column' }}>
+    <FlexWidget style={{ width: 'match_parent', flexDirection: 'column', marginTop: 10 }}>
       <FlexWidget
         style={{
           width: 'match_parent',
@@ -63,66 +84,72 @@ function Meter({ label, percent, p }: { label: string; percent: number; p: Palet
           alignItems: 'center',
         }}
       >
-        <TextWidget text={label} style={{ fontSize: 13, fontFamily: MEDIUM, color: p.fg }} maxLines={1} />
-        <TextWidget text={`${value}%`} style={{ fontSize: 15, fontFamily: SEMIBOLD, color: p.fg }} />
+        <TextWidget text={m.label} style={{ fontSize: 13, fontFamily: MEDIUM, color: p.fg }} maxLines={1} />
+        <TextWidget text={`${value}%`} style={{ fontSize: 14, fontFamily: SEMIBOLD, color: p.fg }} />
       </FlexWidget>
       <FlexWidget
         style={{
           width: 'match_parent',
-          height: 7,
+          height: 6,
           marginTop: 5,
-          borderRadius: 4,
+          borderRadius: 3,
           backgroundColor: p.track,
           flexDirection: 'row',
           overflow: 'hidden',
         }}
       >
         {value > 0 && (
-          <FlexWidget style={{ flex: value, height: 7, borderRadius: 4, backgroundColor: color }} />
+          <FlexWidget style={{ flex: value, height: 6, borderRadius: 3, backgroundColor: color }} />
         )}
-        {value < 100 && <FlexWidget style={{ flex: 100 - value, height: 7 }} />}
+        {value < 100 && <FlexWidget style={{ flex: 100 - value, height: 6 }} />}
       </FlexWidget>
+      {reset && (
+        <TextWidget
+          text={reset}
+          style={{ fontSize: 11, fontFamily: REGULAR, color: p.muted, marginTop: 3 }}
+          maxLines={1}
+          truncate="END"
+        />
+      )}
     </FlexWidget>
   );
 }
 
-/** "3:40 PM" today, otherwise "Fri 3:40 PM". */
-function resetText(iso: string | null, now: number): string | null {
-  if (!iso) return null;
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime()) || d.getTime() <= now) return null;
-  const time = d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
-  if (d.toDateString() === new Date(now).toDateString()) return `Session resets at ${time}`;
-  return `Session resets ${d.toLocaleDateString(undefined, { weekday: 'short' })} ${time}`;
-}
-
-/** The header: the widget's name, and the refresh button (a generous tap target). */
-function Header({ p, refreshing }: { p: Palette; refreshing: boolean }) {
+/** The header: the widget's name, and the refresh button (a generous tap target, fully inside). */
+function Header({ p, refreshing, plan }: { p: Palette; refreshing: boolean; plan?: string | null }) {
   return (
     <FlexWidget
       style={{
         width: 'match_parent',
+        height: 24,
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
       }}
     >
-      <TextWidget text="Claude usage" style={{ fontSize: 13, fontFamily: SEMIBOLD, color: p.primary }} />
+      <FlexWidget style={{ flexDirection: 'row', alignItems: 'center' }}>
+        <TextWidget text="Claude usage" style={{ fontSize: 13, fontFamily: SEMIBOLD, color: p.primary }} />
+        {plan ? (
+          <TextWidget
+            text={`  ·  ${plan}`}
+            style={{ fontSize: 12, fontFamily: MEDIUM, color: p.muted }}
+            maxLines={1}
+          />
+        ) : null}
+      </FlexWidget>
       <FlexWidget
         clickAction={REFRESH_ACTION}
         accessibilityLabel={refreshing ? 'Updating' : 'Refresh'}
         style={{
-          width: 32,
-          height: 32,
-          borderRadius: 16,
-          marginTop: -8,
-          marginRight: -8,
+          width: 30,
+          height: 30,
+          borderRadius: 15,
           justifyContent: 'center',
           alignItems: 'center',
           backgroundColor: refreshing ? p.track : '#00000000',
         }}
       >
-        <SvgWidget svg={refreshSvg(String(refreshing ? p.muted : p.fg))} style={{ width: 17, height: 17 }} />
+        <SvgWidget svg={refreshSvg(String(refreshing ? p.muted : p.fg))} style={{ width: 20, height: 20 }} />
       </FlexWidget>
     </FlexWidget>
   );
@@ -138,9 +165,11 @@ function Frame({ p, children }: { p: Palette; children: React.ReactNode }) {
         height: 'match_parent',
         backgroundColor: p.bg,
         borderRadius: 24,
-        padding: 16,
+        paddingHorizontal: 16,
+        paddingTop: 12,
+        paddingBottom: 14,
         flexDirection: 'column',
-        justifyContent: 'space-between',
+        justifyContent: 'flex-start',
       }}
     >
       {children}
@@ -162,25 +191,44 @@ function Message({
   return (
     <Frame p={p}>
       <Header p={p} refreshing={refreshing} />
-      <FlexWidget style={{ width: 'match_parent', flexDirection: 'column' }}>
-        <TextWidget text={title} style={{ fontSize: 15, fontFamily: SEMIBOLD, color: p.fg }} maxLines={1} />
-        <TextWidget
-          text={body}
-          style={{ fontSize: 12, fontFamily: REGULAR, color: p.muted, marginTop: 2 }}
-          maxLines={2}
-        />
-      </FlexWidget>
+      <TextWidget
+        text={title}
+        style={{ fontSize: 15, fontFamily: SEMIBOLD, color: p.fg, marginTop: 10 }}
+        maxLines={1}
+      />
+      <TextWidget
+        text={body}
+        style={{ fontSize: 12, fontFamily: REGULAR, color: p.muted, marginTop: 2 }}
+        maxLines={2}
+      />
     </Frame>
   );
+}
+
+/** "PC sign-in valid until Dec 20" (the closest thing to an end date Claude Code shares). */
+function loginText(iso: string | null, now: number): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  if (d.getTime() <= now) return 'PC sign-in to Claude expired';
+  return `PC sign-in valid until ${d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`;
 }
 
 /** "Updated 3:42 PM" (today) or "Updated Fri 3:42 PM": when the PC last reported these numbers. */
 function updatedText(iso: string, now: number): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '';
-  const time = d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
-  if (d.toDateString() === new Date(now).toDateString()) return `Updated ${time}`;
-  return `Updated ${d.toLocaleDateString(undefined, { weekday: 'short' })} ${time}`;
+  if (d.toDateString() === new Date(now).toDateString()) return `Updated ${time(d)}`;
+  return `Updated ${d.toLocaleDateString(undefined, { weekday: 'short' })} ${time(d)}`;
+}
+
+/** The meters, in the Profile screen's order. Older saved data has no model limits. */
+export function meters(usage: Extract<WidgetUsage, { state: 'ok' }>): UsageMeter[] {
+  return [
+    ...(usage.session ? [{ label: 'Session (5hr)', ...usage.session }] : []),
+    ...(usage.weekly ? [{ label: 'Weekly (7 day)', ...usage.weekly }] : []),
+    ...(usage.models ?? []),
+  ];
 }
 
 function Usage({
@@ -188,11 +236,13 @@ function Usage({
   p,
   now,
   refreshing,
+  height,
 }: {
   usage: WidgetUsage;
   p: Palette;
   now: number;
   refreshing: boolean;
+  height: number;
 }) {
   if (usage.state === 'signed-out') {
     return (
@@ -209,22 +259,36 @@ function Usage({
       />
     );
   }
-  const reset = (usage.session ? resetText(usage.session.resetsAt, now) : null) ?? usage.deviceName;
+  const list = meters(usage);
+  // Each meter says when it resets when there is room for every line; otherwise the session's
+  // reset moves to the foot (the one that matters most) and the meters stay readable.
+  const roomy =
+    height >= CHROME + list.length * (METER + RESET_LINE) + (usage.loginExpiresAt ? RESET_LINE : 0);
+  const sessionReset = usage.session ? resetText(usage.session.resetsAt, now) : null;
+  const login = loginText(usage.loginExpiresAt ?? null, now);
   return (
     <Frame p={p}>
-      <Header p={p} refreshing={refreshing} />
-      {usage.session && <Meter label="Session (5hr)" percent={usage.session.percent} p={p} />}
-      {usage.weekly && <Meter label="Weekly (7 day)" percent={usage.weekly.percent} p={p} />}
+      <Header p={p} refreshing={refreshing} plan={usage.plan} />
+      {list.map((m) => (
+        <Meter key={m.label} m={m} p={p} reset={roomy ? resetText(m.resetsAt, now) : null} />
+      ))}
       <FlexWidget
         style={{
           width: 'match_parent',
+          marginTop: 10,
           flexDirection: 'row',
           justifyContent: 'space-between',
           alignItems: 'center',
         }}
       >
         <TextWidget
-          text={reset}
+          text={
+            roomy
+              ? (login ?? usage.deviceName)
+              : sessionReset
+                ? `Session ${sessionReset.charAt(0).toLowerCase()}${sessionReset.slice(1)}`
+                : usage.deviceName
+          }
           style={{ fontSize: 11, fontFamily: REGULAR, color: p.muted }}
           maxLines={1}
           truncate="END"
@@ -244,12 +308,20 @@ function Usage({
 }
 
 /**
- * Light and dark versions; Android shows the one that matches the system theme. `refreshing` draws
- * the moment between a tap on refresh and the new numbers.
+ * Light and dark versions; Android shows the one that matches the system theme. `height` is the
+ * widget's height in dp (Android passes it); `refreshing` draws the moment between a tap on
+ * refresh and the new numbers.
  */
-export function usageWidget(usage: WidgetUsage, now = Date.now(), refreshing = false) {
+export function usageWidget(
+  usage: WidgetUsage,
+  {
+    height = 0,
+    now = Date.now(),
+    refreshing = false,
+  }: { height?: number; now?: number; refreshing?: boolean } = {},
+) {
   return {
-    light: <Usage usage={usage} p={LIGHT} now={now} refreshing={refreshing} />,
-    dark: <Usage usage={usage} p={DARK} now={now} refreshing={refreshing} />,
+    light: <Usage usage={usage} p={LIGHT} now={now} refreshing={refreshing} height={height} />,
+    dark: <Usage usage={usage} p={DARK} now={now} refreshing={refreshing} height={height} />,
   };
 }

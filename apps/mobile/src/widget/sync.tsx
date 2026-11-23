@@ -8,9 +8,10 @@ import { usageWidget } from '@/widget/usage-widget';
 async function push(usage: WidgetUsage): Promise<void> {
   await saveWidgetUsage(usage);
   if (Platform.OS !== 'android') return;
-  await requestWidgetUpdate({ widgetName: USAGE_WIDGET, renderWidget: () => usageWidget(usage) }).catch(
-    () => undefined,
-  );
+  await requestWidgetUpdate({
+    widgetName: USAGE_WIDGET,
+    renderWidget: (info) => usageWidget(usage, { height: info.height }),
+  }).catch(() => undefined);
 }
 
 /** While the app is open, the home-screen widget follows the same numbers the app shows. */

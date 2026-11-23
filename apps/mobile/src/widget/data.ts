@@ -3,6 +3,13 @@ import { DeviceListResponse, type DeviceDto } from '@pocket-agent/protocol';
 import { API_URL } from '@/lib/api';
 import { loadToken } from '@/lib/session';
 
+/** One limit on the widget: its name, how much is used, when it resets. */
+export interface UsageMeter {
+  label: string;
+  percent: number;
+  resetsAt: string | null;
+}
+
 /** What the usage widget shows. Kept on the phone so the widget can draw without the network. */
 export type WidgetUsage =
   | { state: 'signed-out' }
@@ -12,6 +19,11 @@ export type WidgetUsage =
       deviceName: string;
       session: { percent: number; resetsAt: string | null } | null;
       weekly: { percent: number; resetsAt: string | null } | null;
+      /** Model limits (e.g. "Fable limit"); missing in data saved by older versions. */
+      models?: UsageMeter[];
+      /** "Max 5x"; when the PC's Claude sign-in ends (PC agents from 0.1.5). */
+      plan?: string | null;
+      loginExpiresAt?: string | null;
       updatedAt: string;
     };
 
@@ -21,7 +33,10 @@ const KEY = 'pocket-agent.widget.usage';
 /** The PC whose usage to show: the one that reported most recently (online ones first). */
 export function pickUsage(devices: DeviceDto[]): WidgetUsage {
   const withUsage = devices
-    .filter((d) => d.status !== 'Revoked' && d.usage && (d.usage.session || d.usage.weekly))
+    .filter(
+      (d) =>
+        d.status !== 'Revoked' && d.usage && (d.usage.session || d.usage.weekly || d.usage.models.length),
+    )
     .sort(
       (a, b) =>
         Number(b.status === 'Online') - Number(a.status === 'Online') ||
@@ -36,6 +51,13 @@ export function pickUsage(devices: DeviceDto[]): WidgetUsage {
     deviceName: d.name,
     session: win(d.usage.session),
     weekly: win(d.usage.weekly),
+    models: d.usage.models.map((m) => ({
+      label: `${m.name} limit`,
+      percent: m.percent,
+      resetsAt: m.resetsAt,
+    })),
+    plan: d.usage.plan ?? null,
+    loginExpiresAt: d.usage.loginExpiresAt ?? null,
     updatedAt: d.usage.updatedAt,
   };
 }

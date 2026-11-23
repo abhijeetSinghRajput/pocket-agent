@@ -88,7 +88,9 @@ const config: ExpoConfig = {
             minWidth: '250dp',
             minHeight: '110dp',
             targetCellWidth: 4,
-            targetCellHeight: 2,
+            targetCellHeight: 3,
+            // Taller than its meters need only looks empty: stops a little past the roomy layout.
+            maxResizeHeight: '260dp',
             resizeMode: 'horizontal|vertical',
             updatePeriodMillis: 30 * 60 * 1000,
             // What the widget picker shows: a picture of the widget.

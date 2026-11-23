@@ -45,8 +45,8 @@ export async function authRoutes(
         targetId: user.id,
         ip: req.ip,
       });
-      await startSession(ctx, req, reply, user.id);
-      return reply.code(201).send({ user: toUserDto(user) });
+      const token = await startSession(ctx, req, reply, user.id);
+      return reply.code(201).send({ user: toUserDto(user), ...(token ? { token } : {}) });
     } catch (err) {
       if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
         return reply
@@ -91,7 +91,7 @@ export async function authRoutes(
     }
 
     await ctx.redis.del(failKey(email));
-    await startSession(ctx, req, reply, user.id);
+    const token = await startSession(ctx, req, reply, user.id);
     await audit(ctx.prisma, {
       userId: user.id,
       actorType: 'user',
@@ -101,7 +101,7 @@ export async function authRoutes(
       targetId: user.id,
       ip: req.ip,
     });
-    return { user: toUserDto(user) };
+    return { user: toUserDto(user), ...(token ? { token } : {}) };
   });
 
   /**
@@ -166,7 +166,7 @@ export async function authRoutes(
       user = await ctx.prisma.user.update({ where: { id: user.id }, data: { avatarUrl: id.picture } });
     }
 
-    await startSession(ctx, req, reply, user.id);
+    const token = await startSession(ctx, req, reply, user.id);
     await audit(ctx.prisma, {
       userId: user.id,
       actorType: 'user',
@@ -177,7 +177,9 @@ export async function authRoutes(
       ip: req.ip,
       metadata: { method: 'google' },
     });
-    return reply.code(action === 'user.registered' ? 201 : 200).send({ user: toUserDto(user) });
+    return reply
+      .code(action === 'user.registered' ? 201 : 200)
+      .send({ user: toUserDto(user), ...(token ? { token } : {}) });
   });
 
   app.post('/auth/logout', { preHandler: [trusted, requireUser(ctx)] }, async (req, reply) => {

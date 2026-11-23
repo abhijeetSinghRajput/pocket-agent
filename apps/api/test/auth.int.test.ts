@@ -229,3 +229,61 @@ describe('brute-force protection', () => {
     }
   });
 });
+
+describe('native app sessions (Android / iOS)', () => {
+  const app = { 'x-pocket-agent-client': 'mobile' };
+
+  it('signs up without an Origin, gets a token instead of a cookie, and uses it as a bearer', async () => {
+    const email = uniqueEmail();
+    const res = await t.app.inject({
+      method: 'POST',
+      url: '/auth/register',
+      headers: app,
+      payload: { name: 'Phone', email, password: 'a-long-enough-password' },
+    });
+    expect(res.statusCode).toBe(201);
+    expect(res.headers['set-cookie']).toBeUndefined();
+    const { token, user } = res.json<{ token: string; user: { id: string } }>();
+    users.push(user.id);
+    expect(token.length).toBeGreaterThan(20);
+    const auth = { ...app, authorization: `Bearer ${token}` };
+
+    const me = await t.app.inject({ method: 'GET', url: '/auth/me', headers: auth });
+    expect(MeResponse.parse(me.json()).user.email).toBe(email);
+
+    // State-changing routes work with the token and no Origin…
+    const code = await t.app.inject({ method: 'POST', url: '/devices/pairing-codes', headers: auth });
+    expect(code.statusCode).toBe(201);
+    // …and signing out ends that session for good.
+    expect((await t.app.inject({ method: 'POST', url: '/auth/logout', headers: auth })).statusCode).toBe(204);
+    expect((await t.app.inject({ method: 'GET', url: '/auth/me', headers: auth })).statusCode).toBe(401);
+  });
+
+  it('a browser session still gets no token; no Origin and no app header is refused', async () => {
+    const email = uniqueEmail();
+    const web = await t.app.inject({
+      method: 'POST',
+      url: '/auth/register',
+      headers: browser(),
+      payload: { name: 'Web', email, password: 'a-long-enough-password' },
+    });
+    expect(web.statusCode).toBe(201);
+    users.push(web.json<{ user: { id: string } }>().user.id);
+    expect(web.json()).not.toHaveProperty('token');
+
+    const bare = await t.app.inject({
+      method: 'POST',
+      url: '/auth/login',
+      payload: { email, password: 'a-long-enough-password' },
+    });
+    expect(bare.statusCode).toBe(403);
+    // A page on another site can't pass by adding the app header: its Origin is still checked.
+    const forged = await t.app.inject({
+      method: 'POST',
+      url: '/auth/login',
+      headers: { ...app, origin: 'https://evil.example' },
+      payload: { email, password: 'a-long-enough-password' },
+    });
+    expect(forged.statusCode).toBe(403);
+  });
+});

@@ -17,6 +17,7 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
+    "@pocket-agent/core": "workspace:*",
     "@pocket-agent/protocol": "workspace:*",
     "@tanstack/react-query": "5.108.1",
     "class-variance-authority": "0.7.1",

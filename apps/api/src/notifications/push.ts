@@ -27,10 +27,10 @@ export interface PushAction {
 
 export type PushResult = 'ok' | 'invalid_token' | 'error';
 
-/** Sends one push to one browser registration. */
+/** Sends one push to one registration: a browser, or (platform `android`) the Android app. */
 export interface PushSender {
   readonly available: boolean;
-  send(token: string, message: PushMessage): Promise<PushResult>;
+  send(token: string, message: PushMessage, platform?: string): Promise<PushResult>;
 }
 
 export const NO_PUSH: PushSender = { available: false, send: async () => 'error' };
@@ -66,33 +66,51 @@ export function createFcmSender(
 
   return {
     available: true,
-    async send(token, m) {
+    async send(token, m, platform) {
       const accessToken = await auth.getAccessToken();
+      const urgent = m.priority === 'critical' || m.priority === 'high';
+      // The same fields either way; FCM data values are strings (the actions travel as JSON).
+      const data = {
+        title: m.title,
+        body: m.body,
+        link: m.link,
+        ...(m.notificationId ? { notificationId: m.notificationId } : {}),
+        tag: m.tag,
+        priority: m.priority,
+        ...(m.actions?.length ? { actions: JSON.stringify(m.actions) } : {}),
+      };
+      const message =
+        platform === 'android'
+          ? {
+              // The Android app: the system shows it while the app is closed or in the
+              // background; in the foreground the app decides (a toast, or nothing).
+              token,
+              notification: { title: m.title, body: m.body },
+              data,
+              android: {
+                priority: urgent ? 'HIGH' : 'NORMAL',
+                ttl: m.priority === 'critical' ? '300s' : '3600s',
+                notification: {
+                  channel_id: m.priority === 'critical' ? 'approvals' : 'default',
+                  tag: m.tag,
+                },
+              },
+            }
+          : {
+              token,
+              webpush: {
+                headers: {
+                  Urgency: urgent ? 'high' : 'normal',
+                  // A permission request is pointless after it expires; others can wait a bit longer.
+                  TTL: m.priority === 'critical' ? '300' : '3600',
+                },
+                data,
+              },
+            };
       const res = await fetch(url, {
         method: 'POST',
         headers: { authorization: `Bearer ${accessToken}`, 'content-type': 'application/json' },
-        body: JSON.stringify({
-          message: {
-            token,
-            webpush: {
-              headers: {
-                Urgency: m.priority === 'critical' || m.priority === 'high' ? 'high' : 'normal',
-                // A permission request is pointless after it expires; others can wait a bit longer.
-                TTL: m.priority === 'critical' ? '300' : '3600',
-              },
-              // FCM data values are strings: the actions travel as JSON.
-              data: {
-                title: m.title,
-                body: m.body,
-                link: m.link,
-                ...(m.notificationId ? { notificationId: m.notificationId } : {}),
-                tag: m.tag,
-                priority: m.priority,
-                ...(m.actions?.length ? { actions: JSON.stringify(m.actions) } : {}),
-              },
-            },
-          },
-        }),
+        body: JSON.stringify({ message }),
         signal: AbortSignal.timeout(10_000),
       }).catch(() => null);
       if (!res) return 'error';

@@ -99,15 +99,19 @@ export async function notify(ctx: NotifyServices, input: NotifyInput): Promise<N
     if (!subs.length) skipped = 'no_browser_registered';
     for (const sub of subs) {
       const r = await ctx.push
-        .send(sub.token, {
-          title: n.title,
-          body: n.body,
-          link: input.link,
-          notificationId: n.id,
-          tag: input.dedupeKey.slice(0, 100),
-          priority,
-          ...(input.actions?.length ? { actions: input.actions } : {}),
-        })
+        .send(
+          sub.token,
+          {
+            title: n.title,
+            body: n.body,
+            link: input.link,
+            notificationId: n.id,
+            tag: input.dedupeKey.slice(0, 100),
+            priority,
+            ...(input.actions?.length ? { actions: input.actions } : {}),
+          },
+          sub.platform,
+        )
         .catch(() => 'error' as const);
       if (r === 'ok') {
         sent++;

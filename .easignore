@@ -1,0 +1,25 @@
+# What the Expo cloud build uploads (it replaces .gitignore for EAS): the mobile app and the
+# shared packages it bundles from source. Everything else stays on this PC.
+node_modules/
+**/node_modules/
+.claude/
+.agents/
+.git/
+apps/api/
+apps/web/
+apps/local-agent/
+docs/
+infrastructure/
+poc/
+**/dist/
+**/.expo/
+apps/mobile/android/
+apps/mobile/ios/
+*.apk
+*.aab
+*.log
+.env
+.env.*
+*firebase-adminsdk*.json
+*service-account*.json
+skills-lock.json

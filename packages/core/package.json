@@ -1,0 +1,30 @@
+{
+  "name": "@pocket-agent/core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Client logic shared by the web and mobile apps (no UI): the chat timeline, command status text, time formatting.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint . --max-warnings=0"
+  },
+  "dependencies": {
+    "@pocket-agent/protocol": "workspace:*"
+  },
+  "devDependencies": {
+    "@pocket-agent/config": "workspace:*",
+    "@types/node": "26.6.6",
+    "eslint": "10.14.0",
+    "typescript": "6.0.3"
+  }
+}

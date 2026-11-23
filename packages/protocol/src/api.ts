@@ -44,6 +44,13 @@ export type UserDto = z.infer<typeof UserDto>;
 export const MeResponse = z.object({ user: UserDto });
 export type MeResponse = z.infer<typeof MeResponse>;
 
+/**
+ * Sign-in / sign-up answer. `token` is only present for the native apps (they send the
+ * `x-pocket-agent-client: mobile` header and keep the session themselves); browsers get a cookie.
+ */
+export const AuthResponse = MeResponse.extend({ token: z.string().optional() });
+export type AuthResponse = z.infer<typeof AuthResponse>;
+
 // ── Devices & pairing ────────────────────────────────────────────────────────
 export const PAIRING_CODE_TTL_MS = 10 * 60 * 1000;
 

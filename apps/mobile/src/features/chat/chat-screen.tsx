@@ -1,0 +1,351 @@
+import { buildChat, parseQuestions, timeAgo } from '@pocket-agent/core';
+import type { AgentSessionDto, ApprovalDto } from '@pocket-agent/protocol';
+import { useQueryClient } from '@tanstack/react-query';
+import { useRouter } from 'expo-router';
+import { ArrowLeft, Info } from 'lucide-react-native';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { AppState, View } from 'react-native';
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
+import Animated, { FadeInDown } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { PermissionSheet } from '@/features/approvals/permission-sheet';
+import { QuestionSheet } from '@/features/approvals/question-sheet';
+import { Composer, EndSessionButton } from '@/features/chat/composer';
+import { ChatMessages } from '@/features/chat/messages';
+import { SessionInfo } from '@/features/chat/session-info';
+import { SessionAvatar, SessionStatusBadge } from '@/features/sessions/badges';
+import { markRead, useApprovals, useCommands, useEventFeed, useSession } from '@/lib/data';
+import { chatLink } from '@/lib/links';
+import { useLiveEvents, useLiveRefresh } from '@/lib/live';
+import { ease, enter } from '@/lib/motion';
+import { radius, useTheme } from '@/lib/theme';
+import { Button, IconButton, Press, T } from '@/ui/core';
+import { Roll, Skeleton } from '@/ui/feedback';
+
+/** What the header says under the name, like a messenger's "online" / "typing…". */
+function presence(s: AgentSessionDto): { text: string; live: boolean } {
+  if (s.endedAt) return { text: `ended ${timeAgo(s.endedAt)}`, live: false };
+  switch (s.status) {
+    case 'Starting':
+      return { text: 'starting…', live: true };
+    case 'Running':
+      return { text: 'working…', live: true };
+    case 'WaitingForPermission':
+      return { text: 'needs permission', live: true };
+    case 'WaitingForInput':
+      return { text: 'waiting for you', live: false };
+    case 'Disconnected':
+      return { text: `PC offline · last seen ${timeAgo(s.lastActivityAt)}`, live: false };
+    default:
+      return { text: `active ${timeAgo(s.lastActivityAt)}`, live: false };
+  }
+}
+
+function typingKind(s: AgentSessionDto): 'working' | 'starting' | null {
+  if (s.endedAt) return null;
+  if (s.status === 'Running') return 'working';
+  if (s.status === 'Starting') return 'starting';
+  return null;
+}
+
+/** A question from Claude waiting for this chat (the first one, if several). */
+function pendingQuestion(list: ApprovalDto[] | null | undefined, sessionId: string) {
+  for (const a of list ?? []) {
+    if (a.sessionId !== sessionId || a.toolName !== 'AskUserQuestion') continue;
+    const questions = parseQuestions(a.input);
+    if (questions.length) return { approval: a, questions };
+  }
+  return null;
+}
+
+/**
+ * While a chat is open, its notifications ("Claude finished", "Claude is asking you", …) count as
+ * seen: they are marked read when it opens, when the app comes back to it, and as new ones arrive.
+ */
+function useMarkChatRead(sessionId: string) {
+  const client = useQueryClient();
+  const mark = useCallback(() => {
+    if (AppState.currentState !== 'active') return;
+    void markRead({ link: chatLink(sessionId) })
+      .then(() => client.invalidateQueries({ queryKey: ['notifications'] }))
+      .catch(() => undefined);
+  }, [sessionId, client]);
+  useEffect(() => {
+    mark();
+    const sub = AppState.addEventListener('change', (s) => s === 'active' && mark());
+    return () => sub.remove();
+  }, [mark]);
+  useLiveEvents((e) => {
+    if (e.eventType === 'notification.created') mark();
+  });
+}
+
+/** The bar on top of the chat: back, who you are talking to and how it is doing, info, end. */
+function Header({
+  session: s,
+  onInfo,
+  onChange,
+}: {
+  session: AgentSessionDto;
+  onInfo: () => void;
+  onChange: () => void;
+}) {
+  const { c } = useTheme();
+  const insets = useSafeAreaInsets();
+  const router = useRouter();
+  const p = presence(s);
+  return (
+    <View
+      testID="chat-header"
+      style={{
+        paddingTop: insets.top + 4,
+        paddingBottom: 8,
+        paddingHorizontal: 6,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 2,
+        backgroundColor: c.bar,
+        borderBottomWidth: 1,
+        borderBottomColor: c.border,
+      }}
+    >
+      <IconButton
+        icon={ArrowLeft}
+        label="Back to agents"
+        tone="default"
+        onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))}
+      />
+      {/* The whole identity block opens the session's details. */}
+      <Press
+        accessibilityRole="button"
+        accessibilityLabel="Session info"
+        onPress={onInfo}
+        scale={0.985}
+        dim={false}
+        style={{
+          flex: 1,
+          minWidth: 0,
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 10,
+          paddingVertical: 4,
+          paddingHorizontal: 4,
+          borderRadius: radius.lg,
+        }}
+      >
+        <SessionAvatar session={s} size="sm" />
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <T variant="subheading" numberOfLines={1} accessibilityRole="header">
+            {s.projectName}
+          </T>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 1 }}>
+            <View style={{ flexShrink: 1 }}>
+              <Roll
+                text={p.text}
+                variant={p.live ? 'captionMedium' : 'caption'}
+                color={p.live ? c.primary : c.mutedForeground}
+              />
+            </View>
+            <T variant="caption" tone="muted" accessibilityElementsHidden>
+              ·
+            </T>
+            <T variant="caption" tone="muted" numberOfLines={1} style={{ flexShrink: 1 }}>
+              {s.deviceName}
+            </T>
+          </View>
+        </View>
+        <SessionStatusBadge status={s.status} />
+      </Press>
+      <IconButton icon={Info} label="Session info" onPress={onInfo} testID="session-info-button" />
+      <EndSessionButton session={s} onDone={onChange} />
+    </View>
+  );
+}
+
+/** Where the conversation will be while it loads. */
+function FeedSkeleton() {
+  return (
+    <Animated.View
+      entering={enter.fade}
+      style={{ flex: 1, padding: 24, gap: 16 }}
+      accessibilityState={{ busy: true }}
+    >
+      <Skeleton width="66%" height={48} round={radius.xl} style={{ alignSelf: 'flex-end' }} />
+      <Skeleton width="75%" height={96} round={radius.xl} />
+    </Animated.View>
+  );
+}
+
+export function ChatScreen({ id }: { id: string }) {
+  const { c } = useTheme();
+  const insets = useSafeAreaInsets();
+  const router = useRouter();
+  useMarkChatRead(id);
+  const { state, refresh } = useSession(id);
+  const feed = useEventFeed(`/sessions/${id}/events`);
+  const approvals = useApprovals('pending');
+  // A question from Claude waiting for this chat (the first one, if several).
+  const question = pendingQuestion(approvals.state.data, id);
+  // Permission requests waiting for this chat, oldest first.
+  const permissions = (approvals.state.data ?? []).filter(
+    (a) => a.sessionId === id && a.toolName !== 'AskUserQuestion',
+  );
+  const commands = useCommands(id);
+  const [infoOpen, setInfoOpen] = useState(false);
+  useLiveRefresh(
+    () => void feed.refreshHead(),
+    (e) => e.sessionId === id || e.eventType === 'device.status.changed',
+  );
+  const items = useMemo(() => {
+    // Messages you sent are listed separately; while older events aren't loaded yet, show only
+    // the ones from the loaded stretch, so your messages and Claude's replies always line up.
+    const all = commands.state.data ?? [];
+    const sent = feed.hasMore && feed.oldestAt ? all.filter((c) => c.createdAt >= feed.oldestAt!) : all;
+    return buildChat(feed.events, sent);
+  }, [feed.events, feed.hasMore, feed.oldestAt, commands.state.data]);
+
+  if (state.status === 'loading') {
+    return (
+      <View style={{ flex: 1, backgroundColor: c.background }} accessibilityState={{ busy: true }}>
+        <View
+          style={{
+            paddingTop: insets.top + 4,
+            paddingBottom: 8,
+            paddingHorizontal: 16,
+            height: insets.top + 64,
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 12,
+            backgroundColor: c.bar,
+            borderBottomWidth: 1,
+            borderBottomColor: c.border,
+          }}
+        >
+          <Skeleton width={36} height={36} round={18} />
+          <Skeleton width={160} height={16} />
+        </View>
+        <FeedSkeleton />
+      </View>
+    );
+  }
+  if (state.status === 'error') {
+    const notFound = state.error === 'Not found';
+    return (
+      <View
+        style={{
+          flex: 1,
+          backgroundColor: c.background,
+          alignItems: 'center',
+          justifyContent: 'center',
+          paddingHorizontal: 24,
+          paddingTop: insets.top,
+          paddingBottom: insets.bottom,
+        }}
+      >
+        <Animated.View entering={enter.rise()} style={{ alignItems: 'center', gap: 8 }}>
+          <T variant="heading" center accessibilityRole="header">
+            {notFound ? 'Session not found' : 'Could not load this session'}
+          </T>
+          <T variant="small" tone="muted" center>
+            {state.error}
+          </T>
+          <Button
+            label="Back to agents"
+            variant="outline"
+            onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))}
+            style={{ marginTop: 16, alignSelf: 'center' }}
+          />
+        </Animated.View>
+      </View>
+    );
+  }
+
+  const s = state.data;
+  const changed = () => {
+    void refresh();
+    void feed.refreshHead();
+    void commands.refresh();
+  };
+  const decided = () => {
+    void approvals.refresh();
+    changed();
+  };
+  const panel = question || permissions.length > 0;
+
+  return (
+    <View
+      style={{ flex: 1, backgroundColor: c.background }}
+      accessibilityLabel={`Conversation with ${s.projectName}`}
+    >
+      <Header session={s} onInfo={() => setInfoOpen(true)} onChange={changed} />
+      <SessionInfo session={s} open={infoOpen} onClose={() => setInfoOpen(false)} onChange={changed} />
+
+      {/*
+        The keyboard pushes the composer up and the list shrinks with it. The composer already pads
+        for the bottom inset, so that much of the keyboard's height is not added again.
+      */}
+      <KeyboardAvoidingView behavior="padding" keyboardVerticalOffset={-insets.bottom} style={{ flex: 1 }}>
+        {feed.status === 'loading' ? (
+          <FeedSkeleton />
+        ) : feed.status === 'error' ? (
+          <View style={{ flex: 1, padding: 24 }}>
+            <T variant="small" tone="danger" center accessibilityRole="alert">
+              {feed.error}
+            </T>
+          </View>
+        ) : (
+          <ChatMessages
+            items={
+              // The question being asked is shown below, not also in the conversation.
+              question ? items.filter((i) => !(i.kind === 'question' && i.state === 'running')) : items
+            }
+            typing={typingKind(s)}
+            header={
+              feed.hasMore ? (
+                <Button
+                  label={feed.loadingMore ? 'Loading…' : 'Load older messages'}
+                  variant="outline"
+                  size="sm"
+                  disabled={feed.loadingMore}
+                  onPress={() => void feed.loadMore()}
+                  style={{ alignSelf: 'center', borderRadius: radius.full, marginVertical: 8 }}
+                />
+              ) : undefined
+            }
+          />
+        )}
+
+        {panel && (
+          // Claude is asking, or needs permission: that takes the message box's place until decided.
+          <Animated.View
+            key={question ? question.approval.id : permissions[0]!.id}
+            entering={FadeInDown.duration(360)
+              .easing(ease.out)
+              .withInitialValues({ opacity: 0, transform: [{ translateY: 24 }] })}
+          >
+            {question ? (
+              <QuestionSheet approval={question.approval} questions={question.questions} onDone={decided} />
+            ) : (
+              <PermissionSheet approval={permissions[0]!} more={permissions.length - 1} onDone={decided} />
+            )}
+          </Animated.View>
+        )}
+        {/* Hidden, not removed, while a sheet is up: the typed message and picked files stay. */}
+        <Animated.View
+          entering={enter.fade}
+          style={{
+            display: panel ? 'none' : 'flex',
+            borderTopWidth: 1,
+            borderTopColor: c.border,
+            backgroundColor: c.background,
+            paddingHorizontal: 12,
+            paddingTop: 12,
+            paddingBottom: 12 + insets.bottom,
+          }}
+        >
+          <Composer session={s} onSent={changed} onInfo={() => setInfoOpen(true)} />
+        </Animated.View>
+      </KeyboardAvoidingView>
+    </View>
+  );
+}

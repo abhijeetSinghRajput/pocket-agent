@@ -95,9 +95,13 @@ export const UpdateNotificationSettings = z.object({
 });
 export type UpdateNotificationSettings = z.infer<typeof UpdateNotificationSettings>;
 
+/** `web`: a browser (FCM web push). `android`: the Android app (FCM device token). */
+export const PushPlatform = z.enum(['web', 'android']);
+export type PushPlatform = z.infer<typeof PushPlatform>;
+
 export const RegisterPushRequest = z.object({
   token: z.string().min(20).max(4096),
-  platform: z.literal('web'),
+  platform: PushPlatform,
   userAgent: z.string().max(300).optional(),
 });
 export type RegisterPushRequest = z.infer<typeof RegisterPushRequest>;

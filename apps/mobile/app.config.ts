@@ -1,0 +1,88 @@
+import type { ExpoConfig } from 'expo/config';
+
+/**
+ * Pocket Agent for Android and iOS.
+ *
+ * EXPO_PUBLIC_API_URL: the API this build talks to (default: the hosted one).
+ * POCKET_AGENT_ALLOW_HTTP=1: allow plain http (a local API on an emulator); never for a release.
+ * GOOGLE_SERVICES_JSON: path to the Firebase config that turns on push on Android.
+ */
+const allowHttp = process.env.POCKET_AGENT_ALLOW_HTTP === '1';
+const BRAND = '#ee6a1b';
+
+const config: ExpoConfig = {
+  name: 'Pocket Agent',
+  slug: 'pocket-agent',
+  owner: 'pocket-agents-team',
+  version: '0.1.0',
+  orientation: 'portrait',
+  icon: './assets/images/icon.png',
+  scheme: 'pocketagent',
+  userInterfaceStyle: 'automatic',
+  ios: {
+    bundleIdentifier: 'com.mrcodium.pocketagent',
+    supportsTablet: false,
+  },
+  android: {
+    package: 'com.mrcodium.pocketagent',
+    versionCode: 1,
+    // Firebase config for push (Firebase console → project settings → the Android app). Locally:
+    // GOOGLE_SERVICES_JSON=./google-services.json; on EAS: a file environment variable of that name.
+    ...(process.env.GOOGLE_SERVICES_JSON ? { googleServicesFile: process.env.GOOGLE_SERVICES_JSON } : {}),
+    adaptiveIcon: {
+      backgroundColor: BRAND,
+      foregroundImage: './assets/images/adaptive-foreground.png',
+    },
+    softwareKeyboardLayoutMode: 'resize',
+  },
+  plugins: [
+    'expo-router',
+    [
+      'expo-splash-screen',
+      { backgroundColor: '#0a0a0b', image: './assets/images/splash-icon.png', imageWidth: 96 },
+    ],
+    'expo-secure-store',
+    ['expo-build-properties', { android: { usesCleartextTraffic: allowHttp } }],
+    // Push: the server sends through Firebase; Android needs google-services.json next to this
+    // file (Firebase console → project settings → the Android app). Without it the app still
+    // works, only the phone's own notifications are off.
+    ['expo-notifications', { icon: './assets/images/notification-icon.png', color: BRAND }],
+    // Attaching photos to a message (the chat's + button).
+    [
+      'expo-image-picker',
+      {
+        photosPermission: 'Pocket Agent sends the photos you pick to Claude on your PC.',
+        cameraPermission: 'Pocket Agent sends the photos you take to Claude on your PC.',
+      },
+    ],
+    // The home-screen widget (Android): Claude usage of your PC.
+    [
+      'react-native-android-widget',
+      {
+        fonts: [
+          './node_modules/@expo-google-fonts/geist/400Regular/Geist_400Regular.ttf',
+          './node_modules/@expo-google-fonts/geist/500Medium/Geist_500Medium.ttf',
+          './node_modules/@expo-google-fonts/geist/600SemiBold/Geist_600SemiBold.ttf',
+        ],
+        widgets: [
+          {
+            name: 'Usage',
+            label: 'Claude usage',
+            description: 'Your Claude plan usage: the session and weekly limits of your PC.',
+            minWidth: '250dp',
+            minHeight: '110dp',
+            targetCellWidth: 4,
+            targetCellHeight: 2,
+            resizeMode: 'horizontal|vertical',
+            updatePeriodMillis: 30 * 60 * 1000,
+          },
+        ],
+      },
+    ],
+  ],
+  experiments: { typedRoutes: true, reactCompiler: true },
+  // The Expo (EAS) project the cloud builds belong to.
+  extra: { eas: { projectId: '8fd9b55c-b6d6-49c4-840d-1cafbcbd2822' } },
+};
+
+export default config;

@@ -1,6 +1,8 @@
 packages:
   - apps/*
   - packages/*
+  # The Expo app is its own npm project (own lockfile): the API/web deploys don't install React Native.
+  - '!apps/mobile'
 allowBuilds:
   '@prisma/engines': true
   esbuild: true

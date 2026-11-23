@@ -19,6 +19,7 @@ import { dur, ease } from '@/lib/motion';
 import { alpha, radius, useTheme } from '@/lib/theme';
 import { Divider, IconTile, Press, T, tap } from '@/ui/core';
 import { Notice } from '@/ui/feedback';
+import { Segmented } from '@/ui/form';
 import { Sheet } from '@/ui/sheet';
 
 const isBusy = (s: AgentSessionDto) => s.status === 'Running' || s.status === 'WaitingForPermission';
@@ -250,8 +251,13 @@ export function ModePicker({
 
 // ── Model + effort ───────────────────────────────────────────────────────────
 
-/** Effort as one row of steps, like the editor's slider. */
-function EffortSteps({
+/** The effort levels as one slider of steps (Auto keeps the session's own), like the editor's. */
+export const EFFORT_STEPS: { value: string; label: string }[] = [
+  { value: '', label: 'Auto' },
+  ...EFFORTS.map((e) => ({ value: e.id, label: e.id === 'xhigh' ? 'XHigh' : e.name })),
+];
+
+function EffortSlider({
   value,
   onChange,
   disabled,
@@ -260,47 +266,17 @@ function EffortSteps({
   onChange: (v: string) => void;
   disabled: boolean;
 }) {
-  const { c } = useTheme();
   return (
-    <View
-      accessibilityRole="radiogroup"
-      accessibilityLabel="Effort"
-      style={{ flexDirection: 'row', gap: 4, paddingHorizontal: 6, paddingBottom: 6 }}
-    >
-      {[{ id: '', name: 'Auto' }, ...EFFORTS].map((e) => {
-        const checked = value === e.id;
-        return (
-          <Press
-            key={e.id || 'keep'}
-            accessibilityRole="radio"
-            accessibilityState={{ checked, disabled }}
-            accessibilityLabel={e.id ? e.name : 'Keep the session’s effort'}
-            disabled={disabled}
-            onPress={() => {
-              if (!checked) tap();
-              onChange(e.id);
-            }}
-            haptic={false}
-            scale={0.94}
-            style={{
-              flex: 1,
-              height: 34,
-              borderRadius: radius.md,
-              alignItems: 'center',
-              justifyContent: 'center',
-              backgroundColor: checked ? c.primary : c.muted,
-            }}
-          >
-            <T
-              variant="captionMedium"
-              numberOfLines={1}
-              style={{ fontSize: 11.5, color: checked ? c.primaryForeground : c.foreground }}
-            >
-              {e.id === 'xhigh' ? 'XHigh' : e.name}
-            </T>
-          </Press>
-        );
-      })}
+    <View style={{ paddingHorizontal: 6, paddingBottom: 6 }}>
+      <Segmented
+        options={EFFORT_STEPS}
+        value={value}
+        onChange={onChange}
+        compact
+        disabled={disabled}
+        label="Effort"
+        testID="effort-slider"
+      />
     </View>
   );
 }
@@ -375,7 +351,7 @@ export function ModelPicker({
             <Divider />
           </View>
           <Label>Effort</Label>
-          <EffortSteps value={effort} onChange={onEffort} disabled={!!locked} />
+          <EffortSlider value={effort} onChange={onEffort} disabled={!!locked} />
         </Body>
       </Sheet>
     </>

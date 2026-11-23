@@ -1,17 +1,19 @@
 import { formatDate } from '@pocket-agent/core';
 import * as Application from 'expo-application';
-import { LogOut } from 'lucide-react-native';
+import { LogOut, Moon, Smartphone, Sun } from 'lucide-react-native';
 import { useState } from 'react';
 import { View } from 'react-native';
 import Animated from 'react-native-reanimated';
 import { ApiStatus } from '@/features/profile/api-status';
 import { ClaudeUsageCard } from '@/features/profile/claude-usage';
 import { NotificationSettings } from '@/features/profile/notification-settings';
+import { setThemePreference, useThemePreference, type ThemePreference } from '@/lib/appearance';
 import { useAuth, useUser } from '@/lib/auth';
 import { enter } from '@/lib/motion';
 import { useTheme } from '@/lib/theme';
 import { Avatar, Button, Card, Press, T } from '@/ui/core';
 import { Screen } from '@/ui/screen';
+import { Segmented } from '@/ui/form';
 import { Sheet } from '@/ui/sheet';
 
 /** Who is signed in. */
@@ -40,6 +42,45 @@ function ProfileHeader() {
             Member since {formatDate(user.createdAt)}
           </T>
         </View>
+      </Card>
+    </View>
+  );
+}
+
+const THEMES: { value: ThemePreference; label: string }[] = [
+  { value: 'system', label: 'System' },
+  { value: 'light', label: 'Light' },
+  { value: 'dark', label: 'Dark' },
+];
+
+/** Light or dark: follow the phone, or pin one. */
+function AppearanceCard() {
+  const { c, dark } = useTheme();
+  const pref = useThemePreference();
+  const Icon = pref === 'system' ? Smartphone : dark ? Moon : Sun;
+  return (
+    <View testID="appearance">
+      <Card style={{ padding: 16 }}>
+        <View
+          style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}
+        >
+          <T variant="overline" tone="muted" accessibilityRole="header">
+            APPEARANCE
+          </T>
+          <Icon size={16} color={c.mutedForeground} strokeWidth={2.2} />
+        </View>
+        <View style={{ marginTop: 12 }}>
+          <Segmented
+            options={THEMES}
+            value={pref}
+            onChange={setThemePreference}
+            label="Theme"
+            testID="theme"
+          />
+        </View>
+        <T variant="caption" tone="muted" style={{ marginTop: 8 }}>
+          {pref === 'system' ? 'Follows your phone’s setting.' : `Always ${pref}, whatever the phone says.`}
+        </T>
       </Card>
     </View>
   );
@@ -121,6 +162,9 @@ export function ProfileScreen() {
         <ClaudeUsageCard />
       </Animated.View>
       <Animated.View entering={enter.rise(2)}>
+        <AppearanceCard />
+      </Animated.View>
+      <Animated.View entering={enter.rise(3)}>
         <Card style={{ padding: 16 }}>
           <T variant="overline" tone="muted" accessibilityRole="header" style={{ marginBottom: 12 }}>
             NOTIFICATIONS
@@ -128,13 +172,13 @@ export function ProfileScreen() {
           <NotificationSettings />
         </Card>
       </Animated.View>
-      <Animated.View entering={enter.rise(3)}>
+      <Animated.View entering={enter.rise(4)}>
         <ApiStatus />
       </Animated.View>
-      <Animated.View entering={enter.rise(4)}>
+      <Animated.View entering={enter.rise(5)}>
         <SignOut />
       </Animated.View>
-      <Animated.View entering={enter.rise(5)}>
+      <Animated.View entering={enter.rise(6)}>
         <T variant="caption" tone="muted" center style={{ marginTop: 8 }} testID="app-version">
           Pocket Agent {version ?? '—'}
           {build ? ` (${build})` : ''}

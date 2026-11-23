@@ -10,10 +10,11 @@ import { DarkTheme, DefaultTheme, Stack, ThemeProvider, useRouter, useSegments }
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import * as SystemUI from 'expo-system-ui';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
+import { loadThemePreference } from '@/lib/appearance';
 import { AuthProvider, useAuth } from '@/lib/auth';
 import { QueryProvider } from '@/lib/query';
 import { useTheme } from '@/lib/theme';
@@ -94,12 +95,18 @@ export default function RootLayout() {
     GeistMono_500Medium,
   });
 
+  // Your light/dark choice is applied before anything is drawn, so nothing flashes the other way.
+  const [themeReady, setThemeReady] = useState(false);
+  useEffect(() => {
+    void loadThemePreference().finally(() => setThemeReady(true));
+  }, []);
+
   // The window behind the screens (seen during transitions and keyboard resize) follows the theme.
   useEffect(() => {
     void SystemUI.setBackgroundColorAsync(c.background);
   }, [c.background]);
 
-  if (!fontsLoaded && !fontError) return null;
+  if ((!fontsLoaded && !fontError) || !themeReady) return null;
 
   const base = dark ? DarkTheme : DefaultTheme;
   return (

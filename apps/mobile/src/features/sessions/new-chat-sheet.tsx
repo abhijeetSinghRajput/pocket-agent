@@ -17,12 +17,14 @@ import Animated, {
   useSharedValue,
   withTiming,
 } from 'react-native-reanimated';
+import { EFFORT_STEPS } from '@/features/chat/pickers';
 import { apiRequest } from '@/lib/api';
 import { useDevices } from '@/lib/data';
 import { dur, ease } from '@/lib/motion';
 import { fonts, radius, useTheme } from '@/lib/theme';
 import { Button, buzz, Card, Divider, Fade, Press, T, tap, thud } from '@/ui/core';
 import { Notice, Skeleton } from '@/ui/feedback';
+import { Segmented } from '@/ui/form';
 import { Sheet } from '@/ui/sheet';
 import { TerminalGuide } from '@/ui/terminal-guide';
 
@@ -32,13 +34,6 @@ const MODES: { id: TurnMode; name: string; description: string }[] = [
   { id: 'acceptEdits', name: 'Edit automatically', description: 'Edits files without asking' },
   { id: 'plan', name: 'Plan', description: 'Explores and plans, changes nothing' },
   { id: 'auto', name: 'Auto', description: 'Safe actions run, risky ones ask' },
-];
-const EFFORTS: { id: TurnEffort; name: string }[] = [
-  { id: 'low', name: 'Low' },
-  { id: 'medium', name: 'Medium' },
-  { id: 'high', name: 'High' },
-  { id: 'xhigh', name: 'XHigh' },
-  { id: 'max', name: 'Max' },
 ];
 
 const usableDevices = (all: DeviceDto[] | null) =>
@@ -267,10 +262,12 @@ export function NewChatSheet({ open, onClose }: { open: boolean; onClose: () => 
                   )}
                 </Group>
                 <Group label="Effort">
-                  <ChipRow
-                    options={[{ id: '', name: 'Auto' }, ...EFFORTS]}
+                  <Segmented
+                    options={EFFORT_STEPS}
                     value={effort}
                     onChange={(v) => setEffort(v as TurnEffort | '')}
+                    compact
+                    label="Effort"
                   />
                 </Group>
               </>

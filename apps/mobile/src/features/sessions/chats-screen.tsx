@@ -2,14 +2,16 @@ import { chatListTime } from '@pocket-agent/core';
 import type { AgentSessionDto } from '@pocket-agent/protocol';
 import { useRouter } from 'expo-router';
 import { Plus } from 'lucide-react-native';
-import { useMemo, useState } from 'react';
-import { RefreshControl, View } from 'react-native';
-import Animated from 'react-native-reanimated';
+import { useEffect, useMemo, useState } from 'react';
+import { RefreshControl, useWindowDimensions, View } from 'react-native';
+import { GestureDetector, usePanGesture } from 'react-native-gesture-handler';
+import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { scheduleOnRN } from 'react-native-worklets';
 import { SessionAvatar, SessionKindBadge, SessionStatusBadge } from '@/features/sessions/badges';
 import { NewChatSheet } from '@/features/sessions/new-chat-sheet';
 import { useApprovals, useSessions } from '@/lib/data';
-import { exit, layout } from '@/lib/motion';
+import { exit, layout, settleSpring } from '@/lib/motion';
 import { alpha, fonts, radius, useTheme } from '@/lib/theme';
 import { useArrivals } from '@/ui/arrive';
 import { Button, Press, T } from '@/ui/core';
@@ -120,14 +122,11 @@ const SCOPES: { value: Scope; label: string }[] = [
   { value: 'all', label: 'All' },
 ];
 
-/** Every session as a chat, newest activity first: the home tab. */
-export function ChatsScreen() {
+/** One page of the list: the sessions of one scope, filtered by the search. */
+function SessionsPage({ scope, query, width }: { scope: Scope; query: string; width: number }) {
   const router = useRouter();
   const { c } = useTheme();
   const insets = useSafeAreaInsets();
-  const [scope, setScope] = useState<Scope>('active');
-  const [creating, setCreating] = useState(false);
-  const [query, setQuery] = useState('');
   const [pulling, setPulling] = useState(false);
   const { state, refresh } = useSessions(scope);
   const approvals = useApprovals('pending').state.data;
@@ -164,13 +163,6 @@ export function ChatsScreen() {
   }
 
   const open = (id: string) => router.push({ pathname: '/chat/[id]', params: { id } });
-
-  const header = (
-    <View style={{ paddingHorizontal: 20, paddingBottom: 12, gap: 12 }}>
-      <Segmented options={SCOPES} value={scope} onChange={setScope} />
-      <SearchField value={query} onChangeText={setQuery} label="Search sessions" testID="session-search" />
-    </View>
-  );
 
   let body;
   if (state.status === 'loading') {
@@ -232,40 +224,104 @@ export function ChatsScreen() {
   }
 
   return (
+    <Animated.FlatList
+      data={sessions}
+      keyExtractor={(s) => s.id}
+      itemLayoutAnimation={layout}
+      renderItem={({ item, index }) => (
+        <Animated.View entering={arriving(item.id, index)} exiting={exit.fade}>
+          <SessionRow s={item} waiting={waitingBySession.get(item.id) ?? 0} onPress={() => open(item.id)} />
+        </Animated.View>
+      )}
+      ListEmptyComponent={body}
+      accessibilityLabel={`${scope === 'active' ? 'Active' : 'All'} sessions`}
+      testID={`sessions-${scope}`}
+      keyboardShouldPersistTaps="handled"
+      keyboardDismissMode="on-drag"
+      showsVerticalScrollIndicator={false}
+      style={{ width }}
+      contentContainerStyle={{
+        paddingHorizontal: 8,
+        paddingBottom: insets.bottom + TAB_BAR_HEIGHT + 24,
+      }}
+      refreshControl={
+        <RefreshControl
+          refreshing={pulling}
+          onRefresh={() => void pull()}
+          tintColor={c.primary}
+          colors={[c.primary]}
+          progressBackgroundColor={c.card}
+        />
+      }
+    />
+  );
+}
+
+/**
+ * Every session as a chat, newest activity first: the home tab. Active and All are two pages side
+ * by side: swipe between them, or tap the control, which follows the swipe.
+ */
+export function ChatsScreen() {
+  const { width } = useWindowDimensions();
+  const [scope, setScope] = useState<Scope>('active');
+  const [creating, setCreating] = useState(false);
+  const [query, setQuery] = useState('');
+
+  const index = SCOPES.findIndex((o) => o.value === scope);
+  // Where the strip of pages sits (0 = Active, -width = All) and which page it is settled on.
+  const x = useSharedValue(0);
+  const page = useSharedValue(0);
+  useEffect(() => {
+    page.set(index);
+    x.set(withSpring(-index * width, settleSpring));
+  }, [index, width, x, page]);
+
+  const pan = usePanGesture({
+    activeOffsetX: [-16, 16],
+    failOffsetY: [-12, 12],
+    onUpdate: (e) => {
+      'worklet';
+      const rest = -page.get() * width;
+      let next = rest + e.translationX;
+      // Past either end the strip only gives a little.
+      if (next > 0) next *= 0.25;
+      else if (next < -width) next = -width + (next + width) * 0.25;
+      x.set(next);
+    },
+    onDeactivate: (e) => {
+      'worklet';
+      const from = page.get();
+      const step =
+        e.translationX < -width * 0.3 || e.velocityX < -600
+          ? 1
+          : e.translationX > width * 0.3 || e.velocityX > 600
+            ? -1
+            : 0;
+      const to = Math.min(SCOPES.length - 1, Math.max(0, from + step));
+      page.set(to);
+      x.set(withSpring(-to * width, { ...settleSpring, velocity: e.velocityX }));
+      if (to !== from) scheduleOnRN(setScope, SCOPES[to]!.value);
+    },
+  });
+  const strip = useAnimatedStyle(() => ({ transform: [{ translateX: x.get() }] }));
+
+  return (
     <Screen
       title="Chats"
       scroll={false}
       actions={<Button label="New chat" icon={Plus} size="sm" onPress={() => setCreating(true)} />}
     >
-      <Animated.FlatList
-        data={sessions}
-        keyExtractor={(s) => s.id}
-        itemLayoutAnimation={layout}
-        renderItem={({ item, index }) => (
-          <Animated.View entering={arriving(item.id, index)} exiting={exit.fade}>
-            <SessionRow s={item} waiting={waitingBySession.get(item.id) ?? 0} onPress={() => open(item.id)} />
-          </Animated.View>
-        )}
-        ListHeaderComponent={header}
-        ListEmptyComponent={body}
-        accessibilityLabel="Sessions list"
-        keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="on-drag"
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={{
-          paddingHorizontal: 8,
-          paddingBottom: insets.bottom + TAB_BAR_HEIGHT + 24,
-        }}
-        refreshControl={
-          <RefreshControl
-            refreshing={pulling}
-            onRefresh={() => void pull()}
-            tintColor={c.primary}
-            colors={[c.primary]}
-            progressBackgroundColor={c.card}
-          />
-        }
-      />
+      <View style={{ paddingHorizontal: 20, paddingBottom: 12, gap: 12 }}>
+        <Segmented options={SCOPES} value={scope} onChange={setScope} label="Which chats" />
+        <SearchField value={query} onChangeText={setQuery} label="Search sessions" testID="session-search" />
+      </View>
+      <GestureDetector gesture={pan}>
+        <Animated.View style={[{ flex: 1, flexDirection: 'row', width: width * SCOPES.length }, strip]}>
+          {SCOPES.map((o) => (
+            <SessionsPage key={o.value} scope={o.value} query={query} width={width} />
+          ))}
+        </Animated.View>
+      </GestureDetector>
       <NewChatSheet open={creating} onClose={() => setCreating(false)} />
     </Screen>
   );

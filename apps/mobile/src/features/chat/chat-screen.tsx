@@ -2,7 +2,7 @@ import { buildChat, parseQuestions, timeAgo } from '@pocket-agent/core';
 import type { AgentSessionDto, ApprovalDto } from '@pocket-agent/protocol';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
-import { ArrowLeft, Info } from 'lucide-react-native';
+import { ArrowLeft } from 'lucide-react-native';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AppState, View } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
@@ -80,7 +80,7 @@ function useMarkChatRead(sessionId: string) {
   });
 }
 
-/** The bar on top of the chat: back, who you are talking to and how it is doing, info, end. */
+/** The bar on top of the chat: back, who you are talking to and how it is doing (tap for details), end. */
 function Header({
   session: s,
   onInfo,
@@ -115,10 +115,12 @@ function Header({
         tone="default"
         onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))}
       />
-      {/* The whole identity block opens the session's details. */}
+      {/* The identity block is the way into the session's details. */}
       <Press
         accessibilityRole="button"
         accessibilityLabel="Session info"
+        accessibilityHint="Opens details of this session"
+        testID="session-info-button"
         onPress={onInfo}
         scale={0.985}
         dim={false}
@@ -156,7 +158,6 @@ function Header({
         </View>
         <SessionStatusBadge status={s.status} />
       </Press>
-      <IconButton icon={Info} label="Session info" onPress={onInfo} testID="session-info-button" />
       <EndSessionButton session={s} onDone={onChange} />
     </View>
   );

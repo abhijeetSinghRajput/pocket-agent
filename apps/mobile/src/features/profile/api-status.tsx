@@ -38,11 +38,37 @@ async function fetchHealth(signal?: AbortSignal): Promise<HealthResult> {
   }
 }
 
-const BADGE: Record<HealthResult['kind'], { label: string; tone: Tone }> = {
-  ok: { label: 'Operational', tone: 'success' },
-  degraded: { label: 'Degraded', tone: 'warning' },
-  unreachable: { label: 'Unreachable', tone: 'danger' },
+const TONE: Record<HealthResult['kind'], Tone> = {
+  ok: 'success',
+  degraded: 'warning',
+  unreachable: 'danger',
 };
+
+/** "12s ago" / "1m 05s ago": how long since the last check, ticking every second. */
+function since(at: number, now: number): string {
+  const s = Math.max(0, Math.floor((now - at) / 1000));
+  if (s < 60) return `${s}s ago`;
+  return `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, '0')}s ago`;
+}
+
+/** The time of the last check, counting up while on screen. */
+function Age({ at, color }: { at: number; color: string }) {
+  // A fresh `at` is never behind `now`, so the first tick after a check reads "0s ago".
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [at]);
+  return (
+    <T
+      variant="captionMedium"
+      accessibilityLabel={`Last checked ${since(at, now)}`}
+      style={{ color, fontVariant: ['tabular-nums'] }}
+    >
+      {since(at, now)}
+    </T>
+  );
+}
 
 /** The refresh glyph; it turns while a check is running. */
 function Spin({ checking, color }: { checking: boolean; color: string }) {
@@ -91,6 +117,7 @@ export function ApiStatus() {
   const { c } = useTheme();
   const focused = useIsFocused();
   const [result, setResult] = useState<HealthResult | null>(null);
+  const [checkedAt, setCheckedAt] = useState<number | null>(null);
   const [checking, setChecking] = useState(false);
   const controller = useRef<AbortController | null>(null);
 
@@ -101,6 +128,7 @@ export function ApiStatus() {
     setChecking(true);
     try {
       setResult(await fetchHealth(ctl.signal));
+      setCheckedAt(Date.now());
     } catch {
       /* aborted by a newer check */
     } finally {
@@ -119,8 +147,9 @@ export function ApiStatus() {
     };
   }, [refresh, focused]);
 
-  const badge = result ? BADGE[result.kind] : { label: 'Checking…', tone: 'muted' as Tone };
-  const badgeColor = toneColor(c, badge.tone);
+  // The badge: how long ago the API was last checked, in the colour of what it said.
+  const tone: Tone = result ? TONE[result.kind] : 'muted';
+  const badgeColor = toneColor(c, tone);
 
   return (
     <View testID="api-status" accessibilityState={{ busy: checking }}>
@@ -137,10 +166,19 @@ export function ApiStatus() {
               height: 24,
               justifyContent: 'center',
               borderRadius: radius.full,
-              backgroundColor: badge.tone === 'muted' ? c.muted : alpha(badgeColor, 0.14),
+              backgroundColor: tone === 'muted' ? c.muted : alpha(badgeColor, 0.14),
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 6,
             }}
+            testID="api-checked"
           >
-            <Roll text={badge.label} variant="captionMedium" color={badgeColor} />
+            {result && <Dot color={badgeColor} size={7} />}
+            {checkedAt === null ? (
+              <Roll text="Checking…" variant="captionMedium" color={badgeColor} />
+            ) : (
+              <Age at={checkedAt} color={badgeColor} />
+            )}
           </View>
         </View>
 

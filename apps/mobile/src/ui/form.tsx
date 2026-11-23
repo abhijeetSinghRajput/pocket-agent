@@ -149,10 +149,19 @@ export function Segmented<V extends string>({
   options,
   value,
   onChange,
+  compact,
+  disabled,
+  label,
+  testID,
 }: {
   options: { value: V; label: string }[];
   value: V;
   onChange: (next: V) => void;
+  /** Smaller text, for many short choices in one row. */
+  compact?: boolean;
+  disabled?: boolean;
+  label?: string;
+  testID?: string;
 }) {
   const { c } = useTheme();
   const [width, setWidth] = useState(0);
@@ -170,12 +179,16 @@ export function Segmented<V extends string>({
     <View
       onLayout={(e: LayoutChangeEvent) => setWidth(e.nativeEvent.layout.width)}
       accessibilityRole="tablist"
+      accessibilityLabel={label}
+      accessibilityState={{ disabled: !!disabled }}
+      testID={testID}
       style={{
         flexDirection: 'row',
         backgroundColor: c.muted,
         borderRadius: radius.lg,
         padding: 3,
         height: 40,
+        opacity: disabled ? 0.5 : 1,
       }}
     >
       {seg > 0 && (
@@ -205,14 +218,21 @@ export function Segmented<V extends string>({
           <Pressable
             key={o.value}
             accessibilityRole="tab"
-            accessibilityState={{ selected }}
+            accessibilityState={{ selected, disabled: !!disabled }}
+            accessibilityLabel={o.label}
+            disabled={disabled}
             onPress={() => {
               if (!selected) tap();
               onChange(o.value);
             }}
-            style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}
+            style={{ flex: 1, alignItems: 'center', justifyContent: 'center', minWidth: 0 }}
           >
-            <T variant="smallMedium" tone={selected ? 'default' : 'muted'}>
+            <T
+              variant={compact ? 'captionMedium' : 'smallMedium'}
+              tone={selected ? 'default' : 'muted'}
+              numberOfLines={1}
+              style={compact ? { fontSize: 11.5 } : undefined}
+            >
               {o.label}
             </T>
           </Pressable>

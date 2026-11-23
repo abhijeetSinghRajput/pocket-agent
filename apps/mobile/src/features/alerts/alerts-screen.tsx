@@ -1,7 +1,17 @@
 import { recentSections, timeAgo } from '@pocket-agent/core';
 import { NotificationPage, type NotificationDto } from '@pocket-agent/protocol';
 import { useRouter } from 'expo-router';
-import { BellOff, ChevronDown } from 'lucide-react-native';
+import {
+  Bell,
+  BellOff,
+  ChevronDown,
+  CircleAlert,
+  CircleCheck,
+  MonitorOff,
+  Play,
+  ShieldAlert,
+  type LucideIcon,
+} from 'lucide-react-native';
 import { useMemo, useState } from 'react';
 import { View } from 'react-native';
 import Animated from 'react-native-reanimated';
@@ -9,20 +19,31 @@ import { apiRequest } from '@/lib/api';
 import { markRead, useNotifications } from '@/lib/data';
 import { routeForLink } from '@/lib/links';
 import { exit, layout } from '@/lib/motion';
-import { fonts, useTheme } from '@/lib/theme';
+import { fonts, radius, useTheme } from '@/lib/theme';
 import { useArrivals } from '@/ui/arrive';
-import { Badge, Button, buzz, Card, Divider, Dot, Fade, Press, T } from '@/ui/core';
+import { Button, buzz, Card, Divider, Dot, Fade, IconTile, Press, T, type Tone } from '@/ui/core';
 import { EmptyState, Notice, Skeleton } from '@/ui/feedback';
 import { Screen } from '@/ui/screen';
 
-const CATEGORY_LABEL: Record<string, string> = {
-  permission_required: 'Permission',
-  agent_failed: 'Failed',
-  device_disconnected: 'PC offline',
-  task_completed: 'Finished',
-  agent_started: 'Started',
-  test: 'Test',
+/** What each kind of alert looks like: an icon in the tone of what happened. */
+const LOOK: Record<string, { icon: LucideIcon; tone: Tone }> = {
+  permission_required: { icon: ShieldAlert, tone: 'warning' },
+  agent_failed: { icon: CircleAlert, tone: 'danger' },
+  device_disconnected: { icon: MonitorOff, tone: 'muted' },
+  task_completed: { icon: CircleCheck, tone: 'success' },
+  agent_started: { icon: Play, tone: 'primary' },
+  test: { icon: Bell, tone: 'muted' },
 };
+const DEFAULT_LOOK = { icon: Bell, tone: 'muted' as Tone };
+
+/** "now", "5m", "2h", "3d": how long ago, as short as a phone's notification shade says it. */
+function shortAgo(iso: string, now = Date.now()): string {
+  const s = Math.max(0, Math.round((now - Date.parse(iso)) / 1000));
+  if (s < 60) return 'now';
+  if (s < 3600) return `${Math.floor(s / 60)}m`;
+  if (s < 86_400) return `${Math.floor(s / 3600)}h`;
+  return `${Math.floor(s / 86_400)}d`;
+}
 
 function pushNote(n: NotificationDto): string | null {
   if (n.push.sent > 0) return null;
@@ -44,33 +65,65 @@ function Row({ n, onOpen }: { n: NotificationDto; onOpen: (n: NotificationDto) =
   const { c } = useTheme();
   const unread = !n.readAt;
   const note = pushNote(n);
+  const look = LOOK[n.category] ?? DEFAULT_LOOK;
   const body = (
-    <View style={{ flexDirection: 'row', gap: 12, paddingHorizontal: 16, paddingVertical: 14 }}>
-      <View style={{ width: 8, marginTop: 6 }}>
-        <Fade visible={unread}>
-          <Dot color={c.primary} size={8} />
-        </Fade>
+    <View
+      style={{
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        gap: 12,
+        paddingHorizontal: 14,
+        paddingVertical: 12,
+      }}
+    >
+      <View>
+        <IconTile icon={look.icon} size={40} tone={look.tone} />
+        {/* Unread: a dot on the tile's corner, ringed in the card so it reads as sitting on it. */}
+        <View
+          pointerEvents="none"
+          style={{
+            position: 'absolute',
+            top: -3,
+            right: -3,
+            padding: 2,
+            borderRadius: radius.full,
+            backgroundColor: c.card,
+          }}
+        >
+          <Fade visible={unread}>
+            <Dot color={c.primary} size={8} />
+          </Fade>
+        </View>
       </View>
       <View style={{ flex: 1, minWidth: 0 }}>
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8, rowGap: 4 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 8 }}>
           <T
             variant="smallMedium"
-            style={{ fontFamily: unread ? fonts.semibold : fonts.medium, flexShrink: 1 }}
+            numberOfLines={1}
+            style={{ flex: 1, fontFamily: unread ? fonts.semibold : fonts.medium }}
           >
             {n.title}
           </T>
-          <Badge
-            label={CATEGORY_LABEL[n.category] ?? n.category}
-            tone={n.priority === 'critical' ? 'warning' : 'muted'}
-          />
+          <T
+            variant="caption"
+            accessibilityLabel={timeAgo(n.createdAt)}
+            style={{ fontVariant: ['tabular-nums'], color: unread ? c.primary : c.mutedForeground }}
+          >
+            {shortAgo(n.createdAt)}
+          </T>
         </View>
-        <T variant="small" tone="muted" style={{ marginTop: 2 }}>
+        <T
+          variant="small"
+          numberOfLines={2}
+          style={{ marginTop: 1, color: unread ? c.foreground : c.mutedForeground }}
+        >
           {n.body}
         </T>
-        <T variant="caption" tone="muted" style={{ marginTop: 4 }}>
-          {timeAgo(n.createdAt)}
-          {note && ` · ${note}`}
-        </T>
+        {note && (
+          <T variant="caption" tone="muted" style={{ marginTop: 3 }}>
+            {note}
+          </T>
+        )}
       </View>
     </View>
   );
@@ -84,7 +137,7 @@ function Row({ n, onOpen }: { n: NotificationDto; onOpen: (n: NotificationDto) =
   return (
     <Press
       accessibilityRole="button"
-      accessibilityLabel={`${n.title}. ${n.body}`}
+      accessibilityLabel={`${n.title}. ${n.body}. ${timeAgo(n.createdAt)}`}
       testID="notification"
       onPress={() => onOpen(n)}
       scale={0.99}
@@ -191,7 +244,7 @@ export function AlertsScreen() {
           </Animated.View>
         ) : undefined
       }
-      contentStyle={{ paddingHorizontal: 20, gap: 20 }}
+      contentStyle={{ paddingHorizontal: 16, gap: 18 }}
     >
       {(error || state.error) && <Notice>{error ?? state.error}</Notice>}
       {state.status === 'loading' && <Skeleton height={160} round={18} />}
@@ -227,7 +280,7 @@ export function AlertsScreen() {
           <Card style={{ overflow: 'hidden' }}>
             {section.items.map((n, i) => (
               <Animated.View key={n.id} entering={arriving(n.id, row++)} layout={layout}>
-                {i > 0 && <Divider />}
+                {i > 0 && <Divider inset={66} />}
                 <Row n={n} onOpen={open} />
               </Animated.View>
             ))}

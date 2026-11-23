@@ -104,7 +104,18 @@ export function TabBar({ state, emitter, navigateToTab }: TabBarProps) {
                   </View>
                 )}
                 {badge > 0 && (
-                  <View style={{ position: 'absolute', top: -2, left: '50%', marginLeft: 6 }}>
+                  // On the icon's top-right corner, with a ring of the bar so it reads as sitting on it.
+                  <View
+                    pointerEvents="none"
+                    style={{
+                      position: 'absolute',
+                      top: 1,
+                      left: 12,
+                      padding: 2,
+                      borderRadius: 11,
+                      backgroundColor: c.bar,
+                    }}
+                  >
                     <CountBubble count={badge} />
                   </View>
                 )}
@@ -135,9 +146,16 @@ function TabIcon({ icon: Icon, focused }: { icon: LucideIcon; focused: boolean }
     lift.set(withTiming(focused ? 1 : 0, { duration: dur.quick, easing: ease.out }));
   }, [focused, lift]);
   const style = useAnimatedStyle(() => ({ transform: [{ scale: 1 + 0.06 * lift.value }] }));
+  // Duotone: the outline in one tone, the inside in a soft wash of the same tone.
+  const tone = focused ? c.primary : c.mutedForeground;
   return (
     <Animated.View style={style}>
-      <Icon size={21} color={focused ? c.primary : c.mutedForeground} strokeWidth={focused ? 2.3 : 2} />
+      <Icon
+        size={21}
+        color={tone}
+        fill={alpha(tone, focused ? 0.24 : 0.14)}
+        strokeWidth={focused ? 2.3 : 2}
+      />
     </Animated.View>
   );
 }

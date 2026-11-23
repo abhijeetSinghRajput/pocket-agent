@@ -267,6 +267,7 @@ export function NewChatSheet({ open, onClose }: { open: boolean; onClose: () => 
                     value={effort}
                     onChange={(v) => setEffort(v as TurnEffort | '')}
                     compact
+                    strong
                     label="Effort"
                   />
                 </Group>

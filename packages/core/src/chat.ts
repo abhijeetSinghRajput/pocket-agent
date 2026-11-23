@@ -4,6 +4,26 @@ import { AttachmentRefs, type AttachmentRef } from '@pocket-agent/protocol';
 type P = Record<string, unknown>;
 const str = (v: unknown) => (typeof v === 'string' ? v : '');
 
+/** Context the editor or Claude Code adds to a prompt; the person never typed it. */
+const INJECTED =
+  /<(ide_opened_file|ide_selection|ide_diagnostics|system-reminder|local-command-caveat|local-command-stdout|local-command-stderr|command-message)>[\s\S]*?<\/\1>/g;
+/** Prompts that are entirely an automatic event (a background task finishing), not the person. */
+const AUTOMATIC = /^\s*<(task-notification|bash-notification)>[\s\S]*<\/\1>\s*$/;
+
+/**
+ * What the person actually wrote in a prompt: injected context removed, a slash command shown as
+ * typed (`/model opus`). Null when nothing of theirs is left (an automatic notification).
+ */
+export function cleanPrompt(text: string): string | null {
+  if (AUTOMATIC.test(text)) return null;
+  const command = /<command-name>([\s\S]*?)<\/command-name>/.exec(text);
+  if (command) {
+    const args = /<command-args>([\s\S]*?)<\/command-args>/.exec(text)?.[1]?.trim();
+    return [command[1]!.trim(), args].filter(Boolean).join(' ');
+  }
+  return text.replace(INJECTED, '').trim();
+}
+
 /** The single most useful field of a summarised tool input. */
 export function toolTarget(input: unknown): string {
   try {
@@ -158,16 +178,21 @@ export function buildChat(events: AgentEventDto[], commands: CommandDto[] = []):
   const tools = new Map<string, Extract<ChatItem, { kind: 'tool' }>>();
   const permissions = new Map<string, Extract<ChatItem, { kind: 'permission' }>>();
   const userItems: Extract<ChatItem, { kind: 'user' }>[] = [];
+  let started = false;
+  let ended = false;
 
   for (const e of sorted) {
     const p = e.payload;
     const at = e.createdAt;
     switch (e.eventType) {
       case 'agent.output': {
-        const text = str(p['text']);
         if (p['role'] === 'user') {
           const files = AttachmentRefs.safeParse(p['attachments']);
           const attachments = files.success && files.data.length ? files.data : undefined;
+          const cleaned = cleanPrompt(str(p['text']));
+          // Only editor context or an automatic notice: nothing the person said.
+          if (cleaned === null || (!cleaned && !attachments)) break;
+          const text = cleaned;
           // The PC uploads files attached in the editor a moment after the prompt: they belong to it.
           const previous = userItems.at(-1);
           if (!text && attachments && previous && Date.parse(at) - Date.parse(previous.at) < 10 * 60_000) {
@@ -183,7 +208,10 @@ export function buildChat(events: AgentEventDto[], commands: CommandDto[] = []):
           };
           userItems.push(item);
           items.push(item);
-        } else if (p['role'] === 'assistant') {
+          break;
+        }
+        const text = str(p['text']);
+        if (p['role'] === 'assistant') {
           if (text.trim()) items.push({ kind: 'assistant', key: e.id, at, text });
         } else if (THOUGHT.test(text)) {
           items.push({ kind: 'thought', key: e.id, at, text });
@@ -249,15 +277,22 @@ export function buildChat(events: AgentEventDto[], commands: CommandDto[] = []):
         break;
       }
       case 'agent.session.started':
+        // Each message sent from the phone to an editor session runs as its own Claude process on
+        // the PC, and each reports a start. The conversation goes on: mark only its beginning, and
+        // a real comeback after it ended.
+        if (started && !ended) break;
         items.push({
           kind: 'notice',
           key: e.id,
           at,
-          text: p['startSource'] === 'resume' ? 'Session resumed' : 'Session started',
+          text: started || p['startSource'] === 'resume' ? 'Session resumed' : 'Session started',
           tone: 'muted',
         });
+        started = true;
+        ended = false;
         break;
       case 'agent.session.ended':
+        ended = true;
         items.push({
           kind: 'notice',
           key: e.id,

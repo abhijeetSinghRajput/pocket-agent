@@ -1,4 +1,9 @@
-import { AttachmentLinkResponse, fileExtension, isPreviewable, type AttachmentRef } from '@pocket-agent/protocol';
+import {
+  AttachmentLinkResponse,
+  fileExtension,
+  isPreviewable,
+  type AttachmentRef,
+} from '@pocket-agent/protocol';
 import { Image } from 'expo-image';
 import * as WebBrowser from 'expo-web-browser';
 import { FileText, ImageOff, X } from 'lucide-react-native';
@@ -6,6 +11,7 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 import {
   GestureDetector,
+  GestureHandlerRootView,
   useExclusiveGestures,
   usePanGesture,
   usePinchGesture,
@@ -42,7 +48,9 @@ export async function attachmentLink(id: string): Promise<string> {
 /** Opens the original file in the system browser (PDF viewer, download…). */
 export async function openAttachment(id: string): Promise<void> {
   const url = await attachmentLink(id);
-  await WebBrowser.openBrowserAsync(url, { presentationStyle: WebBrowser.WebBrowserPresentationStyle.PAGE_SHEET });
+  await WebBrowser.openBrowserAsync(url, {
+    presentationStyle: WebBrowser.WebBrowserPresentationStyle.PAGE_SHEET,
+  });
 }
 
 const WHITE = '#ffffff';
@@ -166,7 +174,11 @@ function SentFile({ file, single, fg }: { file: AttachmentRef; single: boolean; 
             contentFit="cover"
             transition={{ duration: dur.enter, effect: 'cross-dissolve' }}
             onError={() => setBroken(true)}
-            style={single ? { width: '100%', height: 224, backgroundColor: WHITE } : { aspectRatio: 1, backgroundColor: WHITE }}
+            style={
+              single
+                ? { width: '100%', height: 224, backgroundColor: WHITE }
+                : { aspectRatio: 1, backgroundColor: WHITE }
+            }
             accessibilityIgnoresInvertColors
           />
         )}
@@ -195,16 +207,17 @@ function SentFile({ file, single, fg }: { file: AttachmentRef; single: boolean; 
           <Animated.View
             entering={enter.fade}
             exiting={exit.fade}
-            style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0, 0, 0, 0.4)', alignItems: 'center', justifyContent: 'center' }]}
+            style={[
+              StyleSheet.absoluteFill,
+              { backgroundColor: 'rgba(0, 0, 0, 0.4)', alignItems: 'center', justifyContent: 'center' },
+            ]}
           >
             <ActivityIndicator size="small" color={WHITE} />
           </Animated.View>
         )}
       </Press>
       {errorText}
-      {image && (
-        <ImageViewer file={file} open={viewing} onClose={() => setViewing(false)} />
-      )}
+      {image && <ImageViewer file={file} open={viewing} onClose={() => setViewing(false)} />}
     </View>
   );
 }
@@ -214,10 +227,7 @@ export function SentAttachments({ files, color }: { files: AttachmentRef[]; colo
   const { c } = useTheme();
   if (!files.length) return null;
   return (
-    <View
-      testID="attachments"
-      style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 6 }}
-    >
+    <View testID="attachments" style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 6 }}>
       {files.map((f) => (
         <SentFile key={f.id} file={f} single={files.length === 1} fg={color ?? c.bubbleOutForeground} />
       ))}
@@ -342,68 +352,97 @@ function ImageViewer({ file, open, onClose }: { file: AttachmentRef; open: boole
   const bottom = insets.bottom + 16;
   const source = full ? { uri: full } : thumbSource(file.id);
   return (
-    <Modal transparent visible statusBarTranslucent navigationBarTranslucent animationType="none" onRequestClose={close}>
-      <Animated.View
-        testID="image-viewer"
-        style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0, 0, 0, 0.92)' }, backdrop]}
-      >
-        <Pressable style={StyleSheet.absoluteFill} accessibilityLabel="Close" onPress={close} />
-        <GestureDetector gesture={gesture}>
-          <Animated.View
-            style={[
-              { position: 'absolute', left: 16, right: 16, top, bottom, alignItems: 'center', justifyContent: 'center' },
-              picture,
-            ]}
-          >
-            <Image
-              source={source}
-              placeholder={full ? thumbSource(file.id) : undefined}
-              placeholderContentFit="contain"
-              contentFit="contain"
-              transition={{ duration: dur.enter, effect: 'cross-dissolve' }}
-              style={{ width: width - 32, height: height - top - bottom, borderRadius: radius.md }}
-              accessibilityLabel={file.name}
-              accessibilityIgnoresInvertColors
-            />
-          </Animated.View>
-        </GestureDetector>
-        <View
-          pointerEvents="box-none"
-          style={{
-            position: 'absolute',
-            top: insets.top + 8,
-            left: 16,
-            right: 8,
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: 8,
-          }}
+    <Modal
+      transparent
+      visible
+      statusBarTranslucent
+      navigationBarTranslucent
+      animationType="none"
+      onRequestClose={close}
+    >
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <Animated.View
+          testID="image-viewer"
+          style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0, 0, 0, 0.92)' }, backdrop]}
         >
-          <T variant="smallMedium" style={{ color: WHITE, flex: 1 }} numberOfLines={1}>
-            {file.name}
-          </T>
-          <Press
-            accessibilityRole="button"
-            accessibilityLabel="Close"
-            onPress={close}
-            scale={0.9}
-            hitSlop={6}
-            style={{ width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' }}
+          <Pressable style={StyleSheet.absoluteFill} accessibilityLabel="Close" onPress={close} />
+          <GestureDetector gesture={gesture}>
+            <Animated.View
+              style={[
+                {
+                  position: 'absolute',
+                  left: 16,
+                  right: 16,
+                  top,
+                  bottom,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                },
+                picture,
+              ]}
+            >
+              <Image
+                source={source}
+                placeholder={full ? thumbSource(file.id) : undefined}
+                placeholderContentFit="contain"
+                contentFit="contain"
+                transition={{ duration: dur.enter, effect: 'cross-dissolve' }}
+                style={{ width: width - 32, height: height - top - bottom, borderRadius: radius.md }}
+                accessibilityLabel={file.name}
+                accessibilityIgnoresInvertColors
+              />
+            </Animated.View>
+          </GestureDetector>
+          <View
+            pointerEvents="box-none"
+            style={{
+              position: 'absolute',
+              top: insets.top + 8,
+              left: 16,
+              right: 8,
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 8,
+            }}
           >
-            <X size={22} color={WHITE} strokeWidth={2} />
-          </Press>
-        </View>
-        {error && (
-          <Animated.View
-            entering={enter.rise()}
-            style={{ position: 'absolute', left: 24, right: 24, bottom: insets.bottom + 24, alignItems: 'center' }}
-          >
-            <T variant="small" center style={{ color: WHITE, opacity: 0.85 }} accessibilityRole="alert">
-              {error}
+            <T variant="smallMedium" style={{ color: WHITE, flex: 1 }} numberOfLines={1}>
+              {file.name}
             </T>
-          </Animated.View>
-        )}
-      </Animated.View>
+            <Press
+              accessibilityRole="button"
+              accessibilityLabel="Close"
+              onPress={close}
+              scale={0.9}
+              hitSlop={6}
+              style={{
+                width: 44,
+                height: 44,
+                borderRadius: 22,
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <X size={22} color={WHITE} strokeWidth={2} />
+            </Press>
+          </View>
+          {error && (
+            <Animated.View
+              entering={enter.rise()}
+              style={{
+                position: 'absolute',
+                left: 24,
+                right: 24,
+                bottom: insets.bottom + 24,
+                alignItems: 'center',
+              }}
+            >
+              <T variant="small" center style={{ color: WHITE, opacity: 0.85 }} accessibilityRole="alert">
+                {error}
+              </T>
+            </Animated.View>
+          )}
+        </Animated.View>
+      </GestureHandlerRootView>
     </Modal>
   );
 }

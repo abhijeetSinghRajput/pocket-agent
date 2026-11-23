@@ -18,6 +18,8 @@ import { Card, Dot, Press, T, tap, toneColor, type Tone } from '@/ui/core';
 import { Roll, Skeleton } from '@/ui/feedback';
 
 const POLL_MS = 15_000;
+/** A check shows as running for at least this long, so the button doesn't flicker. */
+const MIN_CHECK_MS = 600;
 
 export type HealthResult =
   { kind: 'ok' | 'degraded'; health: HealthResponse } | { kind: 'unreachable'; error: string };
@@ -127,7 +129,12 @@ export function ApiStatus() {
     controller.current = ctl;
     setChecking(true);
     try {
-      setResult(await fetchHealth(ctl.signal));
+      const [next] = await Promise.all([
+        fetchHealth(ctl.signal),
+        new Promise((r) => setTimeout(r, MIN_CHECK_MS)),
+      ]);
+      if (ctl.signal.aborted) return;
+      setResult(next);
       setCheckedAt(Date.now());
     } catch {
       /* aborted by a newer check */

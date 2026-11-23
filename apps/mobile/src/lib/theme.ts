@@ -1,4 +1,5 @@
 import { useColorScheme } from 'react-native';
+import { useThemePreference } from '@/lib/appearance';
 
 /**
  * Design tokens, the same ones as the web app (apps/web/src/app/globals.css) converted to sRGB:
@@ -94,8 +95,15 @@ export interface Theme {
   c: Colors;
 }
 
+/**
+ * The colours to draw with. A light/dark choice made in the app is read from its own store, so
+ * every screen switches in the same render (the system appearance event arrives late and one
+ * component at a time); "System" follows the phone.
+ */
 export function useTheme(): Theme {
-  const isDark = useColorScheme() === 'dark';
+  const pref = useThemePreference();
+  const system = useColorScheme();
+  const isDark = pref === 'system' ? system === 'dark' : pref === 'dark';
   return { dark: isDark, c: isDark ? dark : light };
 }
 

@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { BackHandler, Modal, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
-import { GestureDetector, usePanGesture } from 'react-native-gesture-handler';
+import { GestureDetector, GestureHandlerRootView, usePanGesture } from 'react-native-gesture-handler';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -91,7 +91,8 @@ export function Sheet({
       animationType="none"
       onRequestClose={onClose}
     >
-      <View style={{ flex: 1, justifyContent: 'flex-end' }}>
+      {/* A Modal is its own window on Android: gestures inside it need their own root. */}
+      <GestureHandlerRootView style={{ flex: 1, justifyContent: 'flex-end' }}>
         <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: c.overlay }, backdrop]}>
           <Pressable
             style={{ flex: 1 }}
@@ -100,38 +101,41 @@ export function Sheet({
           />
         </Animated.View>
         <KeyboardAvoidingView behavior="padding">
-          <GestureDetector gesture={pan}>
-            <Animated.View
-              accessibilityViewIsModal
-              style={[
-                {
-                  backgroundColor: c.popover,
-                  borderTopLeftRadius: radius.xxl,
-                  borderTopRightRadius: radius.xxl,
-                  paddingBottom: insets.bottom + 16,
-                  maxHeight: height - insets.top - 24,
-                },
-                panel,
-              ]}
-            >
-              <View style={{ alignItems: 'center', paddingTop: 10, paddingBottom: 6 }}>
-                <View style={{ width: 40, height: 4.5, borderRadius: 3, backgroundColor: c.border }} />
-              </View>
-              {(title || description) && (
-                <View style={{ paddingHorizontal: 20, paddingTop: 8, paddingBottom: 12, gap: 4 }}>
-                  {title && <T variant="heading">{title}</T>}
-                  {description && (
-                    <T variant="small" tone="muted">
-                      {description}
-                    </T>
-                  )}
+          <Animated.View
+            accessibilityViewIsModal
+            style={[
+              {
+                backgroundColor: c.popover,
+                borderTopLeftRadius: radius.xxl,
+                borderTopRightRadius: radius.xxl,
+                paddingBottom: insets.bottom + 16,
+                maxHeight: height - insets.top - 24,
+              },
+              panel,
+            ]}
+          >
+            {/* Drag down from the handle or the title; the content below scrolls on its own. */}
+            <GestureDetector gesture={pan}>
+              <View collapsable={false}>
+                <View style={{ alignItems: 'center', paddingTop: 10, paddingBottom: 6 }}>
+                  <View style={{ width: 40, height: 4.5, borderRadius: 3, backgroundColor: c.border }} />
                 </View>
-              )}
-              <View style={{ paddingHorizontal: 20 }}>{children}</View>
-            </Animated.View>
-          </GestureDetector>
+                {(title || description) && (
+                  <View style={{ paddingHorizontal: 20, paddingTop: 8, paddingBottom: 12, gap: 4 }}>
+                    {title && <T variant="heading">{title}</T>}
+                    {description && (
+                      <T variant="small" tone="muted">
+                        {description}
+                      </T>
+                    )}
+                  </View>
+                )}
+              </View>
+            </GestureDetector>
+            <View style={{ paddingHorizontal: 20 }}>{children}</View>
+          </Animated.View>
         </KeyboardAvoidingView>
-      </View>
+      </GestureHandlerRootView>
     </Modal>
   );
 }

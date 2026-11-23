@@ -4,6 +4,7 @@ import { useEffect, type ReactNode } from 'react';
 import {
   ActivityIndicator,
   Image,
+  Platform,
   Pressable,
   StyleSheet,
   Text as RNText,
@@ -101,6 +102,7 @@ export function Press({
   scale = 0.97,
   haptic = true,
   dim = true,
+  ripple,
   onPress,
   disabled,
   ...rest
@@ -109,18 +111,28 @@ export function Press({
   style?: StyleProp<ViewStyle>;
   scale?: number;
   haptic?: boolean;
-  /** Also fade a little while pressed. */
+  /** Also fade a little while pressed (iOS; Android shows its ripple instead). */
   dim?: boolean;
+  /** The Android ripple's colour (a light one on filled buttons), or false for none. */
+  ripple?: string | false;
 }) {
+  const { c } = useTheme();
+  const android = Platform.OS === 'android';
+  const fade = dim && !android;
   const pressed = useSharedValue(0);
   const animated = useAnimatedStyle(() => ({
     transform: [{ scale: 1 - (1 - scale) * pressed.value }],
-    opacity: dim ? 1 - 0.14 * pressed.value : 1,
+    opacity: fade ? 1 - 0.14 * pressed.value : 1,
   }));
+  // The ripple is drawn inside the shape: a rounded button keeps its corners.
+  const rounded = android && ripple !== false && StyleSheet.flatten(style)?.borderRadius !== undefined;
   return (
     <AnimatedPressable
       {...rest}
       disabled={disabled}
+      android_ripple={
+        ripple === false ? undefined : { color: ripple ?? alpha(c.foreground, 0.12), foreground: true }
+      }
       onPressIn={(e) => {
         pressed.set(withSpring(1, pressSpring));
         rest.onPressIn?.(e);
@@ -133,7 +145,7 @@ export function Press({
         if (haptic) tap();
         onPress?.(e);
       }}
-      style={[style, animated, disabled && { opacity: 0.45 }]}
+      style={[style, rounded && { overflow: 'hidden' }, animated, disabled && { opacity: 0.45 }]}
     >
       {children}
     </AnimatedPressable>
@@ -187,11 +199,13 @@ export function Button({
     success: { bg: c.success, fg: '#ffffff' },
   };
   const v = look[variant];
+  const filled = variant === 'primary' || variant === 'destructive' || variant === 'success';
   return (
     <Press
       accessibilityRole="button"
       accessibilityLabel={label}
       accessibilityState={{ disabled: !!disabled || !!loading, busy: !!loading }}
+      ripple={filled ? 'rgba(255, 255, 255, 0.24)' : undefined}
       testID={testID}
       onPress={onPress}
       disabled={disabled || loading}

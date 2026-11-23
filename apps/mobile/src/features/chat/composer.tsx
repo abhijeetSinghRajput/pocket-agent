@@ -109,6 +109,10 @@ export const END_TEXT = (s: AgentSessionDto) =>
  * One button: Send when there is something to send; Stop while Claude works. The two icons share
  * the spot and one turns into the other; it breathes while a request is in flight.
  */
+/** Send and attach share one size and shape. */
+const SEND_SIZE = 36;
+const SEND_RADIUS = radius.lg - 2;
+
 function SendButton({
   stopMode,
   disabled,
@@ -160,10 +164,11 @@ function SendButton({
         haptic={false}
         dim={false}
         scale={0.92}
+        ripple="rgba(255, 255, 255, 0.24)"
         style={{
-          width: 36,
-          height: 36,
-          borderRadius: radius.lg - 2,
+          width: SEND_SIZE,
+          height: SEND_SIZE,
+          borderRadius: SEND_RADIUS,
           backgroundColor: c.primary,
           alignItems: 'center',
           justifyContent: 'center',
@@ -451,15 +456,27 @@ export function Composer({
         >
           {/* Files can't be sent with the message that continues an ended session. */}
           {!locked && !resuming && (
-            <IconButton
-              icon={Plus}
-              label="Attach files"
-              size={32}
-              tone="muted"
+            // The same size and shape as Send, in the quiet colour.
+            <Press
+              accessibilityRole="button"
+              accessibilityLabel="Attach files"
+              testID="attach-button"
               disabled={drafts.length >= ATTACHMENT_MAX_PER_MESSAGE}
               onPress={() => setAttachOpen(true)}
-              testID="attach-button"
-            />
+              scale={0.92}
+              hitSlop={4}
+              style={{
+                width: SEND_SIZE,
+                height: SEND_SIZE,
+                borderRadius: SEND_RADIUS,
+                backgroundColor: c.secondary,
+                alignItems: 'center',
+                justifyContent: 'center',
+                marginRight: 4,
+              }}
+            >
+              <Plus size={21} color={c.secondaryForeground} strokeWidth={2.2} />
+            </Press>
           )}
           {!locked && (
             <>

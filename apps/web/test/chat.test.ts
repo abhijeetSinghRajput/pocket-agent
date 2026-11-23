@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { answerText } from '@/components/approvals/approval-card';
 import { typeOver } from '@/components/agents/chat-messages';
 import { resetLabel } from '@/components/claude-usage';
-import { buildChat, isQueued } from '@/lib/chat';
+import { buildChat, cleanPrompt, isQueued } from '@/lib/chat';
 import { chatListTime, dayLabel, daysAgo, recentSections } from '@/lib/format';
 import { openChatId } from '@/lib/nav';
 
@@ -219,6 +219,70 @@ describe('buildChat', () => {
 
   it('drops empty assistant messages', () => {
     expect(buildChat([ev(1, 'agent.output', { role: 'assistant', text: '  ' })])).toEqual([]);
+  });
+
+  it('shows only what the person wrote: editor context removed, automatic notices left out', () => {
+    const items = buildChat([
+      ev(1, 'agent.output', {
+        role: 'user',
+        text: '<ide_opened_file>The user opened the file Untitled-1 in the IDE.</ide_opened_file>\nlogin ho gya',
+      }),
+      ev(2, 'agent.output', {
+        role: 'user',
+        text: '<task-notification>\n<task-id>b039d35sb</task-id>\n<status>failed</status>\n</task-notification>',
+      }),
+      ev(3, 'agent.output', {
+        role: 'user',
+        text: '<ide_selection>const a = 1;</ide_selection>',
+      }),
+    ]);
+    expect(items.map((i) => i.kind === 'user' && i.text)).toEqual(['login ho gya']);
+  });
+});
+
+describe('session start notices', () => {
+  const notices = (items: ReturnType<typeof buildChat>) =>
+    items.filter((i) => i.kind === 'notice').map((i) => i.kind === 'notice' && i.text);
+
+  it('marks the start once, though every message from the phone starts its own process', () => {
+    const items = buildChat([
+      ev(1, 'agent.session.started', { startSource: 'startup' }),
+      ev(2, 'agent.output', { role: 'user', text: 'hi' }),
+      ev(3, 'agent.session.started', { startSource: 'startup' }),
+      ev(4, 'agent.output', { role: 'user', text: 'ack' }),
+      ev(5, 'agent.session.started', { startSource: 'resume' }),
+    ]);
+    expect(notices(items)).toEqual(['Session started']);
+  });
+
+  it('says resumed when the session comes back after it ended', () => {
+    const items = buildChat([
+      ev(1, 'agent.session.started', {}),
+      ev(2, 'agent.session.ended', { reason: 'other' }),
+      ev(3, 'agent.session.started', {}),
+    ]);
+    expect(notices(items)).toEqual(['Session started', 'Session ended (other)', 'Session resumed']);
+  });
+});
+
+describe('cleanPrompt', () => {
+  it('shows a slash command the way it was typed', () => {
+    expect(
+      cleanPrompt(
+        '<command-name>/model</command-name>\n<command-message>model</command-message>\n<command-args>opus</command-args>',
+      ),
+    ).toBe('/model opus');
+    expect(cleanPrompt('<command-name>/clear</command-name><command-args></command-args>')).toBe('/clear');
+  });
+
+  it('removes system reminders and keeps the rest untouched', () => {
+    expect(cleanPrompt('<system-reminder>be brief</system-reminder>Fix the <b>bold</b> bug')).toBe(
+      'Fix the <b>bold</b> bug',
+    );
+  });
+
+  it('treats a prompt that is only a background-task notice as not written by the person', () => {
+    expect(cleanPrompt('<task-notification><status>completed</status></task-notification>')).toBeNull();
   });
 });
 

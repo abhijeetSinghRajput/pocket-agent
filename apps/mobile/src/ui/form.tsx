@@ -150,6 +150,7 @@ export function Segmented<V extends string>({
   value,
   onChange,
   compact,
+  strong,
   disabled,
   label,
   testID,
@@ -159,6 +160,8 @@ export function Segmented<V extends string>({
   onChange: (next: V) => void;
   /** Smaller text, for many short choices in one row. */
   compact?: boolean;
+  /** The choice filled with the accent, on a clearer track (on sheets, where the plain one fades). */
+  strong?: boolean;
   disabled?: boolean;
   label?: string;
   testID?: string;
@@ -184,9 +187,11 @@ export function Segmented<V extends string>({
       testID={testID}
       style={{
         flexDirection: 'row',
-        backgroundColor: c.muted,
+        backgroundColor: strong ? c.background : c.muted,
         borderRadius: radius.lg,
-        padding: 3,
+        borderWidth: strong ? 1 : 0,
+        borderColor: c.border,
+        padding: strong ? 2 : 3,
         height: 40,
         opacity: disabled ? 0.5 : 1,
       }}
@@ -201,7 +206,7 @@ export function Segmented<V extends string>({
               width: seg,
               height: 34,
               borderRadius: radius.md + 1,
-              backgroundColor: c.card,
+              backgroundColor: strong ? c.primary : c.card,
               shadowColor: '#000',
               shadowOpacity: 0.08,
               shadowRadius: 3,
@@ -231,7 +236,11 @@ export function Segmented<V extends string>({
               variant={compact ? 'captionMedium' : 'smallMedium'}
               tone={selected ? 'default' : 'muted'}
               numberOfLines={1}
-              style={compact ? { fontSize: 11.5 } : undefined}
+              style={[
+                compact && { fontSize: 11.5 },
+                strong && { color: selected ? c.primaryForeground : c.foreground },
+                strong && selected && { fontFamily: fonts.semibold },
+              ]}
             >
               {o.label}
             </T>

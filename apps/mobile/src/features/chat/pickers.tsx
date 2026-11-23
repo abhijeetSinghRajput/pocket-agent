@@ -172,11 +172,11 @@ function Label({ children }: { children: ReactNode }) {
 }
 
 /** The sheet's body: scrolls when the phone is short, never taller than it should be. */
-function Body({ children }: { children: ReactNode }) {
+function Body({ children, ratio = 0.62 }: { children: ReactNode; ratio?: number }) {
   const { height } = useWindowDimensions();
   return (
     <ScrollView
-      style={{ maxHeight: height * 0.62 }}
+      style={{ maxHeight: height * ratio }}
       showsVerticalScrollIndicator={false}
       keyboardShouldPersistTaps="handled"
       contentContainerStyle={{ paddingBottom: 4 }}
@@ -273,6 +273,7 @@ function EffortSlider({
         value={value}
         onChange={onChange}
         compact
+        strong
         disabled={disabled}
         label="Effort"
         testID="effort-slider"
@@ -320,7 +321,7 @@ export function ModelPicker({
         title="Select a model"
         description={locked ?? 'Model and effort for your next message'}
       >
-        <Body>
+        <Body ratio={0.5}>
           {locked && (
             <View style={{ paddingBottom: 10 }}>
               <Notice tone="muted">{locked}</Notice>
@@ -347,12 +348,15 @@ export function ModelPicker({
               onPress={() => choose(m.id)}
             />
           ))}
-          <View style={{ marginVertical: 10 }}>
-            <Divider />
-          </View>
-          <Label>Effort</Label>
-          <EffortSlider value={effort} onChange={onEffort} disabled={!!locked} />
         </Body>
+        {/* Effort stays in view under the models, however long that list is. */}
+        <View style={{ marginTop: 6, paddingTop: 10 }}>
+          <Divider />
+          <View style={{ paddingTop: 10 }}>
+            <Label>Effort</Label>
+            <EffortSlider value={effort} onChange={onEffort} disabled={!!locked} />
+          </View>
+        </View>
       </Sheet>
     </>
   );

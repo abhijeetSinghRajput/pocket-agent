@@ -35,6 +35,9 @@ export function InAppToasts() {
         const n = notifications.find((x) => x.id === id);
         // Already on that page (e.g. the chat that finished): it's in front of you.
         if (!n || n.readAt || (n.link && n.link === where.current)) return;
+        // A permission request or question is already on screen while the app is open: in its
+        // chat, as the pop-up sheet anywhere else, listed on Approvals. A toast would repeat it.
+        if (n.category === 'permission_required') return;
         setToasts((t) => [n, ...t.filter((x) => x.id !== n.id)].slice(0, MAX));
         setTimeout(() => dismiss(n.id), SHOW_MS);
       })

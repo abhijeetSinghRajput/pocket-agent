@@ -359,10 +359,13 @@ export function AgentDetail({ id }: { id: string }) {
           </div>
         </div>
       )}
-      {/* Hidden, not removed, while a sheet is up: the typed message and picked files stay. */}
+      {/*
+        Hidden, not removed, while a sheet is up: the typed message and picked files stay.
+        No hard edge above it: the conversation fades out into the background as it reaches the box.
+      */}
       <div
         hidden={!!question || permissions.length > 0}
-        className="shrink-0 border-t bg-background/95 px-3 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur-md sm:px-6"
+        className="relative shrink-0 bg-background px-3 pt-1 pb-[calc(0.75rem+env(safe-area-inset-bottom))] before:pointer-events-none before:absolute before:inset-x-0 before:bottom-full before:h-10 before:bg-linear-to-t before:from-background before:to-transparent sm:px-6"
       >
         <div className="mx-auto flex max-w-3xl flex-col gap-3">
           <Composer session={s} onSent={changed} onInfo={() => setInfoOpen(true)} />

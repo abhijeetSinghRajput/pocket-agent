@@ -9,7 +9,7 @@ import {
   type ChatItem,
 } from '@pocket-agent/core';
 import type { CommandDto, CommandStatus } from '@pocket-agent/protocol';
-import { FlashList, type FlashListRef, type ListRenderItemInfo } from '@shopify/flash-list';
+import * as Clipboard from 'expo-clipboard';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
   ArrowDown,
@@ -17,16 +17,31 @@ import {
   CheckCheck,
   CircleAlert,
   Clock,
+  Copy as CopyIcon,
   Laptop,
   MessageCircleQuestion,
   ShieldAlert,
   Smartphone,
   type LucideIcon,
 } from 'lucide-react-native';
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ComponentRef,
+  type ReactNode,
+} from 'react';
+import {
+  FlatList,
+  Modal,
+  Pressable,
   ScrollView,
   StyleSheet,
+  useWindowDimensions,
+  type ListRenderItemInfo,
   Text,
   View,
   type NativeScrollEvent,
@@ -35,6 +50,7 @@ import {
 } from 'react-native';
 import Animated, {
   Easing,
+  FadeInUp,
   interpolateColor,
   useAnimatedStyle,
   useReducedMotion,
@@ -43,12 +59,15 @@ import Animated, {
   withTiming,
   type SharedValue,
 } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Path, Svg } from 'react-native-svg';
 import { Markdown } from '@/features/chat/markdown';
 import { SentAttachments } from '@/features/chat/sent-attachments';
-import { enter, exit, layout } from '@/lib/motion';
+import { dur, ease, enter, exit, STAGGER } from '@/lib/motion';
 import { alpha, fonts, radius, useTheme, type Colors } from '@/lib/theme';
-import { Divider, Dot, Press, T } from '@/ui/core';
+import { CopyButton } from '@/ui/copy-button';
+import { Divider, Dot, Press, T, thud } from '@/ui/core';
+import { useToast } from '@/ui/toast';
 
 type Of<K extends ChatItem['kind']> = Extract<ChatItem, { kind: K }>;
 
@@ -73,8 +92,97 @@ const TICK: Record<CommandStatus, { Icon: LucideIcon; color: (c: Colors) => stri
 const FOLD_CHARS = 700;
 const FOLD_LINES = 12;
 
+/** Where a long-pressed bubble is on screen, to place its menu next to it. */
+interface Anchor {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+const MENU_HEIGHT = 48;
+
+/**
+ * The menu a long-pressed message opens, like a messenger's: just above the bubble (below it when
+ * there is no room), lined up with its right edge. A tap anywhere else closes it.
+ */
+function BubbleMenu({ anchor, text, onClose }: { anchor: Anchor | null; text: string; onClose: () => void }) {
+  const { c, dark } = useTheme();
+  const toast = useToast();
+  const { width } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  if (!anchor) return null;
+  const above = anchor.y - MENU_HEIGHT - 8 > insets.top + 8;
+  const top = above ? anchor.y - MENU_HEIGHT - 8 : anchor.y + anchor.height + 8;
+  const right = Math.max(12, width - (anchor.x + anchor.width));
+  const copy = () => {
+    onClose();
+    void Clipboard.setStringAsync(text)
+      .then(() => toast({ title: 'Message copied', tone: 'success', key: 'copied' }))
+      .catch(() => undefined);
+  };
+  return (
+    <Modal
+      transparent
+      visible
+      statusBarTranslucent
+      navigationBarTranslucent
+      animationType="none"
+      onRequestClose={onClose}
+    >
+      <Pressable style={StyleSheet.absoluteFill} accessibilityLabel="Close menu" onPress={onClose} />
+      <Animated.View
+        entering={enter.pop}
+        accessibilityRole="menu"
+        style={{
+          position: 'absolute',
+          top,
+          right,
+          minWidth: 148,
+          borderRadius: radius.lg,
+          backgroundColor: c.popover,
+          borderWidth: dark ? 0 : StyleSheet.hairlineWidth,
+          borderColor: c.border,
+          shadowColor: '#000',
+          shadowOpacity: 0.22,
+          shadowRadius: 16,
+          shadowOffset: { width: 0, height: 6 },
+          elevation: 10,
+          overflow: 'hidden',
+        }}
+      >
+        <Press
+          accessibilityRole="menuitem"
+          testID="copy-message"
+          onPress={copy}
+          scale={1}
+          haptic={false}
+          style={{
+            height: MENU_HEIGHT,
+            paddingHorizontal: 16,
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 12,
+          }}
+        >
+          <CopyIcon size={18} color={c.foreground} strokeWidth={2} />
+          <T variant="bodyMedium">Copy</T>
+        </Press>
+      </Animated.View>
+    </Modal>
+  );
+}
+
 function UserMessage({ item }: { item: Of<'user'> }) {
   const { c } = useTheme();
+  const bubble = useRef<ComponentRef<typeof View>>(null);
+  const [menu, setMenu] = useState<Anchor | null>(null);
+  const openMenu = () => {
+    bubble.current?.measureInWindow((x, y, width, height) => {
+      thud();
+      setMenu({ x, y, width, height });
+    });
+  };
   const cmd = item.command;
   const tick = cmd ? TICK[cmd.status] : null;
   const err = cmd ? commandError(cmd) : null;
@@ -111,8 +219,14 @@ function UserMessage({ item }: { item: Of<'user'> }) {
           </Animated.View>
         )}
       </View>
-      <Animated.View
-        layout={layout}
+      {/* Long-press for the message's menu (Copy). */}
+      <Pressable
+        ref={bubble}
+        onLongPress={openMenu}
+        delayLongPress={350}
+        accessibilityHint="Long-press for options"
+        accessibilityActions={[{ name: 'longpress', label: 'Show options' }]}
+        onAccessibilityAction={openMenu}
         style={{
           maxWidth: '88%',
           backgroundColor: c.bubbleOut,
@@ -124,7 +238,6 @@ function UserMessage({ item }: { item: Of<'user'> }) {
       >
         {item.attachments && <SentAttachments files={item.attachments} />}
         <Text
-          selectable
           numberOfLines={long && !open ? FOLD_LINES : undefined}
           style={{
             fontFamily: fonts.regular,
@@ -155,7 +268,8 @@ function UserMessage({ item }: { item: Of<'user'> }) {
             </T>
           </Press>
         )}
-      </Animated.View>
+      </Pressable>
+      <BubbleMenu anchor={menu} text={item.text} onClose={() => setMenu(null)} />
       {err && (
         <Animated.View entering={enter.fade}>
           <T variant="caption" tone="danger" style={{ fontSize: 11, textAlign: 'right' }}>
@@ -267,6 +381,12 @@ function AssistantMessage({ item, ...join }: { item: Of<'assistant'> } & Join) {
         <View accessibilityLabel="Claude:">
           <Markdown text={item.text} />
         </View>
+        {/* As in the editor: the reply that ends a turn can be copied whole. */}
+        {!join.joinBelow && (
+          <View style={{ flexDirection: 'row', marginTop: 4, marginLeft: -8 }}>
+            <CopyButton value={item.text} label="Copy response" size={32} testID="copy-response" />
+          </View>
+        )}
       </View>
     </Step>
   );
@@ -329,7 +449,7 @@ function ToolStep({ item, ...join }: { item: Of<'tool'> } & Join) {
         )}
       </View>
       {block && (
-        <Animated.View layout={layout} style={{ marginTop: 4 }}>
+        <View style={{ marginTop: 4 }}>
           <Press
             accessibilityRole="button"
             accessibilityState={more ? { expanded: open } : undefined}
@@ -384,7 +504,7 @@ function ToolStep({ item, ...join }: { item: Of<'tool'> } & Join) {
               </View>
             )}
           </Press>
-        </Animated.View>
+        </View>
       )}
     </Step>
   );
@@ -920,15 +1040,18 @@ function RowContent({ row }: { row: Row }) {
   }
 }
 
-/**
- * One row of the list. The inner view is keyed by the row, so a recycled cell starts fresh (its
- * fold state, its tick) and a row that arrived after the first render rises into place.
- */
+/** A row that arrives while the chat is open rises into place (the list is inverted: up is -y). */
+const arrive = (index: number) =>
+  FadeInUp.duration(dur.enter + 40)
+    .easing(ease.out)
+    .delay(Math.min(index, 8) * STAGGER)
+    .withInitialValues({ opacity: 0, transform: [{ translateY: -12 }] });
+
+/** One row of the list; a row that arrived after the first render rises into place. */
 const ListRow = memo(function ListRow({ row, fresh }: { row: Row; fresh: number | undefined }) {
   return (
     <Animated.View
-      key={row.key}
-      entering={fresh === undefined ? undefined : enter.rise(fresh)}
+      entering={fresh === undefined ? undefined : arrive(fresh)}
       style={{ paddingHorizontal: PAD, paddingBottom: row.type === 'item' && isQueued(row.item) ? 12 : GAP }}
     >
       <RowContent row={row} />
@@ -936,28 +1059,32 @@ const ListRow = memo(function ListRow({ row, fresh }: { row: Row; fresh: number 
   );
 });
 
-const rowType = (row: Row) => (row.type === 'item' ? row.item.kind : row.type);
 const rowKey = (row: Row) => row.key;
 const NEAR_BOTTOM = 80;
 
 /**
- * The scrolling conversation. Sticks to the bottom while you are there (new messages scroll into
- * view); scrolled up, it stays put and offers a jump back. Loading older messages keeps your place.
+ * The scrolling conversation, as a messenger draws it: an inverted list, so it opens on the newest
+ * message and rows lay out in place (no measuring pass that shuffles them). At the bottom, new
+ * messages come into view; scrolled up, it stays put and offers a jump back.
  */
 export function ChatMessages({
   items,
   typing,
   header,
   footer,
+  bottomInset = 0,
 }: {
   items: ChatItem[];
   typing: 'working' | 'starting' | null;
   header?: ReactNode;
   footer?: ReactNode;
+  /** Room left under the last message (what floats over the list: the message box). */
+  bottomInset?: number;
 }) {
   const { c, dark } = useTheme();
-  const rows = useMemo(() => buildRows(items, typing), [items, typing]);
-  const list = useRef<FlashListRef<Row>>(null);
+  // Newest first: the inverted list draws index 0 at the bottom.
+  const rows = useMemo(() => buildRows(items, typing).reverse(), [items, typing]);
+  const list = useRef<FlatList<Row>>(null);
   const atBottom = useRef(true);
   const [away, setAway] = useState(false);
 
@@ -973,7 +1100,8 @@ export function ChatMessages({
   if (unseen.length) {
     const nextSeen = new Set(seen);
     const nextFresh = new Map(fresh);
-    unseen.forEach((r, i) => {
+    // Oldest of the new ones first, so a group arrives in reading order.
+    [...unseen].reverse().forEach((r, i) => {
       nextSeen.add(r.key);
       if (settled) nextFresh.set(r.key, i);
     });
@@ -981,70 +1109,70 @@ export function ChatMessages({
     setFresh(nextFresh);
   }
   useEffect(() => {
-    // Once a new row has risen in, forget it: a recycled copy later must not rise again.
     if (!fresh.size) return;
     const t = setTimeout(() => setFresh(new Map()), 1500);
     return () => clearTimeout(t);
   }, [fresh]);
 
   const onScroll = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
-    const near = contentSize.height - contentOffset.y - layoutMeasurement.height < NEAR_BOTTOM;
+    // Inverted: offset 0 is the newest message.
+    const near = e.nativeEvent.contentOffset.y < NEAR_BOTTOM;
     if (near !== atBottom.current) {
       atBottom.current = near;
       setAway(!near);
     }
   }, []);
 
-  const toBottom = () => list.current?.scrollToEnd({ animated: true });
+  const toBottom = () => list.current?.scrollToOffset({ offset: 0, animated: true });
 
   const renderItem = useCallback(
-    ({ item, extraData }: ListRenderItemInfo<Row>) => (
-      <ListRow row={item} fresh={(extraData as ReadonlyMap<string, number> | undefined)?.get(item.key)} />
-    ),
-    [],
+    ({ item }: ListRenderItemInfo<Row>) => <ListRow row={item} fresh={fresh.get(item.key)} />,
+    [fresh],
   );
 
   return (
     <View style={{ flex: 1, minHeight: 0 }}>
-      <FlashList
+      <FlatList
         ref={list}
+        inverted
         testID="timeline"
         accessibilityLabel="Conversation"
         data={rows}
         extraData={fresh}
         renderItem={renderItem}
         keyExtractor={rowKey}
-        getItemType={rowType}
-        maintainVisibleContentPosition={{
-          startRenderingFromBottom: true,
-          autoscrollToBottomThreshold: 0.2,
-          animateAutoScrollToBottom: true,
-        }}
+        // Scrolled up, new messages don't move what you are reading; at the bottom they come in.
+        maintainVisibleContentPosition={{ minIndexForVisible: 0, autoscrollToTopThreshold: NEAR_BOTTOM }}
+        initialNumToRender={14}
+        maxToRenderPerBatch={10}
+        windowSize={11}
         onScroll={onScroll}
         scrollEventThrottle={32}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="interactive"
         showsVerticalScrollIndicator={false}
+        // Inverted, the header sits under the newest message and the footer above the oldest.
         ListHeaderComponent={
+          <View style={{ paddingBottom: bottomInset }}>
+            {footer ? <View style={{ paddingHorizontal: PAD, paddingBottom: GAP }}>{footer}</View> : null}
+          </View>
+        }
+        ListFooterComponent={
           <View style={{ paddingHorizontal: PAD, paddingTop: PAD, paddingBottom: header ? GAP : 0 }}>
             {header}
           </View>
         }
         ListEmptyComponent={
-          <T variant="small" tone="muted" center style={{ paddingVertical: 40 }}>
+          <T variant="small" tone="muted" center style={{ paddingVertical: 40, transform: [{ scaleY: -1 }] }}>
             No messages yet.
           </T>
-        }
-        ListFooterComponent={
-          footer ? <View style={{ paddingHorizontal: PAD, paddingBottom: GAP }}>{footer}</View> : null
         }
       />
       {away && (
         <Animated.View
           entering={enter.pop}
           exiting={exit.fade}
-          style={{ position: 'absolute', right: PAD, bottom: 12 }}
+          style={{ position: 'absolute', right: PAD, bottom: bottomInset + 12 }}
         >
           <Press
             accessibilityRole="button"

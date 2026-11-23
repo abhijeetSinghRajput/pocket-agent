@@ -6,6 +6,7 @@ import { ArrowLeft } from 'lucide-react-native';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AppState, View } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
+import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { PermissionSheet } from '@/features/approvals/permission-sheet';
@@ -13,14 +14,17 @@ import { QuestionSheet } from '@/features/approvals/question-sheet';
 import { Composer, EndSessionButton } from '@/features/chat/composer';
 import { ChatMessages } from '@/features/chat/messages';
 import { SessionInfo } from '@/features/chat/session-info';
-import { SessionAvatar, SessionStatusBadge } from '@/features/sessions/badges';
+import { SessionAvatar } from '@/features/sessions/badges';
 import { markRead, useApprovals, useCommands, useEventFeed, useSession } from '@/lib/data';
 import { chatLink } from '@/lib/links';
 import { useLiveEvents, useLiveRefresh } from '@/lib/live';
 import { ease, enter } from '@/lib/motion';
-import { radius, useTheme } from '@/lib/theme';
+import { alpha, radius, useTheme } from '@/lib/theme';
 import { Button, IconButton, Press, T } from '@/ui/core';
 import { Roll, Skeleton } from '@/ui/feedback';
+
+/** How far above the message box the background starts fading in. */
+const FADE = 28;
 
 /** What the header says under the name, like a messenger's "online" / "typing…". */
 function presence(s: AgentSessionDto): { text: string; live: boolean } {
@@ -156,7 +160,6 @@ function Header({
             </T>
           </View>
         </View>
-        <SessionStatusBadge status={s.status} />
       </Press>
       <EndSessionButton session={s} onDone={onChange} />
     </View>
@@ -193,6 +196,8 @@ export function ChatScreen({ id }: { id: string }) {
   );
   const commands = useCommands(id);
   const [infoOpen, setInfoOpen] = useState(false);
+  // Height of what floats over the list's foot (the message box), so the last message clears it.
+  const [dock, setDock] = useState(0);
   useLiveRefresh(
     () => void feed.refreshHead(),
     (e) => e.sessionId === id || e.eventType === 'device.status.changed',
@@ -286,66 +291,93 @@ export function ChatScreen({ id }: { id: string }) {
         for the bottom inset, so that much of the keyboard's height is not added again.
       */}
       <KeyboardAvoidingView behavior="padding" keyboardVerticalOffset={-insets.bottom} style={{ flex: 1 }}>
-        {feed.status === 'loading' ? (
-          <FeedSkeleton />
-        ) : feed.status === 'error' ? (
-          <View style={{ flex: 1, padding: 24 }}>
-            <T variant="small" tone="danger" center accessibilityRole="alert">
-              {feed.error}
-            </T>
-          </View>
-        ) : (
-          <ChatMessages
-            items={
-              // The question being asked is shown below, not also in the conversation.
-              question ? items.filter((i) => !(i.kind === 'question' && i.state === 'running')) : items
-            }
-            typing={typingKind(s)}
-            header={
-              feed.hasMore ? (
-                <Button
-                  label={feed.loadingMore ? 'Loading…' : 'Load older messages'}
-                  variant="outline"
-                  size="sm"
-                  disabled={feed.loadingMore}
-                  onPress={() => void feed.loadMore()}
-                  style={{ alignSelf: 'center', borderRadius: radius.full, marginVertical: 8 }}
-                />
-              ) : undefined
-            }
-          />
-        )}
+        {/* The list and what floats over its foot; this view shrinks with the keyboard. */}
+        <View style={{ flex: 1 }}>
+          {feed.status === 'loading' ? (
+            <FeedSkeleton />
+          ) : feed.status === 'error' ? (
+            <View style={{ flex: 1, padding: 24 }}>
+              <T variant="small" tone="danger" center accessibilityRole="alert">
+                {feed.error}
+              </T>
+            </View>
+          ) : (
+            <ChatMessages
+              items={
+                // The question being asked is shown below, not also in the conversation.
+                question ? items.filter((i) => !(i.kind === 'question' && i.state === 'running')) : items
+              }
+              typing={typingKind(s)}
+              bottomInset={dock}
+              header={
+                feed.hasMore ? (
+                  <Button
+                    label={feed.loadingMore ? 'Loading…' : 'Load older messages'}
+                    variant="outline"
+                    size="sm"
+                    disabled={feed.loadingMore}
+                    onPress={() => void feed.loadMore()}
+                    style={{ alignSelf: 'center', borderRadius: radius.full, marginVertical: 8 }}
+                  />
+                ) : undefined
+              }
+            />
+          )}
 
-        {panel && (
-          // Claude is asking, or needs permission: that takes the message box's place until decided.
-          <Animated.View
-            key={question ? question.approval.id : permissions[0]!.id}
-            entering={FadeInDown.duration(360)
-              .easing(ease.out)
-              .withInitialValues({ opacity: 0, transform: [{ translateY: 24 }] })}
+          {/*
+          The message box (or Claude's question / permission request) floats over the end of the
+          conversation; above it the background fades in, so messages scroll under it and fade out.
+        */}
+          <View
+            pointerEvents="box-none"
+            onLayout={(e) => setDock(Math.round(e.nativeEvent.layout.height))}
+            style={{ position: 'absolute', left: 0, right: 0, bottom: 0 }}
           >
-            {question ? (
-              <QuestionSheet approval={question.approval} questions={question.questions} onDone={decided} />
-            ) : (
-              <PermissionSheet approval={permissions[0]!} more={permissions.length - 1} onDone={decided} />
+            {!panel && (
+              <LinearGradient
+                pointerEvents="none"
+                colors={[alpha(c.background, 0), alpha(c.background, 0.88), c.background]}
+                locations={[0, 0.4, 1]}
+                style={{ position: 'absolute', left: 0, right: 0, top: -FADE, bottom: 0 }}
+              />
             )}
-          </Animated.View>
-        )}
-        {/* Hidden, not removed, while a sheet is up: the typed message and picked files stay. */}
-        <Animated.View
-          entering={enter.fade}
-          style={{
-            display: panel ? 'none' : 'flex',
-            borderTopWidth: 1,
-            borderTopColor: c.border,
-            backgroundColor: c.background,
-            paddingHorizontal: 12,
-            paddingTop: 12,
-            paddingBottom: 12 + insets.bottom,
-          }}
-        >
-          <Composer session={s} onSent={changed} onInfo={() => setInfoOpen(true)} />
-        </Animated.View>
+            {panel && (
+              // Claude is asking, or needs permission: that takes the message box's place until decided.
+              <Animated.View
+                key={question ? question.approval.id : permissions[0]!.id}
+                entering={FadeInDown.duration(360)
+                  .easing(ease.out)
+                  .withInitialValues({ opacity: 0, transform: [{ translateY: 24 }] })}
+              >
+                {question ? (
+                  <QuestionSheet
+                    approval={question.approval}
+                    questions={question.questions}
+                    onDone={decided}
+                  />
+                ) : (
+                  <PermissionSheet
+                    approval={permissions[0]!}
+                    more={permissions.length - 1}
+                    onDone={decided}
+                  />
+                )}
+              </Animated.View>
+            )}
+            {/* Hidden, not removed, while a sheet is up: the typed message and picked files stay. */}
+            <Animated.View
+              entering={enter.fade}
+              style={{
+                display: panel ? 'none' : 'flex',
+                paddingHorizontal: 12,
+                paddingTop: 4,
+                paddingBottom: 12 + insets.bottom,
+              }}
+            >
+              <Composer session={s} onSent={changed} onInfo={() => setInfoOpen(true)} />
+            </Animated.View>
+          </View>
+        </View>
       </KeyboardAvoidingView>
     </View>
   );

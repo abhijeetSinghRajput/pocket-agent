@@ -32,6 +32,9 @@ export function InAppToasts() {
       .then(({ notifications }) => {
         const n = notifications.find((x) => x.id === id);
         if (!n || n.readAt || (n.link && pathForLink(n.link) === pathname)) return;
+        // A permission request or question is already on screen while the app is open: in its
+        // chat, as the pop-up sheet anywhere else, listed on Approvals. A toast would repeat it.
+        if (n.category === 'permission_required') return;
         toast({
           key: n.id,
           title: n.title,

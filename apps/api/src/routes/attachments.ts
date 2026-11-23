@@ -3,6 +3,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import {
   AttachmentError,
+  attachmentThumb,
   completeAttachment,
   discardAttachment,
   fileUrl,
@@ -119,11 +120,8 @@ export async function attachmentRoutes(app: FastifyInstance, ctx: AttachmentServ
   app.get('/attachments/:id/thumb', { preHandler: user }, async (req, reply) => {
     const p = IdParam.safeParse(req.params);
     if (!p.success) return reply.code(404).send({ error: 'not_found' });
-    const a = await ctx.prisma.attachment.findFirst({
-      where: { id: p.data.id, userId: req.user!.id, readyAt: { not: null } },
-      select: { thumb: true },
-    });
-    if (!a?.thumb) return reply.code(404).send({ error: 'not_found' });
+    const thumb = await attachmentThumb(ctx, req.user!.id, p.data.id);
+    if (!thumb) return reply.code(404).send({ error: 'not_found' });
     return (
       reply
         .header('content-type', 'image/jpeg')
@@ -131,7 +129,7 @@ export async function attachmentRoutes(app: FastifyInstance, ctx: AttachmentServ
         .header('x-content-type-options', 'nosniff')
         // Shown by the web app, which may be on another port/subdomain of the same site (never another site).
         .header('cross-origin-resource-policy', 'same-site')
-        .send(Buffer.from(a.thumb))
+        .send(thumb)
     );
   });
 

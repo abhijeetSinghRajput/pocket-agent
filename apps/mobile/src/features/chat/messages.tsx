@@ -70,7 +70,6 @@ import { dur, ease, enter, exit, STAGGER } from '@/lib/motion';
 import { alpha, fonts, radius, useTheme, type Colors } from '@/lib/theme';
 import { CopyButton } from '@/ui/copy-button';
 import { Divider, Dot, Press, T, thud } from '@/ui/core';
-import { useToast } from '@/ui/toast';
 
 type Of<K extends ChatItem['kind']> = Extract<ChatItem, { kind: K }>;
 
@@ -111,7 +110,6 @@ const MENU_HEIGHT = 48;
  */
 function BubbleMenu({ anchor, text, onClose }: { anchor: Anchor | null; text: string; onClose: () => void }) {
   const { c, dark } = useTheme();
-  const toast = useToast();
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   if (!anchor) return null;
@@ -120,9 +118,8 @@ function BubbleMenu({ anchor, text, onClose }: { anchor: Anchor | null; text: st
   const right = Math.max(12, width - (anchor.x + anchor.width));
   const copy = () => {
     onClose();
-    void Clipboard.setStringAsync(text)
-      .then(() => toast({ title: 'Message copied', tone: 'success', key: 'copied' }))
-      .catch(() => undefined);
+    // Android confirms a copy itself (its own "Copied" bubble), so no toast of ours.
+    void Clipboard.setStringAsync(text).catch(() => undefined);
   };
   return (
     <Modal
@@ -244,8 +241,8 @@ function UserMessage({ item }: { item: Of<'user'> }) {
           numberOfLines={long && !open ? FOLD_LINES : undefined}
           style={{
             fontFamily: fonts.regular,
-            fontSize: 14.5,
-            lineHeight: 21.5,
+            fontSize: 15.25,
+            lineHeight: 22.5,
             color: c.bubbleOutForeground,
           }}
         >
@@ -387,7 +384,7 @@ function AssistantMessage({ item, ...join }: { item: Of<'assistant'> } & Join) {
         {/* As in the editor: the reply that ends a turn can be copied whole. */}
         {!join.joinBelow && (
           <View style={{ flexDirection: 'row', marginTop: 4, marginLeft: -8 }}>
-            <CopyButton value={item.text} label="Copy response" size={32} testID="copy-response" />
+            <CopyButton value={item.text} label="Copy response" size={40} testID="copy-response" />
           </View>
         )}
       </View>

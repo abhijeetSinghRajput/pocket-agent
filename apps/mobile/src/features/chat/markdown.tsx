@@ -13,7 +13,8 @@ import { tap } from '@/ui/core';
  * not loaded: message text comes from the PC and should not make the phone fetch URLs.
  */
 
-const BODY: TextStyle = { fontFamily: fonts.regular, fontSize: 15, lineHeight: 23 };
+/** Reading size of a reply: a touch larger than UI text, like a chat app's. */
+const BODY: TextStyle = { fontFamily: fonts.regular, fontSize: 15.75, lineHeight: 24 };
 const GAP = 8;
 
 /** The running text colour (blockquotes read in the muted colour). */
@@ -73,7 +74,7 @@ function inline(tokens: Token[] | undefined, c: Colors, prefix: string): ReactNo
             key={key}
             style={{
               fontFamily: fonts.mono,
-              fontSize: 13,
+              fontSize: 13.5,
               backgroundColor: alpha(c.foreground, 0.07),
               borderRadius: 4,
             }}
@@ -133,9 +134,9 @@ function Para({ children, style }: { children: ReactNode; style?: TextStyle }) {
 }
 
 const HEADING: Record<number, TextStyle> = {
-  1: { fontFamily: fonts.semibold, fontSize: 17, lineHeight: 24 },
-  2: { fontFamily: fonts.semibold, fontSize: 16, lineHeight: 23 },
-  3: { fontFamily: fonts.semibold, fontSize: 15, lineHeight: 23 },
+  1: { fontFamily: fonts.semibold, fontSize: 18, lineHeight: 25 },
+  2: { fontFamily: fonts.semibold, fontSize: 17, lineHeight: 24 },
+  3: { fontFamily: fonts.semibold, fontSize: 15.75, lineHeight: 24 },
 };
 
 function Heading({ depth, children }: { depth: number; children: ReactNode }) {
@@ -225,8 +226,8 @@ function Table({ table }: { table: Tokens.Table }) {
           style={[
             BODY,
             {
-              fontSize: 13.5,
-              lineHeight: 20,
+              fontSize: 14,
+              lineHeight: 21,
               color: c.foreground,
               fontFamily: header ? fonts.semibold : fonts.regular,
               paddingHorizontal: 10,

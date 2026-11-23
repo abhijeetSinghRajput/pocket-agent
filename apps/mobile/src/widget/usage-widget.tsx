@@ -1,4 +1,4 @@
-import { FlexWidget, TextWidget, type ColorProp } from 'react-native-android-widget';
+import { FlexWidget, SvgWidget, TextWidget, type ColorProp } from 'react-native-android-widget';
 import type { WidgetUsage } from '@/widget/data';
 
 /**
@@ -35,6 +35,13 @@ const DARK: Palette = {
   danger: '#ed5350',
 };
 
+/** The click action of the refresh button (handled in task-handler). */
+export const REFRESH_ACTION = 'REFRESH';
+
+/** Lucide's rotate-cw, drawn in `color`. */
+const refreshSvg = (color: string) =>
+  `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>`;
+
 const SEMIBOLD = 'Geist_600SemiBold';
 const MEDIUM = 'Geist_500Medium';
 const REGULAR = 'Geist_400Regular';
@@ -66,7 +73,9 @@ function Meter({ label, percent, p }: { label: string; percent: number; p: Palet
           overflow: 'hidden',
         }}
       >
-        {value > 0 && <FlexWidget style={{ flex: value, height: 7, borderRadius: 4, backgroundColor: color }} />}
+        {value > 0 && (
+          <FlexWidget style={{ flex: value, height: 7, borderRadius: 4, backgroundColor: color }} />
+        )}
         {value < 100 && <FlexWidget style={{ flex: 100 - value, height: 7 }} />}
       </FlexWidget>
     </FlexWidget>
@@ -81,6 +90,38 @@ function resetText(iso: string | null, now: number): string | null {
   const time = d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
   if (d.toDateString() === new Date(now).toDateString()) return `Session resets at ${time}`;
   return `Session resets ${d.toLocaleDateString(undefined, { weekday: 'short' })} ${time}`;
+}
+
+/** The header: the widget's name, and the refresh button (a generous tap target). */
+function Header({ p, refreshing }: { p: Palette; refreshing: boolean }) {
+  return (
+    <FlexWidget
+      style={{
+        width: 'match_parent',
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+      }}
+    >
+      <TextWidget text="Claude usage" style={{ fontSize: 13, fontFamily: SEMIBOLD, color: p.primary }} />
+      <FlexWidget
+        clickAction={REFRESH_ACTION}
+        accessibilityLabel={refreshing ? 'Updating' : 'Refresh'}
+        style={{
+          width: 32,
+          height: 32,
+          borderRadius: 16,
+          marginTop: -8,
+          marginRight: -8,
+          justifyContent: 'center',
+          alignItems: 'center',
+          backgroundColor: refreshing ? p.track : '#00000000',
+        }}
+      >
+        <SvgWidget svg={refreshSvg(String(refreshing ? p.muted : p.fg))} style={{ width: 17, height: 17 }} />
+      </FlexWidget>
+    </FlexWidget>
+  );
 }
 
 function Frame({ p, children }: { p: Palette; children: React.ReactNode }) {
@@ -103,10 +144,20 @@ function Frame({ p, children }: { p: Palette; children: React.ReactNode }) {
   );
 }
 
-function Message({ p, title, body }: { p: Palette; title: string; body: string }) {
+function Message({
+  p,
+  title,
+  body,
+  refreshing,
+}: {
+  p: Palette;
+  title: string;
+  body: string;
+  refreshing: boolean;
+}) {
   return (
     <Frame p={p}>
-      <TextWidget text="Claude usage" style={{ fontSize: 13, fontFamily: SEMIBOLD, color: p.primary }} />
+      <Header p={p} refreshing={refreshing} />
       <FlexWidget style={{ width: 'match_parent', flexDirection: 'column' }}>
         <TextWidget text={title} style={{ fontSize: 15, fontFamily: SEMIBOLD, color: p.fg }} maxLines={1} />
         <TextWidget
@@ -119,16 +170,47 @@ function Message({ p, title, body }: { p: Palette; title: string; body: string }
   );
 }
 
-function Usage({ usage, p, now }: { usage: WidgetUsage; p: Palette; now: number }) {
+/** "Updated 3:42 PM" (today) or "Updated Fri 3:42 PM": when the PC last reported these numbers. */
+function updatedText(iso: string, now: number): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const time = d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  if (d.toDateString() === new Date(now).toDateString()) return `Updated ${time}`;
+  return `Updated ${d.toLocaleDateString(undefined, { weekday: 'short' })} ${time}`;
+}
+
+function Usage({
+  usage,
+  p,
+  now,
+  refreshing,
+}: {
+  usage: WidgetUsage;
+  p: Palette;
+  now: number;
+  refreshing: boolean;
+}) {
   if (usage.state === 'signed-out') {
-    return <Message p={p} title="Not signed in" body="Open Pocket Agent and sign in." />;
+    return (
+      <Message p={p} refreshing={refreshing} title="Not signed in" body="Open Pocket Agent and sign in." />
+    );
   }
   if (usage.state === 'none') {
-    return <Message p={p} title="No usage yet" body="It appears once your PC is connected and reports it." />;
+    return (
+      <Message
+        p={p}
+        refreshing={refreshing}
+        title="No usage yet"
+        body="It appears once your PC is connected and reports it."
+      />
+    );
   }
-  const footer = (usage.session ? resetText(usage.session.resetsAt, now) : null) ?? usage.deviceName;
+  const reset = (usage.session ? resetText(usage.session.resetsAt, now) : null) ?? usage.deviceName;
   return (
     <Frame p={p}>
+      <Header p={p} refreshing={refreshing} />
+      {usage.session && <Meter label="Session (5hr)" percent={usage.session.percent} p={p} />}
+      {usage.weekly && <Meter label="Weekly (7 day)" percent={usage.weekly.percent} p={p} />}
       <FlexWidget
         style={{
           width: 'match_parent',
@@ -137,30 +219,33 @@ function Usage({ usage, p, now }: { usage: WidgetUsage; p: Palette; now: number 
           alignItems: 'center',
         }}
       >
-        <TextWidget text="Claude usage" style={{ fontSize: 13, fontFamily: SEMIBOLD, color: p.primary }} />
         <TextWidget
-          text={usage.deviceName}
+          text={reset}
           style={{ fontSize: 11, fontFamily: REGULAR, color: p.muted }}
           maxLines={1}
           truncate="END"
         />
+        <TextWidget
+          text={refreshing ? 'Updating…' : updatedText(usage.updatedAt, now)}
+          style={{
+            fontSize: 11,
+            fontFamily: refreshing ? MEDIUM : REGULAR,
+            color: refreshing ? p.primary : p.muted,
+          }}
+          maxLines={1}
+        />
       </FlexWidget>
-      {usage.session && <Meter label="Session (5hr)" percent={usage.session.percent} p={p} />}
-      {usage.weekly && <Meter label="Weekly (7 day)" percent={usage.weekly.percent} p={p} />}
-      <TextWidget
-        text={footer}
-        style={{ fontSize: 11, fontFamily: REGULAR, color: p.muted }}
-        maxLines={1}
-        truncate="END"
-      />
     </Frame>
   );
 }
 
-/** Light and dark versions; Android shows the one that matches the system theme. */
-export function usageWidget(usage: WidgetUsage, now = Date.now()) {
+/**
+ * Light and dark versions; Android shows the one that matches the system theme. `refreshing` draws
+ * the moment between a tap on refresh and the new numbers.
+ */
+export function usageWidget(usage: WidgetUsage, now = Date.now(), refreshing = false) {
   return {
-    light: <Usage usage={usage} p={LIGHT} now={now} />,
-    dark: <Usage usage={usage} p={DARK} now={now} />,
+    light: <Usage usage={usage} p={LIGHT} now={now} refreshing={refreshing} />,
+    dark: <Usage usage={usage} p={DARK} now={now} refreshing={refreshing} />,
   };
 }

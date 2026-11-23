@@ -42,7 +42,21 @@ const config: ExpoConfig = {
       { backgroundColor: '#0a0a0b', image: './assets/images/splash-icon.png', imageWidth: 96 },
     ],
     'expo-secure-store',
-    ['expo-build-properties', { android: { usesCleartextTraffic: allowHttp } }],
+    [
+      'expo-build-properties',
+      {
+        android: {
+          usesCleartextTraffic: allowHttp,
+          // Release builds are shrunk by R8. The home-screen widget is driven by Android (receiver,
+          // WorkManager job, headless JS service) and names itself by its class name, so its code
+          // must stay as it is.
+          extraProguardRules: [
+            '-keep class com.reactnativeandroidwidget.** { *; }',
+            '-keep class com.mrcodium.pocketagent.widget.** { *; }',
+          ].join('\n'),
+        },
+      },
+    ],
     // Push: the server sends through Firebase; Android needs google-services.json next to this
     // file (Firebase console → project settings → the Android app). Without it the app still
     // works, only the phone's own notifications are off.
@@ -77,6 +91,8 @@ const config: ExpoConfig = {
             targetCellHeight: 2,
             resizeMode: 'horizontal|vertical',
             updatePeriodMillis: 30 * 60 * 1000,
+            // What the widget picker shows: a picture of the widget.
+            previewImage: './assets/images/widget-preview.png',
           },
         ],
       },

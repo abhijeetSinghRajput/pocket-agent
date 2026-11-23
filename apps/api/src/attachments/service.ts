@@ -69,7 +69,10 @@ export async function signAttachment(ctx: AttachmentServices, owner: Owner, inpu
   return { attachment: toRef(a), ...storage.signUpload(publicId, as) };
 }
 
-/** Confirms the upload with storage (signature, real size and type), then keeps a small preview. */
+/**
+ * Confirms the upload with storage (signature, real size and type). The preview is made after
+ * answering, so the phone isn't kept waiting for it (the thumb route makes it if asked first).
+ */
 export async function completeAttachment(
   ctx: AttachmentServices,
   owner: Owner,
@@ -93,12 +96,37 @@ export async function completeAttachment(
     await ctx.prisma.attachment.delete({ where: { id: a.id } });
     throw new AttachmentError('too_large', 'That file is too large or not a supported type.');
   }
-  const thumb = as === 'image' ? await storage.thumbnail(a.publicId, a.mime).catch(() => null) : null;
   const ready = await ctx.prisma.attachment.update({
     where: { id: a.id },
-    data: { readyAt: ctx.now(), size: info.bytes, thumb: thumb ? new Uint8Array(thumb) : null },
+    data: { readyAt: ctx.now(), size: info.bytes },
   });
+  if (as === 'image') void attachmentThumb(ctx, a.userId, a.id).catch(() => undefined);
   return toRef(ready);
+}
+
+/**
+ * The small preview kept in our database, made on first need (right after the upload, or when it
+ * is first shown). It stays after the file itself was removed. Null if there is none to show.
+ */
+export async function attachmentThumb(
+  ctx: AttachmentServices,
+  userId: string,
+  id: string,
+): Promise<Buffer | null> {
+  const a = await ctx.prisma.attachment.findFirst({
+    where: { id, userId, readyAt: { not: null } },
+    select: { thumb: true, publicId: true, mime: true, removedAt: true },
+  });
+  if (!a) return null;
+  if (a.thumb) return Buffer.from(a.thumb);
+  if (a.removedAt || storedAs(a.mime) !== 'image' || !ctx.storage) return null;
+  const thumb = await ctx.storage.thumbnail(a.publicId, a.mime).catch(() => null);
+  if (!thumb) return null;
+  await ctx.prisma.attachment.updateMany({
+    where: { id, thumb: null },
+    data: { thumb: new Uint8Array(thumb) },
+  });
+  return thumb;
 }
 
 /** The user's attachments with these ids, all uploaded and still stored; undefined if any is not. */

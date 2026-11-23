@@ -10,7 +10,8 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://pocket-agent-api.onrender.com"
+        "EXPO_PUBLIC_API_URL": "https://pocket-agent-api.onrender.com",
+        "GOOGLE_SERVICES_JSON": "./google-services.json"
       }
     },
     "production": {
@@ -19,7 +20,8 @@
         "buildType": "app-bundle"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://pocket-agent-api.onrender.com"
+        "EXPO_PUBLIC_API_URL": "https://pocket-agent-api.onrender.com",
+        "GOOGLE_SERVICES_JSON": "./google-services.json"
       }
     },
     "development": {

@@ -47,6 +47,8 @@ const config: ExpoConfig = {
     // file (Firebase console → project settings → the Android app). Without it the app still
     // works, only the phone's own notifications are off.
     ['expo-notifications', { icon: './assets/images/notification-icon.png', color: BRAND }],
+    // "Continue with Google" (uses the Firebase project's OAuth clients from google-services.json).
+    '@react-native-google-signin/google-signin',
     // Attaching photos to a message (the chat's + button).
     [
       'expo-image-picker',

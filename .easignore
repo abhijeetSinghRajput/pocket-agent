@@ -23,3 +23,9 @@ apps/mobile/ios/
 *firebase-adminsdk*.json
 *service-account*.json
 skills-lock.json
+
+# App signing key (apps/mobile)
+apps/mobile/credentials.json
+apps/mobile/credentials/
+*.jks
+*.keystore

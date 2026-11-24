@@ -10,7 +10,8 @@ import { Spinner } from '@/ui/core';
 /**
  * Nothing in the app works without a PC, so an account with no connected PC (none paired, or only
  * revoked ones) sees the setup screen on every route, and can't skip it. Once a PC is paired the app
- * opens as usual (an offline PC still counts: it is set up, just not running right now).
+ * opens as usual (an offline PC still counts: it is set up, just not running right now). Removing
+ * the last PC while the app is open brings the setup screen back.
  */
 export function AppGate({ children }: { children: ReactNode }) {
   const { c } = useTheme();
@@ -19,11 +20,11 @@ export function AppGate({ children }: { children: ReactNode }) {
   // Decided once, when the device list first arrives, so the "connected" screen stays up after the
   // new PC appears in the list (until the user continues).
   const [decision, setDecision] = useState<'onboard' | 'app' | null>(null);
-  if (decision === null && state.status !== 'loading') {
-    // If the list can't be loaded, don't lock the user out: the app shows its own errors.
-    const needs = state.status === 'ready' && !state.data.some((d) => d.status !== 'Revoked');
-    setDecision(needs ? 'onboard' : 'app');
-  }
+  // If the list can't be loaded, don't lock the user out: the app shows its own errors.
+  const noPc = state.status === 'ready' && !state.data.some((d) => d.status !== 'Revoked');
+  if (decision === null && state.status !== 'loading') setDecision(noPc ? 'onboard' : 'app');
+  // The last PC was revoked while the app was open: back to setup.
+  if (decision === 'app' && noPc) setDecision('onboard');
 
   if (decision === null) {
     return (
@@ -41,8 +42,9 @@ export function AppGate({ children }: { children: ReactNode }) {
       <Animated.View key="onboarding" entering={enter.fade} exiting={exit.fade} style={{ flex: 1 }}>
         <Onboarding
           knownDeviceIds={(state.data ?? []).map((d) => d.id)}
-          onDone={() => {
-            void refresh();
+          onDone={async () => {
+            // The new PC must be in the shared list first, or the app would bounce back here.
+            await refresh();
             setDecision('app');
           }}
         />

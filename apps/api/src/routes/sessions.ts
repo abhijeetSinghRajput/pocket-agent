@@ -1,5 +1,6 @@
 import {
   AgentStatus,
+  OrganizeSessionRequest,
   SessionCapabilities,
   type AgentEventDto,
   type AgentSessionDto,
@@ -9,8 +10,8 @@ import {
 import { buildWorkers, WORKER_TOOL_NAMES } from '@pocket-agent/core';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { requireUser } from '../auth/session.js';
-import type { AppContext } from '../context.js';
+import { requireTrustedOrigin, requireUser } from '../auth/session.js';
+import { limit, type AppContext } from '../context.js';
 import type { AgentEvent, AgentSession, Device, Prisma } from '../generated/prisma/client.js';
 
 const IdParam = z.object({ id: z.uuid() });
@@ -50,6 +51,8 @@ export function toSessionDto(s: AgentSession & { device: Pick<Device, 'name'> })
     startedAt: s.startedAt.toISOString(),
     lastActivityAt: s.lastActivityAt.toISOString(),
     endedAt: s.endedAt?.toISOString() ?? null,
+    pinned: !!s.pinnedAt,
+    archived: !!s.archivedAt,
   };
 }
 
@@ -121,6 +124,33 @@ export async function sessionRoutes(app: FastifyInstance, ctx: AppContext): Prom
     });
     return { sessions: sessions.map(toSessionDto) };
   });
+
+  // Pin a chat to the top of the list, or archive it out of the list (archiving unpins it).
+  app.post(
+    '/sessions/:id/organize',
+    { preHandler: [requireTrustedOrigin(ctx), user], config: limit(ctx, 60) },
+    async (req, reply) => {
+      const p = IdParam.safeParse(req.params);
+      if (!p.success) return reply.code(404).send({ error: 'not_found' });
+      const body = OrganizeSessionRequest.safeParse(req.body ?? {});
+      if (!body.success)
+        return reply.code(400).send({ error: 'invalid_request', message: 'Pin or archive?' });
+      const s = await ctx.prisma.agentSession.findFirst({ where: { id: p.data.id, ...owned(req.user!.id) } });
+      if (!s) return reply.code(404).send({ error: 'not_found' });
+      const now = ctx.now();
+      const { pinned, archived } = body.data;
+      const updated = await ctx.prisma.agentSession.update({
+        where: { id: s.id },
+        data: {
+          ...(pinned !== undefined ? { pinnedAt: pinned ? now : null } : {}),
+          ...(archived !== undefined ? { archivedAt: archived ? now : null } : {}),
+          ...(archived ? { pinnedAt: null } : {}),
+        },
+        include: { device: { select: { name: true } } },
+      });
+      return { session: toSessionDto(updated) };
+    },
+  );
 
   app.get('/sessions/:id', { preHandler: user }, async (req, reply) => {
     const p = IdParam.safeParse(req.params);

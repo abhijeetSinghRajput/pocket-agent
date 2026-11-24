@@ -1310,8 +1310,12 @@ function same(a: unknown, b: unknown): boolean {
 }
 
 /** One row of the list; a row that arrived after the first render rises into place. */
+/** A search in the chat: the rows that match, and the one being shown. */
+type Hit = 'current' | 'match' | undefined;
+
 const ListRow = memo(
-  function ListRow({ row, fresh }: { row: Row; fresh: number | undefined }) {
+  function ListRow({ row, fresh, hit }: { row: Row; fresh: number | undefined; hit: Hit }) {
+    const { c } = useTheme();
     return (
       <Animated.View
         entering={fresh === undefined ? undefined : arrive(fresh)}
@@ -1320,11 +1324,27 @@ const ListRow = memo(
           paddingBottom: row.type === 'item' && isQueued(row.item) ? 12 : GAP,
         }}
       >
-        <RowContent row={row} />
+        {hit ? (
+          // A search match: tinted behind it, the one being shown more.
+          <View
+            testID={hit === 'current' ? 'search-current' : 'search-match'}
+            style={{
+              marginHorizontal: -8,
+              paddingHorizontal: 8,
+              paddingVertical: 4,
+              borderRadius: radius.lg,
+              backgroundColor: alpha(c.primary, hit === 'current' ? 0.16 : 0.06),
+            }}
+          >
+            <RowContent row={row} />
+          </View>
+        ) : (
+          <RowContent row={row} />
+        )}
       </Animated.View>
     );
   },
-  (a, b) => a.fresh === b.fresh && same(a.row, b.row),
+  (a, b) => a.fresh === b.fresh && a.hit === b.hit && same(a.row, b.row),
 );
 
 const rowKey = (row: Row) => row.key;
@@ -1342,6 +1362,7 @@ export function ChatMessages({
   footer,
   bottomInset = 0,
   jumpKey = 0,
+  search,
 }: {
   items: ChatItem[];
   typing: TypingKind | null;
@@ -1351,6 +1372,8 @@ export function ChatMessages({
   bottomInset?: number;
   /** Changes when the user sends a message: the list goes back to the newest message. */
   jumpKey?: number;
+  /** Searching in the chat: the matching items' keys, and the one to show (scrolled to). */
+  search?: { matches: ReadonlySet<string>; current: string | null };
 }) {
   const { c, dark } = useTheme();
   // Newest first: the inverted list draws index 0 at the bottom.
@@ -1407,9 +1430,34 @@ export function ChatMessages({
     if (Date.now() < following.current) list.current?.scrollToOffset({ offset: 0, animated: true });
   }, [rows]);
 
+  // Searching: the match being shown is brought to the middle of the screen.
+  const current = search?.current ?? null;
+  useEffect(() => {
+    if (!current) return;
+    const index = rows.findIndex((r) => r.key === current);
+    if (index >= 0) list.current?.scrollToIndex({ index, viewPosition: 0.5, animated: true });
+    // Only when the match changes, not as rows arrive.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [current]);
+  const onScrollToIndexFailed = useCallback((info: { index: number; averageItemLength: number }) => {
+    // Not laid out yet: go near it, then try again once it is.
+    list.current?.scrollToOffset({ offset: info.averageItemLength * info.index, animated: false });
+    setTimeout(
+      () => list.current?.scrollToIndex({ index: info.index, viewPosition: 0.5, animated: true }),
+      120,
+    );
+  }, []);
+
+  const matches = search?.matches;
   const renderItem = useCallback(
-    ({ item }: ListRenderItemInfo<Row>) => <ListRow row={item} fresh={fresh.get(item.key)} />,
-    [fresh],
+    ({ item }: ListRenderItemInfo<Row>) => (
+      <ListRow
+        row={item}
+        fresh={fresh.get(item.key)}
+        hit={item.key === current ? 'current' : matches?.has(item.key) ? 'match' : undefined}
+      />
+    ),
+    [fresh, current, matches],
   );
 
   return (
@@ -1420,7 +1468,8 @@ export function ChatMessages({
         testID="timeline"
         accessibilityLabel="Conversation"
         data={rows}
-        extraData={fresh}
+        extraData={[fresh, current, matches]}
+        onScrollToIndexFailed={onScrollToIndexFailed}
         renderItem={renderItem}
         keyExtractor={rowKey}
         // Scrolled up, new messages don't move what you are reading; at the bottom they come in.

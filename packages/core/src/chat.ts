@@ -478,3 +478,37 @@ export function summaryParts(s: Extract<ChatItem, { kind: 'summary' }>): string[
     ...(s.failed ? [`${s.failed} failed`] : []),
   ];
 }
+
+/** What a chat item says, for searching inside the chat (the words shown for it). */
+function searchableText(i: ChatItem): string {
+  switch (i.kind) {
+    case 'user':
+    case 'assistant':
+    case 'thought':
+    case 'notice':
+      return i.text;
+    case 'tool':
+      return `${i.toolName} ${i.target} ${i.output}`;
+    case 'permission':
+      return `${i.toolName} ${i.target}`;
+    case 'question':
+      return [
+        ...i.questions.flatMap((q) => [q.question, ...q.options.map((o) => o.label)]),
+        ...Object.values(i.answers),
+      ].join(' ');
+    case 'summary':
+      return i.files.join(' ');
+    case 'control':
+      return '';
+  }
+}
+
+/**
+ * Search inside a chat: the keys of the items whose words contain the query (case aside), oldest
+ * first. Fewer than 2 characters finds nothing.
+ */
+export function chatMatches(items: readonly ChatItem[], query: string): string[] {
+  const q = query.trim().toLowerCase();
+  if (q.length < 2) return [];
+  return items.filter((i) => searchableText(i).toLowerCase().includes(q)).map((i) => i.key);
+}

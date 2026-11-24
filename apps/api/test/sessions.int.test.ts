@@ -297,3 +297,37 @@ describe('retention', () => {
     s.agent.ws.close();
   });
 });
+
+describe('pinning and archiving chats', () => {
+  const organize = (id: string, cookie: string, body: object) =>
+    t.app.inject({
+      method: 'POST',
+      url: `/sessions/${id}/organize`,
+      headers: browser(cookie),
+      payload: body,
+    });
+
+  it('pins and archives (archiving unpins); only the owner can', async () => {
+    const s = await setup();
+    const ext = sid();
+    await s.agent.send(sessionStarted(ext));
+    const id = (await dbSession(s.deviceId, ext)).id;
+
+    const pinned = await organize(id, s.cookie, { pinned: true });
+    expect(pinned.statusCode).toBe(200);
+    expect(SessionResponse.parse(pinned.json()).session).toMatchObject({ pinned: true, archived: false });
+
+    const archived = SessionResponse.parse((await organize(id, s.cookie, { archived: true })).json());
+    expect(archived.session).toMatchObject({ pinned: false, archived: true });
+    const list = SessionListResponse.parse((await get('/sessions?scope=all', s.cookie)).json());
+    expect(list.sessions.find((x) => x.id === id)).toMatchObject({ archived: true });
+
+    const back = SessionResponse.parse((await organize(id, s.cookie, { archived: false })).json());
+    expect(back.session.archived).toBe(false);
+
+    const other = await createUserWithSession(t.ctx);
+    users.push(other.user.id);
+    expect((await organize(id, other.cookie, { pinned: true })).statusCode).toBe(404);
+    expect((await organize(id, s.cookie, {})).statusCode).toBe(400);
+  });
+});

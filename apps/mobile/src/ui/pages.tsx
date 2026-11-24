@@ -4,6 +4,7 @@ import { GestureDetector, usePanGesture } from 'react-native-gesture-handler';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { scheduleOnRN } from 'react-native-worklets';
 import { settleSpring } from '@/lib/motion';
+import { tap } from '@/ui/core';
 
 /**
  * A screen's tabs as pages side by side: swipe between them, or pick one with the tab control
@@ -33,7 +34,11 @@ export function SwipePages<T extends string>({
     x.set(withSpring(-index * width, settleSpring));
   }, [index, width, x, page]);
 
-  const choose = (to: number) => onChange(pages[to]!);
+  // Turned by a swipe: the same tick as tapping a tab.
+  const choose = (to: number) => {
+    tap();
+    onChange(pages[to]!);
+  };
   const pan = usePanGesture({
     activeOffsetX: [-16, 16],
     failOffsetY: [-12, 12],

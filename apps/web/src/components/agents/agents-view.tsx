@@ -1,7 +1,7 @@
 'use client';
 
 import { SessionListResponse, type AgentSessionDto } from '@pocket-agent/protocol';
-import { MessagesSquare, Plus, Search, X } from 'lucide-react';
+import { MessagesSquare, Pin, Plus, Search, X } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useCallback, useMemo, useState } from 'react';
@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Segmented } from '@/components/ui/segmented';
 import { TerminalGuide } from '@/components/ui/terminal-guide';
 import { apiRequest } from '@/lib/api';
+import { chatList, type ChatScope } from '@/lib/chat';
 import { chatListTime } from '@/lib/format';
 import { useLiveRefresh } from '@/lib/live';
 import { useApprovals } from '@/lib/use-approvals';
@@ -62,6 +63,9 @@ function SessionRow({ s, active, waiting }: { s: AgentSessionDto; active: boolea
             >
               {chatListTime(s.lastActivityAt)}
             </time>
+            {s.pinned && (
+              <Pin className="size-3.5 shrink-0 rotate-45 text-muted-foreground" aria-label="Pinned" />
+            )}
           </div>
           <div className="mt-0.5 flex items-center gap-2">
             <p
@@ -96,18 +100,21 @@ function SessionRow({ s, active, waiting }: { s: AgentSessionDto; active: boolea
 const SCOPES = [
   { value: 'active', label: 'Active' },
   { value: 'all', label: 'All' },
+  { value: 'archived', label: 'Archived' },
 ] as const;
 
 export function AgentsView({ activeId = null }: { activeId?: string | null }) {
-  const [scope, setScope] = useState<'active' | 'all'>('active');
+  const [scope, setScope] = useState<ChatScope>('active');
+  // Archived chats come from the full list (pinned and archived are set from the phone app).
+  const from = scope === 'archived' ? 'all' : scope;
   const [creating, setCreating] = useState(false);
   const [query, setQuery] = useState('');
   const fetcher = useCallback(
     (signal: AbortSignal) =>
-      apiRequest(`/sessions?scope=${scope}`, SessionListResponse, { signal }).then((r) => r.sessions),
-    [scope],
+      apiRequest(`/sessions?scope=${from}`, SessionListResponse, { signal }).then((r) => r.sessions),
+    [from],
   );
-  const { state, refresh } = usePoll(['sessions', scope], fetcher, 30_000);
+  const { state, refresh } = usePoll(['sessions', from], fetcher, 30_000);
   useLiveRefresh(() => void refresh());
   const approvals = useApprovals('pending').state.data;
 
@@ -119,16 +126,16 @@ export function AgentsView({ activeId = null }: { activeId?: string | null }) {
 
   const sessions = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return [...(state.data ?? [])]
-      .filter(
-        (s) =>
-          !q ||
-          [s.projectName, s.currentTask ?? '', s.deviceName, s.projectPath].some((f) =>
-            f.toLowerCase().includes(q),
-          ),
-      )
-      .sort((a, b) => Date.parse(b.lastActivityAt) - Date.parse(a.lastActivityAt));
-  }, [state.data, query]);
+    // Pinned first, then latest activity; archived chats only under Archived.
+    return chatList(state.data ?? [], scope).filter(
+      (s) =>
+        !q ||
+        [s.projectName, s.currentTask ?? '', s.deviceName, s.projectPath].some((f) =>
+          f.toLowerCase().includes(q),
+        ),
+    );
+  }, [state.data, query, scope]);
+  const listed = state.data ? chatList(state.data, scope).length : 0;
 
   const Title = activeId ? 'h2' : 'h1';
 
@@ -198,7 +205,12 @@ export function AgentsView({ activeId = null }: { activeId?: string | null }) {
             {state.error}
           </p>
         )}
-        {state.status === 'ready' && !state.data?.length && (
+        {state.status === 'ready' && !listed && scope === 'archived' && (
+          <p className="px-4 py-10 text-center text-sm text-muted-foreground">
+            No archived chats. Archive one from the Pocket Agent app (long-press a chat).
+          </p>
+        )}
+        {state.status === 'ready' && !listed && scope !== 'archived' && (
           <section className="stagger mx-2.5 mt-2 flex flex-col gap-3" data-testid="no-sessions">
             <div className="px-1">
               <h2 className="text-base font-semibold">
@@ -218,7 +230,7 @@ export function AgentsView({ activeId = null }: { activeId?: string | null }) {
             />
           </section>
         )}
-        {state.status === 'ready' && !!state.data?.length && !sessions.length && (
+        {state.status === 'ready' && listed > 0 && !sessions.length && (
           <p className="px-4 py-10 text-center text-sm text-muted-foreground">
             No sessions match “{query.trim()}”.
           </p>

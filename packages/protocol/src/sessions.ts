@@ -29,8 +29,18 @@ export const AgentSessionDto = z.object({
   startedAt: iso,
   lastActivityAt: iso,
   endedAt: iso.nullable(),
+  /** Kept at the top of the chat list. */
+  pinned: z.boolean().default(false),
+  /** Moved out of the chat list into Archived. */
+  archived: z.boolean().default(false),
 });
 export type AgentSessionDto = z.infer<typeof AgentSessionDto>;
+
+/** `POST /sessions/:id/organize`: pin or archive a chat (archiving also unpins it). */
+export const OrganizeSessionRequest = z
+  .object({ pinned: z.boolean().optional(), archived: z.boolean().optional() })
+  .refine((v) => v.pinned !== undefined || v.archived !== undefined, 'Pin or archive?');
+export type OrganizeSessionRequest = z.infer<typeof OrganizeSessionRequest>;
 
 export const SessionListResponse = z.object({ sessions: z.array(AgentSessionDto) });
 export type SessionListResponse = z.infer<typeof SessionListResponse>;

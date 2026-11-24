@@ -9,7 +9,7 @@ import { scheduleOnRN } from 'react-native-worklets';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { dur, ease, enter, exit, layout } from '@/lib/motion';
 import { alpha, fonts, radius, useTheme } from '@/lib/theme';
-import { buzz, Divider, Press, T } from '@/ui/core';
+import { buzz, Divider, Press, T, tap } from '@/ui/core';
 import { Notice } from '@/ui/feedback';
 import { AnswerButtons, BigButton, CountdownInline, OptionMark, SentNote, SheetFrame } from './parts';
 import {
@@ -280,14 +280,19 @@ export function QuestionSheet({
     setDir(next > page ? 1 : -1);
     setPage(next);
   };
+  const swipeTo = (to: number) => {
+    if (to < 0 || to > last) return;
+    tap();
+    go(to);
+  };
   const swipe = usePanGesture({
     enabled: paged,
     activeOffsetX: [-20, 20],
     failOffsetY: [-12, 12],
     onDeactivate: (e) => {
       'worklet';
-      if (e.translationX < -60 || e.velocityX < -500) scheduleOnRN(go, page + 1);
-      else if (e.translationX > 60 || e.velocityX > 500) scheduleOnRN(go, page - 1);
+      if (e.translationX < -60 || e.velocityX < -500) scheduleOnRN(swipeTo, page + 1);
+      else if (e.translationX > 60 || e.velocityX > 500) scheduleOnRN(swipeTo, page - 1);
     },
   });
   // Submit with a question still unanswered: that question is shown rather than refused.

@@ -7,7 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scheduleOnRN } from 'react-native-worklets';
 import { dur, ease } from '@/lib/motion';
 import { radius, useTheme } from '@/lib/theme';
-import { T } from '@/ui/core';
+import { T, tap } from '@/ui/core';
 
 /**
  * A panel that rises from the bottom edge over a dimmed screen. It follows the finger when dragged
@@ -66,6 +66,11 @@ export function Sheet({
     if (dismissable) onClose();
   };
 
+  // Swiped away: a light tick, like the system's.
+  const dismissed = () => {
+    tap();
+    onClose();
+  };
   const pan = usePanGesture({
     enabled: dismissable,
     activeOffsetY: 10,
@@ -76,7 +81,7 @@ export function Sheet({
     },
     onDeactivate: (e) => {
       'worklet';
-      if (e.translationY > height * 0.22 || e.velocityY > 900) scheduleOnRN(onClose);
+      if (e.translationY > height * 0.22 || e.velocityY > 900) scheduleOnRN(dismissed);
       else y.set(withTiming(0, { duration: dur.enter, easing: ease.touch }));
     },
   });

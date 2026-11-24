@@ -1,16 +1,17 @@
-import { buildChat, isBusy, pendingQuestion, timeAgo } from '@pocket-agent/core';
+import { buildChat, chatMatches, isBusy, pendingQuestion, timeAgo } from '@pocket-agent/core';
 import type { AgentSessionDto } from '@pocket-agent/protocol';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
-import { ArrowLeft } from 'lucide-react-native';
+import { ArrowLeft, Search } from 'lucide-react-native';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { AppState, View } from 'react-native';
+import { AppState, BackHandler, View } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { PermissionSheet } from '@/features/approvals/permission-sheet';
 import { QuestionSheet } from '@/features/approvals/question-sheet';
+import { ChatSearchBar } from '@/features/chat/chat-search';
 import { Composer, EndSessionButton } from '@/features/chat/composer';
 import { useOutbox } from '@/features/chat/outbox';
 import { ChatMessages, RetryContext } from '@/features/chat/messages';
@@ -83,11 +84,13 @@ function Header({
   session: s,
   sending,
   onInfo,
+  onSearch,
   onChange,
 }: {
   session: AgentSessionDto;
   sending: boolean;
   onInfo: () => void;
+  onSearch: () => void;
   onChange: () => void;
 }) {
   const { c } = useTheme();
@@ -157,6 +160,13 @@ function Header({
           </View>
         </View>
       </Press>
+      <IconButton
+        icon={Search}
+        label="Search in this chat"
+        tone="default"
+        onPress={onSearch}
+        testID="chat-search-open"
+      />
       <EndSessionButton session={s} onDone={onChange} />
     </View>
   );
@@ -192,6 +202,26 @@ export function ChatScreen({ id }: { id: string }) {
   );
   const commands = useCommands(id);
   const [infoOpen, setInfoOpen] = useState(false);
+  // Searching in the chat: what is typed, and which match is shown (null: the newest).
+  const [searching, setSearching] = useState(false);
+  const [query, setQuery] = useState('');
+  const [matchIndex, setMatchIndex] = useState<number | null>(null);
+  const closeSearch = () => {
+    setSearching(false);
+    setQuery('');
+    setMatchIndex(null);
+  };
+  // Back closes the search first.
+  useEffect(() => {
+    if (!searching) return;
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      setSearching(false);
+      setQuery('');
+      setMatchIndex(null);
+      return true;
+    });
+    return () => sub.remove();
+  }, [searching]);
   // Bumped on every send: the conversation scrolls back to the newest message.
   const [jump, setJump] = useState(0);
   // When a message was just sent, until the PC reports Claude working on it (or 20s pass).
@@ -241,6 +271,17 @@ export function ChatScreen({ id }: { id: string }) {
     items.some((i) => (i.kind === 'assistant' || i.kind === 'tool') && Date.parse(i.at) >= sentAt)
   )
     setSentAt(null);
+
+  // The question being asked is shown below, not also in the conversation.
+  const asking = !!question;
+  const shown = useMemo(
+    () => (asking ? items.filter((i) => !(i.kind === 'question' && i.state === 'running')) : items),
+    [items, asking],
+  );
+  // Search in the chat (the messages loaded so far): matches oldest first, the newest shown first.
+  const matches = useMemo(() => (searching ? chatMatches(shown, query) : []), [searching, shown, query]);
+  const matchSet = useMemo(() => new Set(matches), [matches]);
+  const shownMatch = matches.length ? Math.min(matchIndex ?? matches.length - 1, matches.length - 1) : -1;
 
   if (state.status === 'loading') {
     return (
@@ -315,7 +356,27 @@ export function ChatScreen({ id }: { id: string }) {
       style={{ flex: 1, backgroundColor: c.background }}
       accessibilityLabel={`Conversation with ${s.projectName}`}
     >
-      <Header session={s} sending={sending} onInfo={() => setInfoOpen(true)} onChange={changed} />
+      {searching ? (
+        <ChatSearchBar
+          query={query}
+          onQuery={(q) => {
+            setQuery(q);
+            setMatchIndex(null);
+          }}
+          count={matches.length}
+          index={Math.max(0, shownMatch)}
+          onIndex={setMatchIndex}
+          onClose={closeSearch}
+        />
+      ) : (
+        <Header
+          session={s}
+          sending={sending}
+          onInfo={() => setInfoOpen(true)}
+          onSearch={() => setSearching(true)}
+          onChange={changed}
+        />
+      )}
       <ConnectionStrip />
       <SessionInfo session={s} open={infoOpen} onClose={() => setInfoOpen(false)} onChange={changed} />
 
@@ -337,9 +398,11 @@ export function ChatScreen({ id }: { id: string }) {
           ) : (
             <RetryContext.Provider value={outbox.retry}>
               <ChatMessages
-                items={
-                  // The question being asked is shown below, not also in the conversation.
-                  question ? items.filter((i) => !(i.kind === 'question' && i.state === 'running')) : items
+                items={shown}
+                search={
+                  searching
+                    ? { matches: matchSet, current: shownMatch >= 0 ? matches[shownMatch]! : null }
+                    : undefined
                 }
                 typing={typingKind(s) ?? (sending ? 'sending' : null)}
                 bottomInset={dock}

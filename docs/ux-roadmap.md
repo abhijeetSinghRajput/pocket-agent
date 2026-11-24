@@ -42,6 +42,8 @@ changes), then waits for the owner's go-ahead before the next.
   this phone's notifications — each with its fix (a command to copy, a download, a button).
 
 ## M6 — Polish
-- **Haptics** on long-press, swipe-dismiss and tab switch.
-- **Pin and archive chats**.
-- **Search inside a chat**.
+- **Haptics** on long-press, swipe-dismiss (sheets, toasts) and tab switch (also by swipe).
+- **Pin and archive chats**: long-press a chat on the phone; kept on the server, so the web shows
+  the same order (pinned first) and an Archived tab.
+- **Search inside a chat**: the search button in a chat's header; matches are tinted, the arrows
+  step through them (the messages loaded so far). App 2.1.0.

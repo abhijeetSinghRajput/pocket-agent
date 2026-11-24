@@ -229,3 +229,22 @@ export function recentWorkspaces(
   }
   return out;
 }
+
+/** Which chats a list shows: active ones, all of them, or the archived ones. */
+export type ChatScope = 'active' | 'all' | 'archived';
+
+/**
+ * A chat list's rows: archived chats only under Archived (and nowhere else), pinned ones first,
+ * then the most recent activity.
+ */
+export function chatList(sessions: readonly AgentSessionDto[], scope: ChatScope): AgentSessionDto[] {
+  return sessions
+    .filter((s) =>
+      scope === 'archived' ? s.archived : !s.archived && (scope === 'all' || s.endedAt === null),
+    )
+    .sort(
+      (a, b) =>
+        Number(b.pinned && scope !== 'archived') - Number(a.pinned && scope !== 'archived') ||
+        Date.parse(b.lastActivityAt) - Date.parse(a.lastActivityAt),
+    );
+}

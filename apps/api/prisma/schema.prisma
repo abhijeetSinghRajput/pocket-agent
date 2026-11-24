@@ -209,6 +209,10 @@ model AgentSession {
   startedAt         DateTime    @default(now())
   lastActivityAt    DateTime    @default(now())
   endedAt           DateTime?
+  /// Kept at the top of your chat list (set from the app).
+  pinnedAt          DateTime?
+  /// Moved out of the chat list into Archived (set from the app).
+  archivedAt        DateTime?
 
   device    Device       @relation(fields: [deviceId], references: [id], onDelete: Cascade)
   events    AgentEvent[]

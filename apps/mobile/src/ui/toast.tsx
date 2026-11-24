@@ -88,6 +88,11 @@ function ToastCard({ toast: t, onDismiss }: { toast: ToastItem; onDismiss: () =>
   const Icon = ICON[tone] ?? Bell;
   const color = toneColor(c, tone);
 
+  // Swiped away: a light tick.
+  const swiped = () => {
+    tap();
+    onDismiss();
+  };
   const pan = usePanGesture({
     activeOffsetX: [-12, 12],
     activeOffsetY: -12,
@@ -103,19 +108,11 @@ function ToastCard({ toast: t, onDismiss }: { toast: ToastItem; onDismiss: () =>
       if (sideways) {
         const to = (e.translationX + e.velocityX * 0.1 < 0 ? -1 : 1) * width;
         x.set(
-          withTiming(
-            to,
-            { duration: dur.quick, easing: ease.out },
-            (done) => done && scheduleOnRN(onDismiss),
-          ),
+          withTiming(to, { duration: dur.quick, easing: ease.out }, (done) => done && scheduleOnRN(swiped)),
         );
       } else if (up) {
         y.set(
-          withTiming(
-            -160,
-            { duration: dur.quick, easing: ease.out },
-            (done) => done && scheduleOnRN(onDismiss),
-          ),
+          withTiming(-160, { duration: dur.quick, easing: ease.out }, (done) => done && scheduleOnRN(swiped)),
         );
       } else {
         x.set(withSpring(0, settleSpring));

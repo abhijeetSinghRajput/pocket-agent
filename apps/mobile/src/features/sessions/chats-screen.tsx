@@ -1,12 +1,13 @@
-import { chatListTime } from '@pocket-agent/core';
+import { chatList, chatListTime, type ChatScope } from '@pocket-agent/core';
 import type { AgentSessionDto } from '@pocket-agent/protocol';
 import { useRouter } from 'expo-router';
-import { Plus } from 'lucide-react-native';
+import { Pin, Plus } from 'lucide-react-native';
 import { useMemo, useState } from 'react';
 import { RefreshControl, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SessionAvatar, SessionKindBadge, SessionStatusBadge } from '@/features/sessions/badges';
+import { ChatActions } from '@/features/sessions/chat-actions';
 import { NewChatSheet } from '@/features/sessions/new-chat-sheet';
 import { Workspaces } from '@/features/sessions/workspaces';
 import { useApprovals, useDevices, useSessions } from '@/lib/data';
@@ -14,7 +15,7 @@ import { useDrafts, type Draft } from '@/lib/drafts';
 import { exit, layout } from '@/lib/motion';
 import { alpha, fonts, radius, useTheme } from '@/lib/theme';
 import { useArrivals } from '@/ui/arrive';
-import { Button, Press, T } from '@/ui/core';
+import { Button, Press, T, thud } from '@/ui/core';
 import { Notice, Skeleton } from '@/ui/feedback';
 import { Segmented } from '@/ui/form';
 import { SwipePages } from '@/ui/pages';
@@ -50,11 +51,14 @@ function SessionRow({
   waiting,
   draft,
   onPress,
+  onLongPress,
 }: {
   s: AgentSessionDto;
   waiting: number;
   draft?: Draft;
   onPress: () => void;
+  /** The chat's menu: pin, archive. */
+  onLongPress: () => void;
 }) {
   const { c } = useTheme();
   const busy = !s.endedAt && (s.status === 'Running' || s.status === 'WaitingForPermission');
@@ -64,6 +68,11 @@ function SessionRow({
       accessibilityLabel={`${s.projectName}, ${preview(s)}`}
       testID="session-card"
       onPress={onPress}
+      onLongPress={onLongPress}
+      delayLongPress={350}
+      accessibilityHint="Long-press to pin or archive"
+      accessibilityActions={[{ name: 'longpress', label: 'Pin or archive' }]}
+      onAccessibilityAction={onLongPress}
       scale={0.98}
       style={{
         flexDirection: 'row',
@@ -80,6 +89,15 @@ function SessionRow({
           <T variant="subheading" style={{ flex: 1, fontSize: 15, lineHeight: 21 }} numberOfLines={1}>
             {s.projectName}
           </T>
+          {s.pinned && (
+            <Pin
+              size={13}
+              color={c.mutedForeground}
+              strokeWidth={2.2}
+              style={{ transform: [{ rotate: '45deg' }], alignSelf: 'center' }}
+              accessibilityLabel="Pinned"
+            />
+          )}
           <T
             variant={waiting ? 'captionMedium' : 'caption'}
             style={{
@@ -153,10 +171,11 @@ function SessionRow({
   );
 }
 
-type Scope = 'active' | 'all';
+type Scope = ChatScope;
 const SCOPES: { value: Scope; label: string }[] = [
   { value: 'active', label: 'Active' },
   { value: 'all', label: 'All' },
+  { value: 'archived', label: 'Archived' },
 ];
 const SCOPE_VALUES = SCOPES.map((o) => o.value);
 
@@ -166,7 +185,9 @@ function SessionsPage({ scope, query, width }: { scope: Scope; query: string; wi
   const { c } = useTheme();
   const insets = useSafeAreaInsets();
   const [pulling, setPulling] = useState(false);
-  const { state, refresh } = useSessions(scope);
+  // Archived chats come from the full list.
+  const { state, refresh } = useSessions(scope === 'archived' ? 'all' : scope);
+  const [menu, setMenu] = useState<AgentSessionDto | null>(null);
   const approvals = useApprovals('pending').state.data;
   const drafts = useDrafts();
   const hasDevices = (useDevices().state.data ?? []).some((d) => d.status !== 'Revoked');
@@ -179,16 +200,16 @@ function SessionsPage({ scope, query, width }: { scope: Scope; query: string; wi
 
   const sessions = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return [...(state.data ?? [])]
-      .filter(
-        (s) =>
-          !q ||
-          [s.projectName, s.currentTask ?? '', s.deviceName, s.projectPath].some((f) =>
-            f.toLowerCase().includes(q),
-          ),
-      )
-      .sort((a, b) => Date.parse(b.lastActivityAt) - Date.parse(a.lastActivityAt));
-  }, [state.data, query]);
+    // Pinned first, then by latest activity; archived ones only under Archived.
+    return chatList(state.data ?? [], scope).filter(
+      (s) =>
+        !q ||
+        [s.projectName, s.currentTask ?? '', s.deviceName, s.projectPath].some((f) =>
+          f.toLowerCase().includes(q),
+        ),
+    );
+  }, [state.data, query, scope]);
+  const shown = useMemo(() => (state.data ? chatList(state.data, scope) : []), [state.data, scope]);
 
   const ids = useMemo(() => (state.data ? sessions.map((s) => s.id) : null), [state.data, sessions]);
   const arriving = useArrivals(ids);
@@ -225,7 +246,16 @@ function SessionsPage({ scope, query, width }: { scope: Scope; query: string; wi
         <Notice>{state.error}</Notice>
       </View>
     );
-  } else if (!state.data.length && scope === 'active' && hasDevices) {
+  } else if (!shown.length && scope === 'archived') {
+    body = (
+      <Animated.View entering={arriving('archived-empty', 0)} style={{ paddingHorizontal: 20, gap: 2 }}>
+        <T variant="subheading">No archived chats</T>
+        <T variant="small" tone="muted">
+          Long-press a chat to archive it. It moves here; nothing is deleted.
+        </T>
+      </Animated.View>
+    );
+  } else if (!shown.length && scope === 'active' && hasDevices) {
     // Nothing running: the PCs and their workspaces, to start a chat in one.
     body = (
       <Animated.View entering={arriving('workspaces', 0)} style={{ paddingHorizontal: 12, gap: 16 }}>
@@ -238,7 +268,7 @@ function SessionsPage({ scope, query, width }: { scope: Scope; query: string; wi
         <Workspaces />
       </Animated.View>
     );
-  } else if (!state.data.length) {
+  } else if (!shown.length) {
     body = (
       <Animated.View
         entering={arriving('empty', 0)}
@@ -277,47 +307,54 @@ function SessionsPage({ scope, query, width }: { scope: Scope; query: string; wi
   }
 
   return (
-    <Animated.FlatList
-      data={sessions}
-      keyExtractor={(s) => s.id}
-      itemLayoutAnimation={layout}
-      renderItem={({ item, index }) => (
-        <Animated.View entering={arriving(item.id, index)} exiting={exit.fade}>
-          <SessionRow
-            s={item}
-            waiting={waitingBySession.get(item.id) ?? 0}
-            draft={drafts.get(item.id)}
-            onPress={() => open(item.id)}
+    <>
+      <Animated.FlatList
+        data={sessions}
+        keyExtractor={(s) => s.id}
+        itemLayoutAnimation={layout}
+        renderItem={({ item, index }) => (
+          <Animated.View entering={arriving(item.id, index)} exiting={exit.fade}>
+            <SessionRow
+              s={item}
+              waiting={waitingBySession.get(item.id) ?? 0}
+              draft={drafts.get(item.id)}
+              onPress={() => open(item.id)}
+              onLongPress={() => {
+                thud();
+                setMenu(item);
+              }}
+            />
+          </Animated.View>
+        )}
+        ListEmptyComponent={body}
+        accessibilityLabel={`${SCOPES.find((o) => o.value === scope)!.label} sessions`}
+        testID={`sessions-${scope}`}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        showsVerticalScrollIndicator={false}
+        style={{ width }}
+        contentContainerStyle={{
+          paddingHorizontal: 8,
+          paddingBottom: insets.bottom + TAB_BAR_HEIGHT + 24,
+        }}
+        refreshControl={
+          <RefreshControl
+            refreshing={pulling}
+            onRefresh={() => void pull()}
+            tintColor={c.primary}
+            colors={[c.primary]}
+            progressBackgroundColor={c.card}
           />
-        </Animated.View>
-      )}
-      ListEmptyComponent={body}
-      accessibilityLabel={`${scope === 'active' ? 'Active' : 'All'} sessions`}
-      testID={`sessions-${scope}`}
-      keyboardShouldPersistTaps="handled"
-      keyboardDismissMode="on-drag"
-      showsVerticalScrollIndicator={false}
-      style={{ width }}
-      contentContainerStyle={{
-        paddingHorizontal: 8,
-        paddingBottom: insets.bottom + TAB_BAR_HEIGHT + 24,
-      }}
-      refreshControl={
-        <RefreshControl
-          refreshing={pulling}
-          onRefresh={() => void pull()}
-          tintColor={c.primary}
-          colors={[c.primary]}
-          progressBackgroundColor={c.card}
-        />
-      }
-    />
+        }
+      />
+      <ChatActions chat={menu} onClose={() => setMenu(null)} />
+    </>
   );
 }
 
 /**
- * Every session as a chat, newest activity first: the home tab. Active and All are two pages side
- * by side: swipe between them, or tap the control, which follows the swipe.
+ * Every session as a chat, pinned ones first, then newest activity: the home tab. Active, All and
+ * Archived are pages side by side: swipe between them, or tap the control, which follows the swipe.
  */
 export function ChatsScreen() {
   const [scope, setScope] = useState<Scope>('active');

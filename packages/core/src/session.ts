@@ -36,11 +36,10 @@ export function hooksAreConnected(s: Pick<AgentSessionDto, 'metadata' | 'capabil
 /** When the instruction will actually reach Claude — stated honestly per session type. */
 export function deliveryHint(s: AgentSessionDto): string {
   if (s.capabilities.instructAnytime) {
-    // Busy: the header's spinner already says Claude is working; a message waits its turn.
-    if (isBusy(s)) return '';
-    return s.mode === 'managed'
-      ? 'Claude starts on this right away.'
-      : 'Claude starts on this right away on your PC. Your editor won’t show it live; follow it here.';
+    // Nothing to say for a chat that takes messages as they come (busy: the header's spinner says
+    // so). A session from the editor: it won't show there live.
+    if (isBusy(s) || s.mode === 'managed') return '';
+    return 'Your editor won’t show this live; follow it here.';
   }
   return s.status === 'WaitingForInput'
     ? 'Claude is idle, so this waits for the next turn you start on the PC. To run it at once, turn on wake on the PC: pocket-agent instructions wake enable'

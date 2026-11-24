@@ -11,3 +11,4 @@ export * from './notifications.js';
 export * from './sessions.js';
 export * from './state-machines.js';
 export * from './versions.js';
+export * from './subagents.js';

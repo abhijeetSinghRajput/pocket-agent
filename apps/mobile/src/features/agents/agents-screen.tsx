@@ -1,15 +1,14 @@
 import { timeAgo, toolTarget } from '@pocket-agent/core';
 import type { ApprovalDto } from '@pocket-agent/protocol';
-import { useRouter } from 'expo-router';
 import { Bot, ChevronDown, Plus } from 'lucide-react-native';
-import { Children, isValidElement, useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { View } from 'react-native';
 import Animated from 'react-native-reanimated';
 import { ApprovalCard } from '@/features/approvals/approval-card';
 import { APPROVAL_STATUS } from '@/features/approvals/shared';
 import { NewChatSheet } from '@/features/sessions/new-chat-sheet';
 import { useApprovals, useWorkers } from '@/lib/data';
-import { WorkerRow } from './worker-row';
+import { AgentMap } from './agent-map';
 import { enter, exit, layout } from '@/lib/motion';
 import { alpha, fonts, radius, useTheme } from '@/lib/theme';
 import { Button, Card, Divider, Press, T, tap, toneColor } from '@/ui/core';
@@ -26,36 +25,6 @@ function useTick(ms: number) {
     const id = setInterval(() => setNow(Date.now()), ms);
     return () => clearInterval(id);
   }, [ms]);
-}
-
-/** A section title in the grouped-list style: small caps above its group. */
-function SectionTitle({ children, count }: { children: string; count?: number }) {
-  return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 4 }}>
-      <T variant="overline" tone="muted" accessibilityRole="header">
-        {children}
-      </T>
-      {count !== undefined && (
-        <T variant="overline" tone="muted" style={{ opacity: 0.6 }}>
-          {count}
-        </T>
-      )}
-    </View>
-  );
-}
-
-/** A group of rows in one card, split by inset dividers. */
-function Group({ children }: { children: ReactNode }) {
-  return (
-    <Card style={{ overflow: 'hidden' }}>
-      {Children.toArray(children).map((child, i) => (
-        <Animated.View key={isValidElement(child) ? (child.key ?? i) : i} layout={layout}>
-          {i > 0 && <Divider inset={74} />}
-          {child}
-        </Animated.View>
-      ))}
-    </Card>
-  );
 }
 
 /** A decided request in the history: what it was, where, how it ended. */
@@ -161,7 +130,6 @@ function RecentDecisions({ items }: { items: ApprovalDto[] }) {
  * on the Chats tab. Tap a worker to open the chat it runs in.
  */
 export function AgentsScreen() {
-  const router = useRouter();
   const { c } = useTheme();
   useTick(30_000);
   const workers = useWorkers();
@@ -215,7 +183,6 @@ export function AgentsScreen() {
         .filter(Boolean)
         .join(' · ') || 'Nothing running right now';
 
-  const openChat = (id: string) => router.push({ pathname: '/chat/[id]', params: { id } });
   const pull = () => {
     tap();
     setPulling(true);
@@ -269,35 +236,9 @@ export function AgentsScreen() {
         </Animated.View>
       )}
 
-      {running.length > 0 && (
-        <Animated.View
-          entering={enter.rise(step++)}
-          layout={layout}
-          style={{ gap: 8 }}
-          testID="workers-running"
-        >
-          <SectionTitle count={running.length}>RUNNING</SectionTitle>
-          <Group>
-            {running.map((w) => (
-              <WorkerRow key={w.id} w={w} onPress={() => openChat(w.sessionId)} />
-            ))}
-          </Group>
-        </Animated.View>
-      )}
-
-      {finished.length > 0 && (
-        <Animated.View
-          entering={enter.rise(step++)}
-          layout={layout}
-          style={{ gap: 8 }}
-          testID="workers-finished"
-        >
-          <SectionTitle count={finished.length}>FINISHED TODAY</SectionTitle>
-          <Group>
-            {finished.map((w) => (
-              <WorkerRow key={w.id} w={w} onPress={() => openChat(w.sessionId)} />
-            ))}
-          </Group>
+      {list.length > 0 && (
+        <Animated.View entering={enter.rise(step++)} layout={layout}>
+          <AgentMap workers={list} />
         </Animated.View>
       )}
 

@@ -21,7 +21,8 @@ type SessionEvent = Exclude<
       | 'device.settings'
       | 'command.ack'
       | 'approval.decision.ack'
-      | 'folder.listed';
+      | 'folder.listed'
+      | 'agents.read.result';
   }
 >;
 

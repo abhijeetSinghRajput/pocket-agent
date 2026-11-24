@@ -14,10 +14,10 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { authenticateDevice } from '../auth/device-auth.js';
 import { requireTrustedOrigin, requireUser } from '../auth/session.js';
-import { limit, redisKey, type AppContext } from '../context.js';
-import { CHANNELS, notifyUser, type Bus } from '../realtime/bus.js';
+import { limit, type AppContext } from '../context.js';
+import { notifyUser, type Bus } from '../realtime/bus.js';
 import { versionBelow } from '@pocket-agent/protocol';
-import { FOLDER_LIST_WAIT_MS, folderReplyKey } from '../devices/folders.js';
+import { askPc, pcOnline } from '../devices/ask-pc.js';
 import { publishRevocation } from '../gateway/agent-gateway.js';
 import type { Device } from '../generated/prisma/client.js';
 import { audit } from '../lib/audit.js';
@@ -26,7 +26,9 @@ import { generatePairingCode, normalizePairingCode, randomToken, sha256 } from '
 const MAX_ACTIVE_PAIRING_CODES = 5;
 const DeviceIdParam = z.object({ id: z.uuid() });
 const FolderQuery = z.object({ path: z.string().trim().min(1).max(1024) });
-const FOLDER_POLL_MS = 120;
+
+/** No answer from a PC that is connected: Pocket Agent there is stuck or was just stopped. */
+export const PC_NO_ANSWER = 'Your PC did not answer. Check that Pocket Agent is running on it.';
 
 const FOLDER_ERRORS: Record<string, string> = {
   project_not_allowed: 'That folder is not on this PC’s project list.',
@@ -170,38 +172,26 @@ export async function deviceRoutes(app: FastifyInstance, ctx: AppContext & { bus
         'agent_outdated',
         `Browsing folders needs Pocket Agent ${FOLDERS_MIN_AGENT_VERSION} or newer on the PC. Run \`pocket-agent update\` there.`,
       );
-    const online =
-      device.status === 'Online' &&
-      (await ctx.redis.exists(redisKey(ctx, 'presence', device.id)).catch(() => 0)) === 1;
-    if (!online) return fail(409, 'device_offline', 'Your PC is offline. Start Pocket Agent on it.');
+    if (!(await pcOnline(ctx, device)))
+      return fail(409, 'device_offline', 'Your PC is offline. Start Pocket Agent on it.');
 
     const requestId = crypto.randomUUID();
     const frame = BackendToAgent.parse(
       createEvent('folder.list', { requestId, path: query.data.path }, { deviceId: device.id }),
     );
-    await ctx.bus.publish(CHANNELS.agentCommands, JSON.stringify({ deviceId: device.id, frame }));
-
-    const key = folderReplyKey(ctx, requestId);
-    const deadline = Date.now() + FOLDER_LIST_WAIT_MS;
-    while (Date.now() < deadline) {
-      await new Promise((r) => setTimeout(r, FOLDER_POLL_MS));
-      const raw = await ctx.redis.get(key);
-      if (!raw) continue;
-      await ctx.redis.del(key).catch(() => undefined);
-      const answer = JSON.parse(raw) as {
-        folders: Array<{ name: string; path: string }>;
-        truncated: boolean;
-        error?: string;
-      };
-      if (answer.error)
-        return fail(
-          answer.error === 'project_not_allowed' ? 400 : 404,
-          answer.error,
-          FOLDER_ERRORS[answer.error] ?? 'Your PC could not list that folder.',
-        );
-      return { path: query.data.path, folders: answer.folders, truncated: answer.truncated };
-    }
-    return fail(504, 'pc_no_answer', 'Your PC did not answer. Check that Pocket Agent is running on it.');
+    const answer = await askPc<{
+      folders: Array<{ name: string; path: string }>;
+      truncated: boolean;
+      error?: string;
+    }>(ctx, device.id, requestId, frame);
+    if (!answer) return fail(504, 'pc_no_answer', PC_NO_ANSWER);
+    if (answer.error)
+      return fail(
+        answer.error === 'project_not_allowed' ? 400 : 404,
+        answer.error,
+        FOLDER_ERRORS[answer.error] ?? 'Your PC could not list that folder.',
+      );
+    return { path: query.data.path, folders: answer.folders, truncated: answer.truncated };
   });
 }
 

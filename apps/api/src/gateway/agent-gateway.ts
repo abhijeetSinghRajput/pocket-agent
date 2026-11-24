@@ -13,7 +13,7 @@ import { redisKey, type AppContext } from '../context.js';
 import { Prisma, type Device } from '../generated/prisma/client.js';
 import { applyDecisionAck } from '../approvals/service.js';
 import { applyCommandAck, resendPending } from '../commands/service.js';
-import { FOLDER_LIST_WAIT_MS, folderReplyKey } from '../devices/folders.js';
+import { pcAnswered } from '../devices/ask-pc.js';
 import type { PushSender } from '../notifications/push.js';
 import { notifyFromEvents } from '../notifications/triggers.js';
 import { CHANNELS, notifyUser, type Bus } from '../realtime/bus.js';
@@ -259,12 +259,10 @@ export async function agentGateway(app: FastifyInstance, ctx: GatewayServices): 
           return ack(msg.eventId);
         }
 
-        if (msg.eventType === 'folder.listed') {
-          // The request may be waiting on another API instance: it reads the answer from Redis.
+        if (msg.eventType === 'folder.listed' || msg.eventType === 'agents.read.result') {
+          // An answer to something the app asked; the request may be waiting on another instance.
           const { requestId, ...answer } = msg.payload;
-          await ctx.redis
-            .set(folderReplyKey(ctx, requestId), JSON.stringify(answer), 'PX', FOLDER_LIST_WAIT_MS * 2)
-            .catch(() => undefined);
+          await pcAnswered(ctx, requestId, answer);
           return;
         }
 

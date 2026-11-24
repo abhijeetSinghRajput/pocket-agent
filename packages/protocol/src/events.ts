@@ -3,6 +3,7 @@ import { QuestionAnswers } from './approvals.js';
 import { AttachmentRefs } from './attachments.js';
 import { SessionCapabilities } from './capabilities.js';
 import { defineEvent } from './envelope.js';
+import { SUBAGENT_EVENTS_MAX, SUBAGENTS_MAX, SubagentEvent, SubagentInfo } from './subagents.js';
 import {
   AgentStatus,
   ApprovalStatus,
@@ -201,6 +202,18 @@ export const DeviceSettings = defineEvent(
   }),
 );
 /** The PC's answer to `folder.list`: the folders directly inside the one asked about. */
+/** The PC's answer to `agents.read`: the session's sub-agents and the transcript asked for. */
+export const AgentsReadResult = defineEvent(
+  'agents.read.result',
+  z.object({
+    requestId: z.uuid(),
+    agents: z.array(SubagentInfo).max(SUBAGENTS_MAX).default([]),
+    events: z.array(SubagentEvent).max(SUBAGENT_EVENTS_MAX).default([]),
+    truncated: z.boolean().default(false),
+    /** Why it could not be read (conversation_not_found, agent_not_found). */
+    error: z.string().max(100).optional(),
+  }),
+);
 export const FolderListed = defineEvent(
   'folder.listed',
   z.object({
@@ -239,6 +252,7 @@ export const AgentToBackend = z.discriminatedUnion('eventType', [
   DeviceSettings,
   ApprovalDecisionAck,
   FolderListed,
+  AgentsReadResult,
 ]);
 export type AgentToBackend = z.infer<typeof AgentToBackend>;
 
@@ -339,6 +353,14 @@ export const FolderList = defineEvent(
   'folder.list',
   z.object({ requestId: z.uuid(), path: z.string().min(1).max(1024) }),
 );
+/**
+ * Asks the PC for the sub-agents of the session named in the envelope, and the transcript of the
+ * one started by `toolUseId`. Answered with `agents.read.result`; nothing is stored or re-sent.
+ */
+export const AgentsRead = defineEvent(
+  'agents.read',
+  z.object({ requestId: z.uuid(), toolUseId: z.string().min(1).max(200) }),
+);
 export const Ack = defineEvent('ack', z.object({ ackEventId: z.uuid() }));
 
 export const BackendToAgent = z.discriminatedUnion('eventType', [
@@ -347,6 +369,7 @@ export const BackendToAgent = z.discriminatedUnion('eventType', [
   DeviceRevoke,
   ConfigUpdate,
   FolderList,
+  AgentsRead,
   Ack,
 ]);
 export type BackendToAgent = z.infer<typeof BackendToAgent>;

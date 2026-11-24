@@ -15,7 +15,7 @@ const STATUS: Record<WorkerStatus, { label: string; tone: Tone }> = {
 };
 
 /** A worker's status as a pill: the word rolls when it changes; a running one breathes. */
-function WorkerBadge({ status }: { status: WorkerStatus }) {
+export function WorkerBadge({ status }: { status: WorkerStatus }) {
   const { c } = useTheme();
   const s = STATUS[status];
   const color = toneColor(c, s.tone);
@@ -39,9 +39,9 @@ function WorkerBadge({ status }: { status: WorkerStatus }) {
 
 /**
  * One background worker: what it was asked to do, what kind it is, which chat it belongs to, how
- * long it has run (or when it ended). Tapping opens the chat it runs in.
+ * long it has run (or when it ended). In the agent map (`inTree`) its chat is the branch above it.
  */
-export function WorkerRow({ w, onPress }: { w: WorkerDto; onPress: () => void }) {
+export function WorkerRow({ w, onPress, inTree }: { w: WorkerDto; onPress: () => void; inTree?: boolean }) {
   const { c } = useTheme();
   const running = w.status === 'running';
   const Icon = w.kind === 'workflow' ? Workflow : Bot;
@@ -50,7 +50,7 @@ export function WorkerRow({ w, onPress }: { w: WorkerDto; onPress: () => void })
   return (
     <Press
       accessibilityRole="button"
-      accessibilityLabel={`${kind}: ${w.title}, ${STATUS[w.status].label}, in ${w.projectName}. Open chat`}
+      accessibilityLabel={`${kind}: ${w.title}, ${STATUS[w.status].label}, in ${w.projectName}. ${w.kind === 'subagent' ? 'Open' : 'Open chat'}`}
       testID="worker-row"
       onPress={onPress}
       scale={0.99}
@@ -58,7 +58,8 @@ export function WorkerRow({ w, onPress }: { w: WorkerDto; onPress: () => void })
         flexDirection: 'row',
         alignItems: 'center',
         gap: 12,
-        paddingHorizontal: 14,
+        paddingLeft: inTree ? 6 : 14,
+        paddingRight: inTree ? 4 : 14,
         paddingVertical: 12,
       }}
     >
@@ -99,7 +100,7 @@ export function WorkerRow({ w, onPress }: { w: WorkerDto; onPress: () => void })
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 }}>
           <WorkerBadge status={w.status} />
           <T variant="caption" tone="muted" numberOfLines={1} style={{ flexShrink: 1 }}>
-            {w.projectName} · {w.deviceName}
+            {inTree ? (w.background ? 'In the background' : '') : `${w.projectName} · ${w.deviceName}`}
           </T>
         </View>
       </View>

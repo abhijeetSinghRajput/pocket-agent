@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router';
 import {
   Bell,
   BellOff,
+  CheckCheck,
   ChevronDown,
   CircleAlert,
   CircleCheck,
@@ -12,18 +13,22 @@ import {
   ShieldAlert,
   type LucideIcon,
 } from 'lucide-react-native';
-import { useMemo, useState } from 'react';
-import { View } from 'react-native';
-import Animated from 'react-native-reanimated';
+import { useEffect, useMemo, useState } from 'react';
+import { RefreshControl, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { GestureDetector, usePanGesture } from 'react-native-gesture-handler';
+import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { scheduleOnRN } from 'react-native-worklets';
 import { apiRequest } from '@/lib/api';
 import { markRead, useNotifications } from '@/lib/data';
 import { routeForLink } from '@/lib/links';
-import { exit, layout } from '@/lib/motion';
-import { fonts, radius, useTheme } from '@/lib/theme';
+import { enter, exit, layout, settleSpring, timing } from '@/lib/motion';
+import { alpha, fonts, useTheme } from '@/lib/theme';
 import { useArrivals } from '@/ui/arrive';
-import { Button, buzz, Card, Divider, Dot, Fade, IconTile, Press, T, type Tone } from '@/ui/core';
+import { Button, buzz, IconTile, Press, T, type Tone } from '@/ui/core';
 import { EmptyState, Notice, Skeleton } from '@/ui/feedback';
-import { Screen } from '@/ui/screen';
+import { Segmented } from '@/ui/form';
+import { Screen, TAB_BAR_HEIGHT } from '@/ui/screen';
 
 /** What each kind of alert looks like: an icon in the tone of what happened. */
 const LOOK: Record<string, { icon: LucideIcon; tone: Tone }> = {
@@ -35,6 +40,12 @@ const LOOK: Record<string, { icon: LucideIcon; tone: Tone }> = {
   test: { icon: Bell, tone: 'muted' },
 };
 const DEFAULT_LOOK = { icon: Bell, tone: 'muted' as Tone };
+
+type Tab = 'unread' | 'all';
+const TABS: { value: Tab; label: string }[] = [
+  { value: 'unread', label: 'Unread' },
+  { value: 'all', label: 'All' },
+];
 
 /** "now", "5m", "2h", "3d": how long ago, as short as a phone's notification shade says it. */
 function shortAgo(iso: string, now = Date.now()): string {
@@ -61,40 +72,41 @@ function pushNote(n: NotificationDto): string | null {
   }
 }
 
-function Row({ n, onOpen }: { n: NotificationDto; onOpen: (n: NotificationDto) => void }) {
+/**
+ * One notification as a full-width row. Unread ones sit on a light wash of the accent, which eases
+ * out when they are read (no dot).
+ */
+function Row({
+  n,
+  unread,
+  divider,
+  onOpen,
+}: {
+  n: NotificationDto;
+  unread: boolean;
+  divider: boolean;
+  onOpen: (n: NotificationDto) => void;
+}) {
   const { c } = useTheme();
-  const unread = !n.readAt;
   const note = pushNote(n);
   const look = LOOK[n.category] ?? DEFAULT_LOOK;
+  const wash = useSharedValue(unread ? 1 : 0);
+  useEffect(() => {
+    wash.set(timing.quick(unread ? 1 : 0));
+  }, [unread, wash]);
+  const washStyle = useAnimatedStyle(() => ({ opacity: wash.value }));
+
   const body = (
     <View
       style={{
         flexDirection: 'row',
         alignItems: 'flex-start',
-        gap: 12,
-        paddingHorizontal: 14,
-        paddingVertical: 12,
+        gap: 14,
+        paddingHorizontal: 20,
+        paddingVertical: 14,
       }}
     >
-      <View>
-        <IconTile icon={look.icon} size={40} tone={look.tone} />
-        {/* Unread: a dot on the tile's corner, ringed in the card so it reads as sitting on it. */}
-        <View
-          pointerEvents="none"
-          style={{
-            position: 'absolute',
-            top: -3,
-            right: -3,
-            padding: 2,
-            borderRadius: radius.full,
-            backgroundColor: c.card,
-          }}
-        >
-          <Fade visible={unread}>
-            <Dot color={c.primary} size={8} />
-          </Fade>
-        </View>
-      </View>
+      <IconTile icon={look.icon} size={40} tone={look.tone} />
       <View style={{ flex: 1, minWidth: 0 }}>
         <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 8 }}>
           <T
@@ -127,34 +139,241 @@ function Row({ n, onOpen }: { n: NotificationDto; onOpen: (n: NotificationDto) =
       </View>
     </View>
   );
-  if (!n.link) {
-    return (
-      <View testID="notification" accessibilityState={{ selected: unread }}>
-        {body}
-      </View>
-    );
-  }
   return (
-    <Press
-      accessibilityRole="button"
-      accessibilityLabel={`${n.title}. ${n.body}. ${timeAgo(n.createdAt)}`}
-      testID="notification"
-      onPress={() => onOpen(n)}
-      scale={0.99}
-    >
-      {body}
-    </Press>
+    <View>
+      <Animated.View
+        pointerEvents="none"
+        style={[StyleSheet.absoluteFill, { backgroundColor: alpha(c.primary, 0.1) }, washStyle]}
+      />
+      {divider && (
+        <View
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 74,
+            right: 0,
+            height: StyleSheet.hairlineWidth,
+            backgroundColor: c.border,
+          }}
+        />
+      )}
+      {n.link ? (
+        <Press
+          accessibilityRole="button"
+          accessibilityLabel={`${unread ? 'Unread. ' : ''}${n.title}. ${n.body}. ${timeAgo(n.createdAt)}`}
+          accessibilityState={{ selected: unread }}
+          testID="notification"
+          onPress={() => onOpen(n)}
+          scale={0.99}
+        >
+          {body}
+        </Press>
+      ) : (
+        <View testID="notification" accessibilityState={{ selected: unread }}>
+          {body}
+        </View>
+      )}
+    </View>
   );
 }
 
-/** Notification history, newest first, by day. Tapping one marks it read and opens what it is about. */
+type Item =
+  | { kind: 'header'; key: string; label: string }
+  | { kind: 'row'; key: string; n: NotificationDto; divider: boolean };
+
+/** Day headers and rows, flattened for one FlatList. */
+function flatten(sections: { label: string; items: NotificationDto[] }[]): Item[] {
+  const out: Item[] = [];
+  for (const s of sections) {
+    out.push({ kind: 'header', key: `h:${s.label}`, label: s.label });
+    s.items.forEach((n, i) => out.push({ kind: 'row', key: n.id, n, divider: i > 0 }));
+  }
+  return out;
+}
+
+/** One page: the unread notifications, or all of them, by day. */
+function AlertsPage({
+  tab,
+  width,
+  items,
+  readNow,
+  status,
+  more,
+  loadingMore,
+  onMore,
+  onOpen,
+  onRefresh,
+}: {
+  tab: Tab;
+  width: number;
+  items: NotificationDto[];
+  /** Read here but not yet refreshed from the server. */
+  readNow: ReadonlySet<string>;
+  status: 'loading' | 'ready' | 'error';
+  more: boolean;
+  loadingMore: boolean;
+  onMore: () => void;
+  onOpen: (n: NotificationDto) => void;
+  onRefresh: () => Promise<void>;
+}) {
+  const { c } = useTheme();
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const [pulling, setPulling] = useState(false);
+  // All: older than a week stays folded away until asked for. Unread: everything unread shows.
+  const [showEarlier, setShowEarlier] = useState(false);
+
+  const { data, hidden } = useMemo(() => {
+    const list = tab === 'unread' ? items.filter((n) => !n.readAt) : items;
+    const { sections, earlier } = recentSections(list);
+    const open = tab === 'unread' || showEarlier;
+    return {
+      data: flatten([...sections, ...(open && earlier.length ? [{ label: 'Earlier', items: earlier }] : [])]),
+      hidden: open ? 0 : earlier.length,
+    };
+  }, [items, tab, showEarlier]);
+
+  const ids = useMemo(() => (status === 'ready' ? data.map((d) => d.key) : null), [status, data]);
+  const arriving = useArrivals(ids);
+
+  async function pull() {
+    setPulling(true);
+    try {
+      await onRefresh();
+    } finally {
+      setPulling(false);
+    }
+  }
+
+  let empty: React.JSX.Element | undefined;
+  if (status === 'loading') {
+    empty = (
+      <View accessibilityState={{ busy: true }}>
+        {[0, 1, 2, 3].map((i) => (
+          <View key={i} style={{ flexDirection: 'row', gap: 14, paddingHorizontal: 20, paddingVertical: 14 }}>
+            <Skeleton width={40} height={40} round={12} />
+            <View style={{ flex: 1, gap: 8 }}>
+              <Skeleton width={160} height={14} />
+              <Skeleton width="80%" height={12} />
+            </View>
+          </View>
+        ))}
+      </View>
+    );
+  } else if (status === 'ready' && tab === 'unread') {
+    empty = (
+      <View testID="no-unread-notifications">
+        <EmptyState
+          icon={CheckCheck}
+          title="You're all caught up"
+          body="New permission requests, failures and finished turns show up here."
+        />
+      </View>
+    );
+  } else if (status === 'ready') {
+    empty = (
+      <View testID="no-notifications">
+        <EmptyState icon={BellOff} title="No notifications yet">
+          <T variant="small" tone="muted" center>
+            Permission requests, failures and finished turns show up here. Choose which in{' '}
+            <T
+              variant="smallMedium"
+              accessibilityRole="link"
+              style={{ textDecorationLine: 'underline' }}
+              onPress={() => router.push('/profile')}
+            >
+              your profile
+            </T>
+            .
+          </T>
+        </EmptyState>
+      </View>
+    );
+  }
+
+  const canMore = data.length > 0 && (hidden > 0 || more);
+
+  return (
+    <Animated.FlatList
+      data={data}
+      keyExtractor={(d) => d.key}
+      itemLayoutAnimation={layout}
+      renderItem={({ item, index }) => (
+        <Animated.View entering={arriving(item.key, index)} exiting={exit.fade}>
+          {item.kind === 'header' ? (
+            <T
+              variant="overline"
+              tone="muted"
+              accessibilityRole="header"
+              testID="notification-section"
+              style={{
+                paddingHorizontal: 20,
+                paddingTop: index ? 18 : 4,
+                paddingBottom: 6,
+                textTransform: 'uppercase',
+              }}
+            >
+              {item.label}
+            </T>
+          ) : (
+            <Row
+              n={item.n}
+              unread={!item.n.readAt && !readNow.has(item.n.id)}
+              divider={item.divider}
+              onOpen={onOpen}
+            />
+          )}
+        </Animated.View>
+      )}
+      ListEmptyComponent={empty}
+      ListFooterComponent={
+        canMore ? (
+          <View style={{ alignItems: 'center', paddingTop: 12 }}>
+            <Button
+              label={loadingMore ? 'Loading…' : 'Show more'}
+              icon={ChevronDown}
+              variant="ghost"
+              size="sm"
+              disabled={loadingMore}
+              onPress={() => (hidden > 0 ? setShowEarlier(true) : onMore())}
+              testID="show-more"
+            />
+          </View>
+        ) : undefined
+      }
+      accessibilityLabel={tab === 'unread' ? 'Unread notifications' : 'All notifications'}
+      testID={`notifications-${tab}`}
+      showsVerticalScrollIndicator={false}
+      style={{ width }}
+      contentContainerStyle={{ paddingBottom: insets.bottom + TAB_BAR_HEIGHT + 24 }}
+      refreshControl={
+        <RefreshControl
+          refreshing={pulling}
+          onRefresh={() => void pull()}
+          tintColor={c.primary}
+          colors={[c.primary]}
+          progressBackgroundColor={c.card}
+        />
+      }
+    />
+  );
+}
+
+/**
+ * Notification history, newest first, by day, as the phone's own notification list draws it: flat
+ * rows, unread ones on a light wash. Unread and All are two pages side by side: swipe between them,
+ * or tap the control. Tapping a notification marks it read and opens what it is about.
+ */
 export function AlertsScreen() {
   const router = useRouter();
+  const { width } = useWindowDimensions();
   const { state, refresh } = useNotifications(30);
   const [older, setOlder] = useState<NotificationDto[]>([]);
   const [cursor, setCursor] = useState<string | null | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
-  const [pulling, setPulling] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [readNow, setReadNow] = useState<ReadonlySet<string>>(new Set());
+  const [tab, setTab] = useState<Tab>('unread');
 
   const first = state.data;
   const next = cursor === undefined ? (first?.nextCursor ?? null) : cursor;
@@ -166,74 +385,92 @@ export function AlertsScreen() {
     [first, older],
   );
 
-  // Today, Yesterday, Last 7 days; anything earlier only after "Show more".
-  const [showEarlier, setShowEarlier] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const { shown, hidden } = useMemo(() => {
-    const { sections, earlier } = recentSections(items);
-    const all: { label: string; items: NotificationDto[] }[] = [
-      ...sections,
-      ...(showEarlier && earlier.length ? [{ label: 'Earlier', items: earlier }] : []),
-    ];
-    return { shown: all, hidden: showEarlier ? 0 : earlier.length };
-  }, [items, showEarlier]);
-
-  const ids = useMemo(() => (first ? shown.flatMap((s) => s.items.map((n) => n.id)) : null), [first, shown]);
-  const arriving = useArrivals(ids);
-
   async function showMore() {
-    // First what is already here but folded away; after that, older pages from the server.
-    if (hidden > 0) return setShowEarlier(true);
     if (!next) return;
-    setLoading(true);
+    setLoadingMore(true);
     try {
       const page = await apiRequest(`/notifications?limit=30&before=${next}`, NotificationPage);
       setOlder((o) => [...o, ...page.notifications]);
       setCursor(page.nextCursor);
-      setShowEarlier(true);
     } catch (err) {
       setError((err as Error).message);
     } finally {
-      setLoading(false);
+      setLoadingMore(false);
     }
   }
 
   const open = (n: NotificationDto) => {
-    if (!n.readAt) void markRead({ ids: [n.id] }).then(refresh, () => undefined);
-    router.push(routeForLink(n.link));
+    if (!n.readAt) {
+      setReadNow((s) => new Set(s).add(n.id));
+      void markRead({ ids: [n.id] }).then(refresh, () => undefined);
+    }
+    if (n.link) router.push(routeForLink(n.link));
   };
 
   async function markAll() {
     setError(null);
+    const unread = items.filter((n) => !n.readAt).map((n) => n.id);
+    setReadNow((s) => new Set([...s, ...unread]));
     try {
       await markRead();
       setOlder((o) => o.map((n) => ({ ...n, readAt: n.readAt ?? new Date().toISOString() })));
       await refresh();
       buzz(true);
     } catch (err) {
+      setReadNow((s) => new Set([...s].filter((id) => !unread.includes(id))));
       setError((err as Error).message);
       buzz(false);
     }
   }
 
-  async function pull() {
-    setPulling(true);
-    try {
-      await refresh();
-    } finally {
-      setPulling(false);
-    }
-  }
+  const index = TABS.findIndex((o) => o.value === tab);
+  // Where the strip of pages sits (0 = Unread, -width = All) and which page it is settled on.
+  const x = useSharedValue(0);
+  const page = useSharedValue(0);
+  useEffect(() => {
+    page.set(index);
+    x.set(withSpring(-index * width, settleSpring));
+  }, [index, width, x, page]);
 
-  let row = 0;
+  const pan = usePanGesture({
+    activeOffsetX: [-16, 16],
+    failOffsetY: [-12, 12],
+    onUpdate: (e) => {
+      'worklet';
+      const rest = -page.get() * width;
+      let to = rest + e.translationX;
+      // Past either end the strip only gives a little.
+      if (to > 0) to *= 0.25;
+      else if (to < -width) to = -width + (to + width) * 0.25;
+      x.set(to);
+    },
+    onDeactivate: (e) => {
+      'worklet';
+      const from = page.get();
+      const step =
+        e.translationX < -width * 0.3 || e.velocityX < -600
+          ? 1
+          : e.translationX > width * 0.3 || e.velocityX > 600
+            ? -1
+            : 0;
+      const to = Math.min(TABS.length - 1, Math.max(0, from + step));
+      page.set(to);
+      x.set(withSpring(-to * width, { ...settleSpring, velocity: e.velocityX }));
+      if (to !== from) scheduleOnRN(setTab, TABS[to]!.value);
+    },
+  });
+  const strip = useAnimatedStyle(() => ({ transform: [{ translateX: x.get() }] }));
+
+  const unreadCount = first ? items.filter((n) => !n.readAt && !readNow.has(n.id)).length : 0;
+  const status = state.status === 'loading' ? 'loading' : first ? 'ready' : 'error';
+
   return (
     <Screen
       title="Alerts"
-      onRefresh={() => void pull()}
-      refreshing={pulling}
+      scroll={false}
       actions={
-        first && first.unread > 0 ? (
-          <Animated.View entering={arriving('mark-all', 0)} exiting={exit.fade}>
+        first && first.unread > 0 && unreadCount > 0 ? (
+          <Animated.View entering={enter.fade} exiting={exit.fade}>
             <Button
               label="Mark all read"
               variant="outline"
@@ -244,63 +481,30 @@ export function AlertsScreen() {
           </Animated.View>
         ) : undefined
       }
-      contentStyle={{ paddingHorizontal: 16, gap: 18 }}
     >
-      {(error || state.error) && <Notice>{error ?? state.error}</Notice>}
-      {state.status === 'loading' && <Skeleton height={160} round={18} />}
-      {state.status === 'ready' && items.length === 0 && (
-        <View testID="no-notifications">
-          <EmptyState icon={BellOff} title="No notifications yet">
-            <T variant="small" tone="muted" center>
-              Permission requests, failures and finished turns show up here. Choose which in{' '}
-              <T
-                variant="smallMedium"
-                accessibilityRole="link"
-                style={{ textDecorationLine: 'underline' }}
-                onPress={() => router.push('/profile')}
-              >
-                your profile
-              </T>
-              .
-            </T>
-          </EmptyState>
-        </View>
-      )}
-      {shown.map((section) => (
-        <Animated.View
-          key={section.label}
-          layout={layout}
-          accessibilityLabel={section.label}
-          testID="notification-section"
-          style={{ gap: 6 }}
-        >
-          <T variant="overline" tone="muted" style={{ paddingHorizontal: 4, textTransform: 'uppercase' }}>
-            {section.label}
-          </T>
-          <Card style={{ overflow: 'hidden' }}>
-            {section.items.map((n, i) => (
-              <Animated.View key={n.id} entering={arriving(n.id, row++)} layout={layout}>
-                {i > 0 && <Divider inset={66} />}
-                <Row n={n} onOpen={open} />
-              </Animated.View>
-            ))}
-          </Card>
+      <View style={{ paddingHorizontal: 20, paddingBottom: 8, gap: 12 }}>
+        <Segmented options={TABS} value={tab} onChange={setTab} label="Which notifications" />
+        {(error || state.error) && <Notice>{error ?? state.error}</Notice>}
+      </View>
+      <GestureDetector gesture={pan}>
+        <Animated.View style={[{ flex: 1, flexDirection: 'row', width: width * TABS.length }, strip]}>
+          {TABS.map((o) => (
+            <AlertsPage
+              key={o.value}
+              tab={o.value}
+              width={width}
+              items={items}
+              readNow={readNow}
+              status={status}
+              more={!!next}
+              loadingMore={loadingMore}
+              onMore={() => void showMore()}
+              onOpen={open}
+              onRefresh={refresh}
+            />
+          ))}
         </Animated.View>
-      ))}
-      {/* Older than a week stays folded away until asked for. */}
-      {(hidden > 0 || next) && (
-        <Animated.View layout={layout} style={{ alignItems: 'center' }}>
-          <Button
-            label={loading ? 'Loading…' : 'Show more'}
-            icon={ChevronDown}
-            variant="ghost"
-            size="sm"
-            disabled={loading}
-            onPress={() => void showMore()}
-            testID="show-more"
-          />
-        </Animated.View>
-      )}
+      </GestureDetector>
     </Screen>
   );
 }

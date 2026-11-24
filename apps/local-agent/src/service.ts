@@ -22,6 +22,7 @@ import { ManagedSessions, type QueryFn } from './providers/claude-code/managed.j
 import { IdleWake } from './providers/claude-code/wake.js';
 import { listModels } from './providers/claude-code/models.js';
 import { AttachmentClient, safeFileName } from './attachments.js';
+import { readSubagents } from './providers/claude-code/subagents.js';
 import type { ClaudeUsage, ModelOption } from '@pocket-agent/protocol';
 import { readUsage } from './providers/claude-code/usage.js';
 import os from 'node:os';
@@ -174,6 +175,14 @@ export class AgentService {
         void listFolders(this.policy, folder).then((r) =>
           this.link.send(createEvent('folder.listed', { requestId, ...r })),
         );
+      }
+      if (msg.eventType === 'agents.read') {
+        // A session's sub-agents and one's transcript, for the app's agent map. Read from disk on
+        // each ask, never stored.
+        const { requestId, toolUseId } = msg.payload;
+        void readSubagents(msg.sessionId ?? '', toolUseId)
+          .catch(() => ({ error: 'unreadable' }))
+          .then((r) => this.link.send(createEvent('agents.read.result', { requestId, ...r })));
       }
       if (msg.eventType === 'config.update' && msg.payload.awayMode !== this.awayMode) {
         this.awayMode = msg.payload.awayMode;

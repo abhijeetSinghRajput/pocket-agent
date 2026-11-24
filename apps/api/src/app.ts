@@ -24,6 +24,7 @@ import { agentRoutes, deviceRoutes } from './routes/devices.js';
 import { healthRoutes, type HealthDeps } from './routes/health.js';
 import { notificationRoutes } from './routes/notifications.js';
 import { sessionRoutes } from './routes/sessions.js';
+import { subagentRoutes } from './routes/subagents.js';
 
 export interface AppDeps {
   env: Pick<Env, 'WEB_ORIGINS' | 'NODE_ENV'>;
@@ -104,6 +105,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     await app.register(deviceRoutes, services);
     await app.register(agentRoutes, services);
     await app.register(sessionRoutes, services);
+    await app.register(subagentRoutes, services);
     await app.register(agentGateway, services);
     await app.register(clientGateway, services);
     await app.register(retentionJob, services);

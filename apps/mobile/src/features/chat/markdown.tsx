@@ -1,9 +1,13 @@
 import * as Linking from 'expo-linking';
 import { Check } from 'lucide-react-native';
 import { lexer, type Token, type Tokens } from 'marked';
-import { createContext, Fragment, memo, useContext, useMemo, type ReactNode } from 'react';
-import { ScrollView, StyleSheet, Text, View, type TextStyle } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { createContext, Fragment, memo, useContext, useMemo, useRef, useState, type ReactNode } from 'react';
+import { StyleSheet, Text, View, type TextStyle } from 'react-native';
+import { ScrollView as GHScrollView } from 'react-native-gesture-handler';
+import Animated, { useAnimatedStyle, withTiming } from 'react-native-reanimated';
 import { CodeBlock } from '@/features/chat/code-block';
+import { dur, ease } from '@/lib/motion';
 import { alpha, fonts, radius, useTheme, type Colors } from '@/lib/theme';
 import { tap } from '@/ui/core';
 
@@ -202,48 +206,175 @@ function List({ list, depth }: { list: Tokens.List; depth: number }) {
   );
 }
 
+/** A cell never grows past this; longer text wraps inside it. */
+const CELL_MAX = 240;
+const CELL_MIN = 44;
+const CELL_PAD_X = 12;
+const CELL_TEXT: TextStyle = { fontFamily: fonts.regular, fontSize: 14, lineHeight: 20 };
+
+/** Measured column widths by table source, so a table scrolled back into view lays out at once. */
+const widthCache = new Map<string, number[]>();
+
+function cellStyle(header: boolean, align: Tokens.TableCell['align'], color: string): TextStyle {
+  return {
+    ...CELL_TEXT,
+    color,
+    fontFamily: header ? fonts.semibold : fonts.regular,
+    textAlign: align ?? 'left',
+    fontVariant: align === 'right' ? ['tabular-nums'] : undefined,
+  };
+}
+
+/** The faded edge on the side of a table that has more to scroll to. */
+function Edge({ side, visible, color }: { side: 'left' | 'right'; visible: boolean; color: string }) {
+  const style = useAnimatedStyle(() => ({
+    opacity: withTiming(visible ? 1 : 0, { duration: dur.quick, easing: ease.out }),
+  }));
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={[{ position: 'absolute', top: 0, bottom: 0, width: 28, [side]: 0 }, style]}
+    >
+      <LinearGradient
+        colors={side === 'right' ? [alpha(color, 0), color] : [color, alpha(color, 0)]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 0 }}
+        style={{ flex: 1 }}
+      />
+    </Animated.View>
+  );
+}
+
+/**
+ * A GFM table. Every cell of a column is as wide as the column's widest cell (measured once,
+ * off screen, up to CELL_MAX, past which text wraps), cells follow the column's `:--`/`:-:`/`--:`
+ * alignment, and a table wider than the message scrolls sideways inside its frame (a gesture
+ * handler scroll view, so a sideways drag goes to the table and an upward one to the chat).
+ */
 function Table({ table }: { table: Tokens.Table }) {
   const { c } = useTheme();
-  const row = (cells: Tokens.TableCell[], header: boolean, r: number, last: boolean) => (
-    <View
-      key={r}
-      style={{
-        flexDirection: 'row',
-        backgroundColor: header ? alpha(c.muted, 0.6) : undefined,
-        borderBottomWidth: last ? 0 : StyleSheet.hairlineWidth,
-        borderBottomColor: c.border,
-      }}
-    >
-      {cells.map((cl, i) => (
-        <Text
-          key={i}
-          style={[
-            BODY,
-            {
-              fontSize: 14,
-              lineHeight: 21,
-              color: c.foreground,
-              fontFamily: header ? fonts.semibold : fonts.regular,
-              paddingHorizontal: 10,
-              paddingVertical: 6,
-              minWidth: 72,
-              maxWidth: 300,
-              textAlign: cl.align ?? 'left',
-            },
-          ]}
-        >
-          {inline(cl.tokens, c, `t${r}.${i}.`)}
-        </Text>
-      ))}
-    </View>
-  );
+  const cols = table.header.length;
+  const rows = [table.header, ...table.rows];
+  // The column widths and the source they were measured for. While a reply streams in, the table
+  // keeps its last widths (same columns) until the grown one has been measured.
+  const [sized, setSized] = useState<{ raw: string; widths: number[] } | null>(() => {
+    const cached = widthCache.get(table.raw);
+    return cached ? { raw: table.raw, widths: cached } : null;
+  });
+  const widths = sized && sized.widths.length === cols ? sized.widths : null;
+  const fresh = sized?.raw === table.raw;
+  const measured = useRef<{ raw: string; cells: number[][] }>({ raw: '', cells: [] });
+  const [frame, setFrame] = useState(0);
+  // Which ends have more to scroll to (kept as two flags: a scroll only re-renders when one flips).
+  const [atStart, setAtStart] = useState(true);
+  const [atEnd, setAtEnd] = useState(false);
+
+  const onCell = (r: number, i: number, w: number) => {
+    if (measured.current.raw !== table.raw) measured.current = { raw: table.raw, cells: [] };
+    const m = measured.current.cells;
+    (m[r] ??= [])[i] = w;
+    let done = 0;
+    for (const row of m) if (row) done += row.filter((x) => x !== undefined).length;
+    if (done < rows.length * cols) return;
+    const next = Array.from({ length: cols }, (_, col) =>
+      Math.ceil(Math.max(CELL_MIN, ...m.map((row) => row?.[col] ?? 0)) + 1),
+    );
+    if (widthCache.size > 100) widthCache.clear();
+    widthCache.set(table.raw, next);
+    setSized({ raw: table.raw, widths: next });
+  };
+
+  const total = widths ? widths.reduce((a, b) => a + b, 0) : 0;
+  const scrolls = widths !== null && frame > 0 && total + 1 > frame;
+
   return (
-    <ScrollView horizontal nestedScrollEnabled showsHorizontalScrollIndicator={false}>
-      <View style={{ borderRadius: radius.md, backgroundColor: c.card, overflow: 'hidden' }}>
-        {row(table.header, true, -1, table.rows.length === 0)}
-        {table.rows.map((cells, r) => row(cells, false, r, r === table.rows.length - 1))}
-      </View>
-    </ScrollView>
+    <View>
+      {/* Off-screen: every cell at its natural width (wrapping past the cap), to size the columns. */}
+      {!fresh && (
+        <View
+          key={table.raw}
+          aria-hidden
+          pointerEvents="none"
+          style={{ position: 'absolute', opacity: 0, left: 0, top: 0, width: 10_000 }}
+        >
+          {rows.map((cells, r) =>
+            Array.from({ length: cols }, (_, i) => (
+              <View key={`${r}.${i}`} style={{ flexDirection: 'row' }}>
+                <Text
+                  onLayout={(e) => onCell(r, i, e.nativeEvent.layout.width)}
+                  style={[
+                    cellStyle(r === 0, table.align[i] ?? null, c.foreground),
+                    { maxWidth: CELL_MAX, paddingHorizontal: CELL_PAD_X },
+                  ]}
+                >
+                  {cells[i] ? inline(cells[i].tokens, c, `m${r}.${i}.`) : ''}
+                </Text>
+              </View>
+            )),
+          )}
+        </View>
+      )}
+      {widths && (
+        <View
+          onLayout={(e) => setFrame(e.nativeEvent.layout.width)}
+          style={{
+            width: total + 2,
+            maxWidth: '100%',
+            borderRadius: radius.md,
+            borderWidth: StyleSheet.hairlineWidth,
+            borderColor: c.border,
+            backgroundColor: c.card,
+            overflow: 'hidden',
+          }}
+        >
+          <GHScrollView
+            horizontal
+            nestedScrollEnabled
+            directionalLockEnabled
+            bounces={false}
+            overScrollMode="never"
+            scrollEnabled={scrolls}
+            showsHorizontalScrollIndicator={false}
+            scrollEventThrottle={32}
+            onScroll={(e) => {
+              const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
+              setAtStart(contentOffset.x <= 2);
+              setAtEnd(contentOffset.x + layoutMeasurement.width >= contentSize.width - 2);
+            }}
+          >
+            <View accessibilityRole="grid" style={{ width: total }}>
+              {rows.map((cells, r) => (
+                <View
+                  key={r}
+                  accessibilityRole={r === 0 ? 'header' : undefined}
+                  style={{
+                    flexDirection: 'row',
+                    backgroundColor:
+                      r === 0 ? alpha(c.muted, 0.7) : r % 2 === 0 ? alpha(c.foreground, 0.025) : undefined,
+                    borderBottomWidth: r === rows.length - 1 ? 0 : StyleSheet.hairlineWidth,
+                    borderBottomColor: r === 0 ? c.border : alpha(c.border, 0.7),
+                  }}
+                >
+                  {widths.map((w, i) => (
+                    <Text
+                      key={i}
+                      style={[
+                        cellStyle(r === 0, table.align[i] ?? null, c.foreground),
+                        { width: w, paddingHorizontal: CELL_PAD_X, paddingVertical: 8 },
+                      ]}
+                    >
+                      {cells[i] ? inline(cells[i].tokens, c, `t${r}.${i}.`) : ''}
+                    </Text>
+                  ))}
+                </View>
+              ))}
+            </View>
+          </GHScrollView>
+          <Edge side="left" visible={scrolls && !atStart} color={c.card} />
+          <Edge side="right" visible={scrolls && !atEnd} color={c.card} />
+        </View>
+      )}
+    </View>
   );
 }
 

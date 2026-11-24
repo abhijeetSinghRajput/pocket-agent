@@ -6,6 +6,7 @@ import {
   NotificationPage,
   SessionListResponse,
   SessionResponse,
+  SubagentDetailResponse,
   WorkerListResponse,
   type AgentEventDto,
   type BackendToWeb,
@@ -224,6 +225,27 @@ export function useWorkers() {
       e.eventType === 'agent.event.created' &&
       /^agent\.(tool\.|worker\.|session\.ended|output)/.test(e.payload.eventType),
     3000,
+  );
+  return poll;
+}
+
+/**
+ * One sub-agent's work, read live from its PC: its prompt, tool calls and transcript, with the
+ * chat's whole agent map. Its tool calls report through the chat, so the chat's events refresh it.
+ */
+export function useSubagent(sessionId: string, toolUseId: string) {
+  const fetcher = useCallback(
+    (signal: AbortSignal) =>
+      apiRequest(`/sessions/${sessionId}/agents/${encodeURIComponent(toolUseId)}`, SubagentDetailResponse, {
+        signal,
+      }),
+    [sessionId, toolUseId],
+  );
+  const poll = usePoll(['subagent', sessionId, toolUseId], fetcher, 15_000);
+  useLiveRefresh(
+    () => void poll.refresh(),
+    (e) => e.sessionId === sessionId && e.eventType === 'agent.event.created',
+    4000,
   );
   return poll;
 }

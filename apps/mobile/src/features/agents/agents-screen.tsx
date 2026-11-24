@@ -2,8 +2,9 @@ import { timeAgo, toolTarget } from '@pocket-agent/core';
 import type { ApprovalDto } from '@pocket-agent/protocol';
 import { Bot, ChevronDown, Plus } from 'lucide-react-native';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { View } from 'react-native';
+import { RefreshControl, ScrollView, View } from 'react-native';
 import Animated from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ApprovalCard } from '@/features/approvals/approval-card';
 import { APPROVAL_STATUS } from '@/features/approvals/shared';
 import { NewChatSheet } from '@/features/sessions/new-chat-sheet';
@@ -14,7 +15,11 @@ import { alpha, fonts, radius, useTheme } from '@/lib/theme';
 import { Button, Card, Divider, Press, T, tap, toneColor } from '@/ui/core';
 import { EmptyState, Notice, Roll, Skeleton } from '@/ui/feedback';
 import { Segmented } from '@/ui/form';
-import { Screen } from '@/ui/screen';
+import { SwipePages } from '@/ui/pages';
+import { Screen, TAB_BAR_HEIGHT } from '@/ui/screen';
+
+type Page = 'active' | 'finished';
+const PAGES: readonly Page[] = ['active', 'finished'];
 
 /** How long a decided request stays, showing its result, before the list closes over its place. */
 const SETTLE_MS = 1400;
@@ -138,7 +143,8 @@ export function AgentsScreen() {
   const history = useApprovals('all');
   const [creating, setCreating] = useState(false);
   // Running agents first; the ones that finished (and decisions made) are a tab away.
-  const [tab, setTab] = useState<'active' | 'finished'>('active');
+  const [tab, setTab] = useState<Page>('active');
+  const insets = useSafeAreaInsets();
   const [pulling, setPulling] = useState(false);
 
   // Decided requests stay a moment, showing their result, before the refresh takes them away.
@@ -191,44 +197,31 @@ export function AgentsScreen() {
     void refreshAll().finally(() => setPulling(false));
   };
 
-  let step = 0;
-  return (
-    <Screen
-      title="Agents"
-      subtitle={summary}
-      onRefresh={pull}
-      refreshing={pulling}
-      actions={<Button label="New chat" icon={Plus} size="sm" onPress={() => setCreating(true)} />}
-      contentStyle={{ paddingHorizontal: 16, paddingTop: 4, gap: 22 }}
-      // The tabs stay at the top with the title; the agents scroll under them.
-      pinned={
-        <Segmented
-          options={[
-            { value: 'active', label: running.length ? `Active · ${running.length}` : 'Active' },
-            { value: 'finished', label: finished.length ? `Finished · ${finished.length}` : 'Finished' },
-          ]}
-          value={tab}
-          onChange={setTab}
-          label="Which agents"
-        />
-      }
+  const loadingView = loading && (
+    <Animated.View
+      entering={enter.fade}
+      exiting={exit.fade}
+      accessibilityState={{ busy: true }}
+      style={{ gap: 10 }}
     >
-      {loading && (
-        <Animated.View
-          entering={enter.fade}
-          exiting={exit.fade}
-          accessibilityState={{ busy: true }}
-          style={{ gap: 10 }}
-        >
-          <Skeleton height={14} width={90} />
-          <Skeleton height={168} round={radius.xl} />
-        </Animated.View>
-      )}
+      <Skeleton height={14} width={90} />
+      <Skeleton height={168} round={radius.xl} />
+    </Animated.View>
+  );
+  const errors = (
+    <>
       {workers.state.status === 'error' && <Notice>{workers.state.error}</Notice>}
       {pending.state.status === 'error' && <Notice>{pending.state.error}</Notice>}
+    </>
+  );
 
+  /** What runs now, and what needs you. */
+  const activePage = (
+    <>
+      {loadingView}
+      {errors}
       {needs.length > 0 && (
-        <Animated.View entering={enter.rise(step++)} layout={layout} style={{ gap: 10 }} testID="needs-you">
+        <Animated.View entering={enter.rise(0)} layout={layout} style={{ gap: 10 }} testID="needs-you">
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 4 }}>
             <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: c.warning }} />
             <T
@@ -249,19 +242,12 @@ export function AgentsScreen() {
           ))}
         </Animated.View>
       )}
-
-      {!loading && tab === 'active' && running.length > 0 && (
-        <Animated.View key="active" entering={enter.rise(step++)} layout={layout}>
+      {!loading && running.length > 0 && (
+        <Animated.View entering={enter.rise(1)} layout={layout}>
           <AgentMap workers={running} />
         </Animated.View>
       )}
-      {!loading && tab === 'finished' && finished.length > 0 && (
-        <Animated.View key="finished" entering={enter.rise(step++)} layout={layout}>
-          <AgentMap workers={finished} />
-        </Animated.View>
-      )}
-
-      {!loading && tab === 'active' && !running.length && !needs.length && (
+      {!loading && !running.length && !needs.length && (
         <View testID="no-agents">
           <EmptyState
             icon={Bot}
@@ -276,7 +262,20 @@ export function AgentsScreen() {
           />
         </View>
       )}
-      {!loading && tab === 'finished' && !finished.length && (
+    </>
+  );
+
+  /** What finished today, and the decisions made. */
+  const finishedPage = (
+    <>
+      {loadingView}
+      {errors}
+      {!loading && finished.length > 0 && (
+        <Animated.View entering={enter.rise(0)} layout={layout}>
+          <AgentMap workers={finished} />
+        </Animated.View>
+      )}
+      {!loading && !finished.length && (
         <View testID="no-finished-agents">
           <EmptyState
             icon={Bot}
@@ -285,9 +284,55 @@ export function AgentsScreen() {
           />
         </View>
       )}
+      {!loading && <RecentDecisions items={recent} />}
+    </>
+  );
 
-      {!loading && tab === 'finished' && <RecentDecisions items={recent} />}
-
+  return (
+    <Screen
+      title="Agents"
+      subtitle={summary}
+      scroll={false}
+      actions={<Button label="New chat" icon={Plus} size="sm" onPress={() => setCreating(true)} />}
+      // The tabs stay at the top with the title; each page scrolls under them, and they swipe.
+      pinned={
+        <Segmented
+          options={[
+            { value: 'active', label: running.length ? `Active · ${running.length}` : 'Active' },
+            { value: 'finished', label: finished.length ? `Finished · ${finished.length}` : 'Finished' },
+          ]}
+          value={tab}
+          onChange={setTab}
+          label="Which agents"
+        />
+      }
+    >
+      <SwipePages pages={PAGES} value={tab} onChange={setTab}>
+        {(page, width) => (
+          <ScrollView
+            style={{ width }}
+            contentContainerStyle={{
+              paddingHorizontal: 16,
+              paddingTop: 4,
+              paddingBottom: insets.bottom + TAB_BAR_HEIGHT + 24,
+              gap: 22,
+            }}
+            showsVerticalScrollIndicator={false}
+            refreshControl={
+              <RefreshControl
+                refreshing={pulling}
+                onRefresh={pull}
+                tintColor={c.primary}
+                colors={[c.primary]}
+                progressBackgroundColor={c.card}
+              />
+            }
+            testID={`agents-${page}`}
+          >
+            {page === 'active' ? activePage : finishedPage}
+          </ScrollView>
+        )}
+      </SwipePages>
       <NewChatSheet open={creating} onClose={() => setCreating(false)} />
     </Screen>
   );

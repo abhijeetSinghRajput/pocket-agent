@@ -14,20 +14,19 @@ import {
   type LucideIcon,
 } from 'lucide-react-native';
 import { useEffect, useMemo, useState } from 'react';
-import { RefreshControl, StyleSheet, useWindowDimensions, View } from 'react-native';
-import { GestureDetector, usePanGesture } from 'react-native-gesture-handler';
-import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
+import { RefreshControl, StyleSheet, View } from 'react-native';
+import Animated, { useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { scheduleOnRN } from 'react-native-worklets';
 import { apiRequest } from '@/lib/api';
 import { markRead, useNotifications } from '@/lib/data';
 import { routeForLink } from '@/lib/links';
-import { enter, exit, layout, settleSpring, timing } from '@/lib/motion';
+import { enter, exit, layout, timing } from '@/lib/motion';
 import { alpha, fonts, useTheme } from '@/lib/theme';
 import { useArrivals } from '@/ui/arrive';
 import { Button, buzz, IconTile, Press, T, type Tone } from '@/ui/core';
 import { EmptyState, Notice, Skeleton } from '@/ui/feedback';
 import { Segmented } from '@/ui/form';
+import { SwipePages } from '@/ui/pages';
 import { Screen, TAB_BAR_HEIGHT } from '@/ui/screen';
 
 /** What each kind of alert looks like: an icon in the tone of what happened. */
@@ -46,6 +45,7 @@ const TABS: { value: Tab; label: string }[] = [
   { value: 'unread', label: 'Unread' },
   { value: 'all', label: 'All' },
 ];
+const TAB_VALUES = TABS.map((o) => o.value);
 
 /** "now", "5m", "2h", "3d": how long ago, as short as a phone's notification shade says it. */
 function shortAgo(iso: string, now = Date.now()): string {
@@ -366,7 +366,6 @@ function AlertsPage({
  */
 export function AlertsScreen() {
   const router = useRouter();
-  const { width } = useWindowDimensions();
   const { state, refresh } = useNotifications(30);
   const [older, setOlder] = useState<NotificationDto[]>([]);
   const [cursor, setCursor] = useState<string | null | undefined>(undefined);
@@ -423,44 +422,6 @@ export function AlertsScreen() {
     }
   }
 
-  const index = TABS.findIndex((o) => o.value === tab);
-  // Where the strip of pages sits (0 = Unread, -width = All) and which page it is settled on.
-  const x = useSharedValue(0);
-  const page = useSharedValue(0);
-  useEffect(() => {
-    page.set(index);
-    x.set(withSpring(-index * width, settleSpring));
-  }, [index, width, x, page]);
-
-  const pan = usePanGesture({
-    activeOffsetX: [-16, 16],
-    failOffsetY: [-12, 12],
-    onUpdate: (e) => {
-      'worklet';
-      const rest = -page.get() * width;
-      let to = rest + e.translationX;
-      // Past either end the strip only gives a little.
-      if (to > 0) to *= 0.25;
-      else if (to < -width) to = -width + (to + width) * 0.25;
-      x.set(to);
-    },
-    onDeactivate: (e) => {
-      'worklet';
-      const from = page.get();
-      const step =
-        e.translationX < -width * 0.3 || e.velocityX < -600
-          ? 1
-          : e.translationX > width * 0.3 || e.velocityX > 600
-            ? -1
-            : 0;
-      const to = Math.min(TABS.length - 1, Math.max(0, from + step));
-      page.set(to);
-      x.set(withSpring(-to * width, { ...settleSpring, velocity: e.velocityX }));
-      if (to !== from) scheduleOnRN(setTab, TABS[to]!.value);
-    },
-  });
-  const strip = useAnimatedStyle(() => ({ transform: [{ translateX: x.get() }] }));
-
   const unreadCount = first ? items.filter((n) => !n.readAt && !readNow.has(n.id)).length : 0;
   const status = state.status === 'loading' ? 'loading' : first ? 'ready' : 'error';
 
@@ -486,25 +447,22 @@ export function AlertsScreen() {
         <Segmented options={TABS} value={tab} onChange={setTab} label="Which notifications" />
         {(error || state.error) && <Notice>{error ?? state.error}</Notice>}
       </View>
-      <GestureDetector gesture={pan}>
-        <Animated.View style={[{ flex: 1, flexDirection: 'row', width: width * TABS.length }, strip]}>
-          {TABS.map((o) => (
-            <AlertsPage
-              key={o.value}
-              tab={o.value}
-              width={width}
-              items={items}
-              readNow={readNow}
-              status={status}
-              more={!!next}
-              loadingMore={loadingMore}
-              onMore={() => void showMore()}
-              onOpen={open}
-              onRefresh={refresh}
-            />
-          ))}
-        </Animated.View>
-      </GestureDetector>
+      <SwipePages pages={TAB_VALUES} value={tab} onChange={setTab}>
+        {(page, width) => (
+          <AlertsPage
+            tab={page}
+            width={width}
+            items={items}
+            readNow={readNow}
+            status={status}
+            more={!!next}
+            loadingMore={loadingMore}
+            onMore={() => void showMore()}
+            onOpen={open}
+            onRefresh={refresh}
+          />
+        )}
+      </SwipePages>
     </Screen>
   );
 }

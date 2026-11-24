@@ -12,9 +12,8 @@ import {
   type BackendToWeb,
 } from '@pocket-agent/protocol';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AppState } from 'react-native';
 import { apiRequest } from '@/lib/api';
-import { useLiveRefresh, useLiveState } from '@/lib/live';
+import { foreground, useLiveRefresh, useLiveState } from '@/lib/live';
 import { usePoll } from '@/lib/query';
 
 /**
@@ -65,7 +64,8 @@ export function useSession(id: string) {
       apiRequest(`/sessions/${id}`, SessionResponse, { signal }).then((r) => r.session),
     [id],
   );
-  const poll = usePoll(['session', id], fetcher, 30_000);
+  // The open chat's header (working… / waiting for you): checked often if live updates are down.
+  const poll = usePoll(['session', id], fetcher, 5_000);
   useLiveRefresh(
     () => void poll.refresh(),
     (e) => (e.sessionId === id || e.eventType === 'device.status.changed') && sessionChange(e),
@@ -80,7 +80,7 @@ export function useCommands(sessionId: string) {
       apiRequest(`/sessions/${sessionId}/commands`, CommandListResponse, { signal }).then((r) => r.commands),
     [sessionId],
   );
-  const poll = usePoll(['commands', sessionId], fetcher, 30_000);
+  const poll = usePoll(['commands', sessionId], fetcher, 5_000);
   useLiveRefresh(
     () => void poll.refresh(),
     (e) => e.eventType === 'command.status.changed' && e.sessionId === sessionId,
@@ -201,9 +201,10 @@ export function useEventFeed(path: string) {
   }, [refreshHead]);
   // While live updates are connected they say when to refresh; otherwise poll.
   const live = useLiveState() === 'live';
+  // Without them, the open chat checks often: a reply never waits long to show up.
   useEffect(() => {
     if (live) return;
-    const poll = setInterval(() => AppState.currentState === 'active' && void refreshHead(), 30_000);
+    const poll = setInterval(() => foreground() && void refreshHead(), 5_000);
     return () => clearInterval(poll);
   }, [live, refreshHead]);
 

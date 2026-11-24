@@ -27,6 +27,10 @@ interface LiveApi {
 
 const LiveContext = createContext<LiveApi | null>(null);
 
+/** Everything but the background counts as the foreground (`unknown` at a cold start, too). */
+export const foreground = (state: string | null | undefined = AppState.currentState) =>
+  state !== 'background';
+
 /**
  * One WebSocket to `/ws/client` while the app is in the foreground (opened with a one-time
  * ticket). Server → app only: events say *what changed*; screens re-fetch what they show. Screens
@@ -41,7 +45,10 @@ export function LiveProvider({ children }: { children: ReactNode }) {
     let attempt = 0;
     let retry: ReturnType<typeof setTimeout> | undefined;
     let disposed = false;
-    let active = AppState.currentState === 'active';
+    // Connected unless the app is in the background. At a cold start Android can report the state
+    // as unknown for a moment: that counts as the foreground (waiting for "active" would leave the
+    // app without live updates until it is backgrounded and reopened).
+    let active = foreground(AppState.currentState);
     // Each connect() gets a number; only the latest may open a socket (a quick trip to the
     // background and back can leave an older one still waiting for its ticket).
     let generation = 0;
@@ -92,7 +99,7 @@ export function LiveProvider({ children }: { children: ReactNode }) {
 
     // Phones suspend sockets in the background: close on the way out, reconnect on the way back.
     const sub = AppState.addEventListener('change', (next) => {
-      const now = next === 'active';
+      const now = foreground(next);
       if (now === active) return;
       active = now;
       if (!active) {
@@ -101,6 +108,8 @@ export function LiveProvider({ children }: { children: ReactNode }) {
         const closing = ws;
         ws = null;
         closing?.close();
+        // Not live any more: screens poll again until the socket is back.
+        setState('reconnecting');
       } else {
         attempt = 0;
         void connect();

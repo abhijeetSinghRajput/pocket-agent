@@ -1,9 +1,8 @@
 import { NotificationPage } from '@pocket-agent/protocol';
 import { usePathname, useRouter } from 'expo-router';
-import { AppState } from 'react-native';
 import { apiRequest } from '@/lib/api';
 import { markRead } from '@/lib/data';
-import { useLiveEvents } from '@/lib/live';
+import { foreground, useLiveEvents } from '@/lib/live';
 import { routeForLink } from '@/lib/links';
 import { useToast } from '@/ui/toast';
 
@@ -26,7 +25,7 @@ export function InAppToasts() {
   const pathname = usePathname();
 
   useLiveEvents((e) => {
-    if (e.eventType !== 'notification.created' || AppState.currentState !== 'active') return;
+    if (e.eventType !== 'notification.created' || !foreground()) return;
     const id = e.payload.notificationId;
     void apiRequest('/notifications?limit=10', NotificationPage)
       .then(({ notifications }) => {

@@ -17,7 +17,7 @@ import { SessionInfo } from '@/features/chat/session-info';
 import { SessionAvatar } from '@/features/sessions/badges';
 import { markRead, useApprovals, useCommands, useEventFeed, useSession } from '@/lib/data';
 import { chatLink } from '@/lib/links';
-import { useLiveEvents, useLiveRefresh } from '@/lib/live';
+import { foreground, useLiveEvents, useLiveRefresh } from '@/lib/live';
 import { ease, enter } from '@/lib/motion';
 import { alpha, radius, useTheme } from '@/lib/theme';
 import { Button, IconButton, Press, T } from '@/ui/core';
@@ -59,14 +59,14 @@ function typingKind(s: AgentSessionDto): 'working' | 'starting' | null {
 function useMarkChatRead(sessionId: string) {
   const client = useQueryClient();
   const mark = useCallback(() => {
-    if (AppState.currentState !== 'active') return;
+    if (!foreground()) return;
     void markRead({ link: chatLink(sessionId) })
       .then(() => client.invalidateQueries({ queryKey: ['notifications'] }))
       .catch(() => undefined);
   }, [sessionId, client]);
   useEffect(() => {
     mark();
-    const sub = AppState.addEventListener('change', (s) => s === 'active' && mark());
+    const sub = AppState.addEventListener('change', (s) => foreground(s) && mark());
     return () => sub.remove();
   }, [mark]);
   useLiveEvents((e) => {

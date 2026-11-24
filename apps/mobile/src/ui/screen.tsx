@@ -22,6 +22,7 @@ export function Screen({
   refreshing = false,
   tabBar = true,
   contentStyle,
+  pinned,
 }: {
   title: string;
   subtitle?: string;
@@ -34,6 +35,11 @@ export function Screen({
   /** Leave room for the tab bar at the bottom. */
   tabBar?: boolean;
   contentStyle?: StyleProp<ViewStyle>;
+  /**
+   * Stays at the top with the title while the content scrolls under it (a screen's tabs). With it,
+   * the title stays too.
+   */
+  pinned?: ReactNode;
 }) {
   const { c } = useTheme();
   const insets = useSafeAreaInsets();
@@ -66,6 +72,12 @@ export function Screen({
   );
   return (
     <View style={{ flex: 1, backgroundColor: c.background, paddingTop: insets.top }}>
+      {pinned !== undefined && (
+        <View style={{ backgroundColor: c.background, zIndex: 1 }}>
+          {header}
+          <View style={{ paddingHorizontal: 16, paddingBottom: 12 }}>{pinned}</View>
+        </View>
+      )}
       {scroll ? (
         <ScrollView
           contentContainerStyle={[{ paddingBottom: bottom }, contentStyle]}
@@ -83,12 +95,12 @@ export function Screen({
             ) : undefined
           }
         >
-          {header}
+          {pinned === undefined && header}
           {children}
         </ScrollView>
       ) : (
         <>
-          {header}
+          {pinned === undefined && header}
           <View style={[{ flex: 1 }, contentStyle]}>{children}</View>
         </>
       )}

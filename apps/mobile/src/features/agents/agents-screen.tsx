@@ -199,17 +199,20 @@ export function AgentsScreen() {
       onRefresh={pull}
       refreshing={pulling}
       actions={<Button label="New chat" icon={Plus} size="sm" onPress={() => setCreating(true)} />}
-      contentStyle={{ paddingHorizontal: 16, gap: 22 }}
+      contentStyle={{ paddingHorizontal: 16, paddingTop: 4, gap: 22 }}
+      // The tabs stay at the top with the title; the agents scroll under them.
+      pinned={
+        <Segmented
+          options={[
+            { value: 'active', label: running.length ? `Active · ${running.length}` : 'Active' },
+            { value: 'finished', label: finished.length ? `Finished · ${finished.length}` : 'Finished' },
+          ]}
+          value={tab}
+          onChange={setTab}
+          label="Which agents"
+        />
+      }
     >
-      <Segmented
-        options={[
-          { value: 'active', label: running.length ? `Active · ${running.length}` : 'Active' },
-          { value: 'finished', label: finished.length ? `Finished · ${finished.length}` : 'Finished' },
-        ]}
-        value={tab}
-        onChange={setTab}
-        label="Which agents"
-      />
       {loading && (
         <Animated.View
           entering={enter.fade}

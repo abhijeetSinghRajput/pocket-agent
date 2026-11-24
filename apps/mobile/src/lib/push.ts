@@ -40,25 +40,49 @@ export async function ensureChannels(): Promise<void> {
   });
 }
 
-/** Whether live updates are connected (set by the live connection). */
-let liveConnected = false;
-export function setLiveConnected(connected: boolean): void {
-  liveConnected = connected;
+/** What a push says, for the app to show it itself while it is open. */
+export interface ForegroundPush {
+  notificationId: string | null;
+  title: string;
+  body: string;
+  link: string | null;
+  /** A permission request or question (the app already shows those in its own sheet). */
+  decision: boolean;
+}
+const foregroundListeners = new Set<(push: ForegroundPush) => void>();
+
+/** Hears each push that arrives while the app is open (the system shows none of them). */
+export function onForegroundPush(listener: (push: ForegroundPush) => void): () => void {
+  foregroundListeners.add(listener);
+  return () => {
+    foregroundListeners.delete(listener);
+  };
 }
 
 /**
- * Foreground: while live updates are connected the app shows its own toast, so the system shows
- * nothing. While they are down (reconnecting, the server waking), the app would miss it: the
- * system shows it as usual.
+ * The app open: the system shows no notification, the app shows a toast instead (none for the
+ * chat on screen). Closed or in the background: the system shows it as usual.
  */
 export function installForegroundHandler(): void {
   Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-      shouldShowBanner: !liveConnected,
-      shouldShowList: !liveConnected,
-      shouldPlaySound: !liveConnected,
-      shouldSetBadge: false,
-    }),
+    handleNotification: async (n) => {
+      const data = (n.request.content.data ?? {}) as Record<string, unknown>;
+      const str = (v: unknown) => (typeof v === 'string' ? v : '');
+      const push: ForegroundPush = {
+        notificationId: str(data['notificationId']) || null,
+        title: n.request.content.title ?? str(data['title']),
+        body: n.request.content.body ?? (str(data['message']) || str(data['body'])),
+        link: str(data['link']) || null,
+        decision: data['channelId'] === 'approvals',
+      };
+      if (push.title) foregroundListeners.forEach((l) => l(push));
+      return {
+        shouldShowBanner: false,
+        shouldShowList: false,
+        shouldPlaySound: false,
+        shouldSetBadge: false,
+      };
+    },
   });
 }
 

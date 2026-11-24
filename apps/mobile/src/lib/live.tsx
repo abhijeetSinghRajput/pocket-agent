@@ -12,7 +12,6 @@ import {
 import { AppState } from 'react-native';
 import { z } from 'zod';
 import { ApiClientError, apiRequest, WS_URL } from '@/lib/api';
-import { setLiveConnected } from '@/lib/push';
 
 const WsTicket = z.object({ ticket: z.string().min(1) });
 
@@ -126,12 +125,6 @@ export function LiveProvider({ children }: { children: ReactNode }) {
       closing?.close();
     };
   }, []);
-
-  // Notifications that arrive in the foreground show only when the app can't show them itself.
-  useEffect(() => {
-    setLiveConnected(state === 'live');
-    return () => setLiveConnected(false);
-  }, [state]);
 
   const subscribe = useCallback((listener: Listener) => {
     listeners.current.add(listener);

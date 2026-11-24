@@ -319,7 +319,7 @@ export function ChatScreen({ id }: { id: string }) {
                 // The question being asked is shown below, not also in the conversation.
                 question ? items.filter((i) => !(i.kind === 'question' && i.state === 'running')) : items
               }
-              typing={typingKind(s) ?? (sending ? 'working' : null)}
+              typing={typingKind(s) ?? (sending ? 'sending' : null)}
               bottomInset={dock}
               jumpKey={jump}
               header={

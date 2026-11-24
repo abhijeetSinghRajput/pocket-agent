@@ -1014,7 +1014,13 @@ function ShimmerText({ text, cursor }: { text: string; cursor: number | null }) 
  * "✻ Churning… (12s)" — a breathing star, a rotating verb and shimmering text while Claude works.
  * All the ticking lives in this small component, so the conversation itself never re-renders for it.
  */
-export function TypingIndicator({ kind, since }: { kind: 'working' | 'starting'; since: string | null }) {
+/**
+ * What the indicator under the conversation stands for: Claude working, starting, or a message
+ * just sent from here that Claude takes at once ("sending": shown under that message).
+ */
+export type TypingKind = 'working' | 'starting' | 'sending';
+
+export function TypingIndicator({ kind, since }: { kind: TypingKind; since: string | null }) {
   const reduce = useReducedMotion();
   const [start] = useState(() => (since ? Math.min(Date.parse(since), Date.now()) : Date.now()));
   const [now, setNow] = useState(() => Date.now());
@@ -1076,7 +1082,7 @@ export function TypingIndicator({ kind, since }: { kind: 'working' | 'starting';
 type Row =
   | { type: 'day'; key: string; at: string }
   | { type: 'item'; key: string; item: ChatItem; joinAbove: boolean; joinBelow: boolean }
-  | { type: 'typing'; key: 'typing'; kind: 'working' | 'starting'; since: string | null };
+  | { type: 'typing'; key: 'typing'; kind: TypingKind; since: string | null };
 
 const isStep = (i: ChatItem) =>
   i.kind === 'assistant' ||
@@ -1087,9 +1093,11 @@ const isStep = (i: ChatItem) =>
 
 /**
  * The conversation as list rows: a separator whenever the day changes, consecutive steps joined by
- * the hairline, the typing indicator after the last thing said, and queued messages under it all.
+ * the hairline, the typing indicator after the last thing said, and queued messages under it all
+ * (Claude is still on an earlier one). A message just sent that Claude takes at once ("sending")
+ * comes first, with the indicator under it, timed from it.
  */
-function buildRows(items: ChatItem[], typing: 'working' | 'starting' | null): Row[] {
+function buildRows(items: ChatItem[], typing: TypingKind | null): Row[] {
   const queued = items.filter((i): i is Of<'user'> => isQueued(i));
   const said = queued.length ? items.filter((i) => !isQueued(i)) : items;
   const rows: Row[] = [];
@@ -1112,17 +1120,21 @@ function buildRows(items: ChatItem[], typing: 'working' | 'starting' | null): Ro
       joinBelow: isStep(item) && !!next && isStep(next) && daysAgo(next.at) === day,
     });
   }
-  if (typing) {
-    rows.push({
-      type: 'typing',
-      key: 'typing',
-      kind: typing,
-      since: [...said].reverse().find((i) => i.kind === 'user')?.at ?? null,
-    });
-  }
+  const typingRow = (since: string | null): Row[] =>
+    typing ? [{ type: 'typing', key: 'typing', kind: typing, since }] : [];
   // Sent but not picked up yet: these stay under everything until Claude takes them.
-  for (const item of queued)
-    rows.push({ type: 'item', key: item.key, item, joinAbove: false, joinBelow: false });
+  const waiting = queued.map((item): Row => ({
+    type: 'item',
+    key: item.key,
+    item,
+    joinAbove: false,
+    joinBelow: false,
+  }));
+  if (typing === 'sending') {
+    rows.push(...waiting, ...typingRow(queued.at(-1)?.at ?? null));
+  } else {
+    rows.push(...typingRow([...said].reverse().find((i) => i.kind === 'user')?.at ?? null), ...waiting);
+  }
   return rows;
 }
 
@@ -1221,7 +1233,7 @@ export function ChatMessages({
   jumpKey = 0,
 }: {
   items: ChatItem[];
-  typing: 'working' | 'starting' | null;
+  typing: TypingKind | null;
   header?: ReactNode;
   footer?: ReactNode;
   /** Room left under the last message (what floats over the list: the message box). */

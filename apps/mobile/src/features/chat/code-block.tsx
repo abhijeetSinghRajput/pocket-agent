@@ -2,7 +2,7 @@ import { memo, useEffect, useState, type ReactNode } from 'react';
 import { ScrollView, StyleSheet, Text, View, type TextStyle } from 'react-native';
 import { cachedHighlight, highlight, type Span } from '@/features/chat/highlight';
 import { alpha, fonts, radius, useTheme, type Colors } from '@/lib/theme';
-import { CopyButton } from '@/ui/copy-button';
+import { CopyIconButton } from '@/ui/copy';
 import { T } from '@/ui/core';
 
 const CODE: TextStyle = { fontFamily: fonts.mono, fontSize: 12.5, lineHeight: 20 };
@@ -124,7 +124,7 @@ export const CodeBlock = memo(function CodeBlock({ code, lang }: { code: string;
         <T variant="caption" tone="muted" style={{ fontFamily: fonts.mono, fontSize: 11 }} numberOfLines={1}>
           {lang ?? 'code'}
         </T>
-        <CopyButton value={code} label="Copy code" size={28} />
+        <CopyIconButton value={code} label="Copy code" size={28} />
       </View>
       <ScrollView
         horizontal

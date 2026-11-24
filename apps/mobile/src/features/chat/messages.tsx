@@ -74,7 +74,7 @@ import { SelectTextSheet } from '@/features/chat/select-text-sheet';
 import { SentAttachments } from '@/features/chat/sent-attachments';
 import { dur, ease, enter, exit, STAGGER } from '@/lib/motion';
 import { alpha, fonts, radius, useTheme, type Colors } from '@/lib/theme';
-import { CopyButton } from '@/ui/copy-button';
+import { CopyIconButton } from '@/ui/copy';
 import { Divider, Dot, Press, T, thud } from '@/ui/core';
 
 type Of<K extends ChatItem['kind']> = Extract<ChatItem, { kind: K }>;
@@ -462,7 +462,7 @@ function AssistantMessage({ item, ...join }: { item: Of<'assistant'> } & Join) {
         {/* As in the editor: the reply that ends a turn can be copied whole. */}
         {!join.joinBelow && (
           <View style={{ flexDirection: 'row', marginTop: 4, marginLeft: -8 }}>
-            <CopyButton value={item.text} label="Copy response" size={40} testID="copy-response" />
+            <CopyIconButton value={item.text} label="Copy response" size={40} testID="copy-response" />
           </View>
         )}
       </View>

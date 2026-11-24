@@ -11,7 +11,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { Circle, Path, Svg } from 'react-native-svg';
 import { ease } from '@/lib/motion';
-import { useTheme } from '@/lib/theme';
+import { radius, useTheme } from '@/lib/theme';
 import { Press, T, tap } from '@/ui/core';
 
 const AnimatedPath = Animated.createAnimatedComponent(Path);
@@ -124,6 +124,44 @@ export function CopyButton({
           {copied ? 'Copied' : label}
         </T>
       )}
+    </Press>
+  );
+}
+
+/** A small square button that copies `value`, with no word: its icon turns into a tick. */
+export function CopyIconButton({
+  value,
+  label = 'Copy',
+  size = 36,
+  color,
+  testID,
+}: {
+  value: string;
+  label?: string;
+  size?: number;
+  color?: string;
+  testID?: string;
+}) {
+  const { c } = useTheme();
+  const [copied, copy] = useCopy(value);
+  return (
+    <Press
+      accessibilityRole="button"
+      accessibilityLabel={copied ? 'Copied' : label}
+      testID={testID}
+      onPress={copy}
+      haptic={false}
+      scale={0.9}
+      hitSlop={6}
+      style={{
+        width: size,
+        height: size,
+        borderRadius: radius.sm,
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+    >
+      <CopyMark copied={copied} size={Math.round(size * 0.44)} color={color ?? c.mutedForeground} />
     </Press>
   );
 }

@@ -2,7 +2,7 @@ import { formatDate, timeAgo } from '@pocket-agent/core';
 import type { AgentSessionDto } from '@pocket-agent/protocol';
 import { FolderOpen, Laptop } from 'lucide-react-native';
 import type { ReactNode } from 'react';
-import { ScrollView, useWindowDimensions, View } from 'react-native';
+import { ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 import { CapabilityList } from '@/features/chat/capabilities';
 import { SessionControls } from '@/features/chat/composer';
@@ -16,6 +16,7 @@ import {
 import { enter } from '@/lib/motion';
 import { useTheme } from '@/lib/theme';
 import { Divider, T } from '@/ui/core';
+import { CopyIconButton } from '@/ui/copy';
 import { Sheet } from '@/ui/sheet';
 
 function Section({ children, index }: { children: ReactNode; index: number }) {
@@ -39,6 +40,29 @@ function Fact({ label, value }: { label: string; value: string }) {
   );
 }
 
+/**
+ * Claude Code's id for the session (what `claude --resume <id>` takes on the PC), copyable.
+ */
+function SessionId({ id }: { id: string }) {
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }} testID="session-id">
+      <T variant="small" tone="muted">
+        Session ID
+      </T>
+      <T
+        variant="mono"
+        selectable
+        numberOfLines={1}
+        ellipsizeMode="middle"
+        style={{ flex: 1, fontSize: 12.5, textAlign: 'right' }}
+      >
+        {id}
+      </T>
+      <CopyIconButton value={id} label="Copy session ID" size={28} />
+    </View>
+  );
+}
+
 /** Details of a session and what you can do in it; rises from the bottom over the chat. */
 export function SessionInfo({
   session: s,
@@ -58,7 +82,7 @@ export function SessionInfo({
       <ScrollView
         testID="session-info"
         accessibilityLabel="Details and what you can do in this session."
-        style={{ maxHeight: height * 0.72 }}
+        style={{ maxHeight: height * 0.6 }}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: 8 }}
       >
@@ -97,6 +121,7 @@ export function SessionInfo({
               {s.deviceName}
             </T>
           </View>
+          <SessionId id={s.externalSessionId} />
           <Fact label="Started" value={`${formatDate(s.startedAt)} · ${duration(s.startedAt, s.endedAt)}`} />
           <Fact label="Last activity" value={timeAgo(s.lastActivityAt)} />
         </Section>
@@ -112,15 +137,16 @@ export function SessionInfo({
           </View>
           <CapabilityList session={s} />
         </Section>
-        {s.capabilities.interrupt && !s.endedAt && (
-          <>
-            <Divider />
-            <Section index={3}>
-              <SessionControls session={s} onDone={onChange} />
-            </Section>
-          </>
-        )}
       </ScrollView>
+      {/* What you can do to it stays in reach below the details, however far they scroll. */}
+      {s.capabilities.interrupt && !s.endedAt && (
+        <View
+          testID="session-actions"
+          style={{ paddingTop: 12, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.border }}
+        >
+          <SessionControls session={s} onDone={onChange} />
+        </View>
+      )}
     </Sheet>
   );
 }

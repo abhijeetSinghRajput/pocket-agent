@@ -1,4 +1,4 @@
-import { createEvent, FolderListResponse } from '@pocket-agent/protocol';
+import { createEvent, DeviceListResponse, FolderListResponse } from '@pocket-agent/protocol';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   browser,
@@ -106,5 +106,24 @@ describe('browsing folders on the PC', () => {
     users.push(other.user.id);
     const res = await list({ deviceId: s.deviceId, cookie: other.cookie }, WS);
     expect(res.statusCode).toBe(404);
+  });
+});
+
+describe('the PC reports its own setup (health check)', () => {
+  it('stores what the PC says and shows it on the device; an older PC leaves it unknown', async () => {
+    const s = await setup('2.0.0');
+    const devices = async () =>
+      DeviceListResponse.parse(
+        (await t.app.inject({ method: 'GET', url: '/devices', headers: browser(s.cookie) })).json(),
+      ).devices.find((d) => d.id === s.deviceId)!;
+    expect((await devices()).health).toBeNull();
+    await s.agent.send(
+      createEvent('device.settings', {
+        projects: [{ name: 'work', path: WS }],
+        observedInstructions: false,
+        health: { hooks: false },
+      }),
+    );
+    expect((await devices()).health).toEqual({ hooks: false });
   });
 });

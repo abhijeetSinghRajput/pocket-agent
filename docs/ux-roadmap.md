@@ -35,8 +35,11 @@ changes), then waits for the owner's go-ahead before the next.
   waits on, or "Thinking…"), read live from the PC (agent 0.1.10+; older PCs show nothing).
 
 ## M5 — Setup
-- **Pair with a QR code**: the PC shows a code, the app scans it (no typing).
-- **Health check** in Profile: PC online, hooks installed, push on, agent version — each with a fix.
+- **Pair with a QR code**: `pocket-agent connect` without a code shows a QR code and a check code;
+  the app scans it (or the phone's camera opens the web page), you compare the codes and approve
+  (no typing). Released as 2.0.0 (app and PC agent).
+- **Health check** in Profile: each PC online, up to date, Claude Code linked, phone approvals;
+  this phone's notifications — each with its fix (a command to copy, a download, a button).
 
 ## M6 — Polish
 - **Haptics** on long-press, swipe-dismiss and tab switch.

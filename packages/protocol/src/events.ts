@@ -188,6 +188,10 @@ export const ClaudeUsage = z.object({
 });
 export type ClaudeUsage = z.infer<typeof ClaudeUsage>;
 
+/** What the PC knows about its own setup: is Claude Code linked to it (the hooks installed). */
+export const DeviceHealth = z.object({ hooks: z.boolean() });
+export type DeviceHealth = z.infer<typeof DeviceHealth>;
+
 /**
  * PC-side policy, sent after every connect and whenever it changes. The PC enforces it; the
  * backend uses it only to show what is possible.
@@ -205,6 +209,8 @@ export const DeviceSettings = defineEvent(
     models: z.array(ModelOption).max(40).default([]),
     /** Claude plan usage on this PC (refreshed every few minutes). */
     usage: ClaudeUsage.nullable().optional(),
+    /** The PC's own setup checks, for the app's health check (PCs from 2.0.0). */
+    health: DeviceHealth.optional(),
   }),
 );
 /** The PC's answer to `folder.list`: the folders directly inside the one asked about. */

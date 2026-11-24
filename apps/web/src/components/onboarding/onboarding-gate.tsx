@@ -1,6 +1,7 @@
 'use client';
 
 import { DeviceListResponse } from '@pocket-agent/protocol';
+import { usePathname } from 'next/navigation';
 import { useCallback, useState, type ReactNode } from 'react';
 import { Onboarding } from '@/components/onboarding/onboarding';
 import { apiRequest } from '@/lib/api';
@@ -31,6 +32,10 @@ export function OnboardingGate({ children }: { children: ReactNode }) {
     const needs = state.status === 'ready' && !state.data.some((d) => d.status !== 'Revoked');
     setDecision(needs ? 'onboard' : 'app');
   }
+
+  // Approving a PC from its QR code is how a new account gets its first PC: never in the way.
+  const pairing = usePathname().startsWith('/pair/');
+  if (pairing) return children;
 
   if (decision === null) {
     return (

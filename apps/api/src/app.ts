@@ -21,6 +21,7 @@ import { authRoutes } from './routes/auth.js';
 import { firebaseGoogleVerifier, type GoogleVerifier } from './auth/firebase.js';
 import { commandRoutes } from './routes/commands.js';
 import { agentRoutes, deviceRoutes } from './routes/devices.js';
+import { pairingAgentRoutes, pairingUserRoutes } from './routes/pairing.js';
 import { healthRoutes, type HealthDeps } from './routes/health.js';
 import { notificationRoutes } from './routes/notifications.js';
 import { sessionRoutes } from './routes/sessions.js';
@@ -104,6 +105,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     await app.register(authRoutes, services);
     await app.register(deviceRoutes, services);
     await app.register(agentRoutes, services);
+    await app.register(pairingAgentRoutes, services);
+    await app.register(pairingUserRoutes, services);
     await app.register(sessionRoutes, services);
     await app.register(subagentRoutes, services);
     await app.register(agentGateway, services);

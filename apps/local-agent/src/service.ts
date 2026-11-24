@@ -226,6 +226,8 @@ export class AgentService {
       remoteApproval: this.policy.remoteApproval,
       models: this.models,
       usage: this.usage,
+      // For the app's health check: is Claude Code linked to this PC.
+      health: { hooks: this.hooksInstalled },
     });
   }
 

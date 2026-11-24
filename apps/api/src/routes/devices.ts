@@ -5,6 +5,7 @@ import {
   isWithinFolder,
   PAIRING_CODE_TTL_MS,
   ClaudeUsage,
+  DeviceHealth,
   ModelOption,
   PairDeviceRequest,
   type DeviceDto,
@@ -58,6 +59,9 @@ export function toDeviceDto(d: Device): DeviceDto {
       .catch(null)
       .parse(d.usage ?? null),
     awayMode: d.awayMode,
+    health: DeviceHealth.nullable()
+      .catch(null)
+      .parse(d.health ?? null),
   };
 }
 

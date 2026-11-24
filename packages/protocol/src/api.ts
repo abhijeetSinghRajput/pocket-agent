@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { ClaudeUsage, ModelOption } from './events.js';
+import { ClaudeUsage, DeviceHealth, ModelOption } from './events.js';
 import { DeviceStatus, Platform } from './enums.js';
 
 // ── Errors ───────────────────────────────────────────────────────────────────
@@ -94,8 +94,78 @@ export const DeviceDto = z.object({
   usage: ClaudeUsage.nullable().default(null),
   /** Away mode (set from the dashboard or the PC). */
   awayMode: z.boolean(),
+  /** The PC's own setup checks (null until a PC from 2.0.0 reports them). */
+  health: DeviceHealth.nullable().default(null),
 });
 export type DeviceDto = z.infer<typeof DeviceDto>;
+
+/**
+ * The newest Local Agent released. The app's health check compares each PC with it (bumped with
+ * every agent release).
+ */
+export const LATEST_AGENT_VERSION = '2.0.0';
+/** Where the agent's releases are downloaded (the newest is "latest"). */
+export const AGENT_RELEASES_URL = 'https://github.com/abhijeetSinghRajput/pocket-agent/releases/latest';
+
+// ── Pairing with a QR code ────────────────────────────────────────────────────
+// The PC asks for a pairing request and shows its link as a QR code (and a short check code). The
+// phone scans it, shows which PC it is, and you approve; the PC, asking every few seconds, then
+// receives its credentials. Nothing is typed.
+
+/** First Local Agent version that pairs with a QR code. */
+export const QR_PAIRING_AGENT_VERSION = '2.0.0';
+/** How long a pairing request can be approved. */
+export const PAIRING_REQUEST_TTL_MS = 10 * 60_000;
+
+/** `POST /devices/pair/requests` (from the PC, no credentials yet). */
+export const CreatePairingRequest = z.object({
+  name: z.string().trim().min(1).max(100),
+  platform: Platform,
+  agentVersion: z.string().min(1).max(50),
+});
+export type CreatePairingRequest = z.infer<typeof CreatePairingRequest>;
+
+export const PairingRequestCreated = z.object({
+  requestId: z.string(),
+  /** Only the PC has it: it proves the PC asking for credentials is the one that made the request. */
+  pollToken: z.string(),
+  /** Shown on the PC and on the phone: they must match. */
+  check: z.string(),
+  /** What the QR code holds: the approve page (the app reads the request id from it). */
+  link: z.url(),
+  expiresAt: z.iso.datetime({ offset: true }),
+});
+export type PairingRequestCreated = z.infer<typeof PairingRequestCreated>;
+
+/** `POST /devices/pair/requests/:id/poll` (from the PC). */
+export const PollPairingRequest = z.object({ pollToken: z.string().min(1).max(200) });
+export type PollPairingRequest = z.infer<typeof PollPairingRequest>;
+/** Still waiting (202); approved answers with `PairDeviceResponse` (201). */
+export const PairingPending = z.object({ status: z.literal('pending') });
+
+/** `GET /pairing/requests/:id` (signed in): what you are about to approve. */
+export const PairingRequestDto = z.object({
+  id: z.string(),
+  name: z.string(),
+  platform: Platform,
+  agentVersion: z.string(),
+  check: z.string(),
+  expiresAt: z.iso.datetime({ offset: true }),
+  status: z.enum(['pending', 'approved', 'declined', 'expired', 'paired']),
+});
+export type PairingRequestDto = z.infer<typeof PairingRequestDto>;
+export const PairingRequestResponse = z.object({ request: PairingRequestDto });
+export type PairingRequestResponse = z.infer<typeof PairingRequestResponse>;
+
+/** The request id in a scanned pairing link (`…/pair/<id>`), or null when it isn't one. */
+export function pairingRequestId(scanned: string): string | null {
+  try {
+    const m = /\/pair\/([0-9a-f-]{36})\/?$/i.exec(new URL(scanned.trim()).pathname);
+    return m ? m[1]!.toLowerCase() : null;
+  } catch {
+    return null;
+  }
+}
 
 /** `GET /devices/:id/folders?path=`: the folders directly inside `path` on that PC. */
 export const FolderListResponse = z.object({

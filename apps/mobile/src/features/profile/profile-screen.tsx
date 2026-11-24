@@ -4,6 +4,7 @@ import { LogOut, Moon, Smartphone, Sun } from 'lucide-react-native';
 import { useState } from 'react';
 import { View } from 'react-native';
 import Animated from 'react-native-reanimated';
+import { HealthCheckCard } from '@/features/profile/health-check';
 import { ApiStatus } from '@/features/profile/api-status';
 import { ClaudeUsageCard } from '@/features/profile/claude-usage';
 import { NotificationSettings } from '@/features/profile/notification-settings';
@@ -171,6 +172,9 @@ export function ProfileScreen() {
           </T>
           <NotificationSettings />
         </Card>
+      </Animated.View>
+      <Animated.View entering={enter.rise(4)}>
+        <HealthCheckCard />
       </Animated.View>
       <Animated.View entering={enter.rise(4)}>
         <ApiStatus />

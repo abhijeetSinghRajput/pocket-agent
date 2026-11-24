@@ -14,7 +14,7 @@ const config: ExpoConfig = {
   name: 'Pocket Agent',
   slug: 'pocket-agent',
   owner: 'pocket-agents-team',
-  version: '0.1.0',
+  version: '2.0.0',
   orientation: 'portrait',
   icon: './assets/images/icon.png',
   scheme: 'pocketagent',
@@ -25,7 +25,7 @@ const config: ExpoConfig = {
   },
   android: {
     package: 'com.mrcodium.pocketagent',
-    versionCode: 1,
+    versionCode: 2,
     // Firebase config for push (Firebase console → project settings → the Android app). Locally:
     // GOOGLE_SERVICES_JSON=./google-services.json; on EAS: a file environment variable of that name.
     ...(process.env.GOOGLE_SERVICES_JSON ? { googleServicesFile: process.env.GOOGLE_SERVICES_JSON } : {}),
@@ -70,6 +70,15 @@ const config: ExpoConfig = {
     ['expo-notifications', { icon: './assets/images/notification-icon.png', color: BRAND }],
     // "Continue with Google" (uses the Firebase project's OAuth clients from google-services.json).
     '@react-native-google-signin/google-signin',
+    // Reading a PC's pairing QR code (Devices → Scan the PC's QR code). The microphone stays
+    // available for dictation (recordAudioAndroid), not for the camera.
+    [
+      'expo-camera',
+      {
+        cameraPermission: 'Pocket Agent uses the camera to scan the QR code your PC shows when connecting.',
+        recordAudioAndroid: true,
+      },
+    ],
     // Attaching photos to a message (the chat's + button).
     [
       'expo-image-picker',

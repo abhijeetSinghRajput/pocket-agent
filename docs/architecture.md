@@ -268,6 +268,25 @@ listed in Firebase Auth → Authorized domains.
 5. Rotation: `POST /devices/:id/rotate` issues a new secret over the authenticated socket, and the old
    one stops working once the agent acknowledges the new one.
 
+**Pairing with a QR code** (2.0.0; nothing typed). `pocket-agent connect` (or `pair`) without a code:
+
+1. The PC calls `POST /devices/pair/requests` (name, platform, version; rate-limited, no
+   credentials). The API stores a `PairingRequest` (random v4 id, a 4-character check code,
+   `sha256(pollToken)`, 10-minute expiry) and returns the id, the poll token, the check code and the
+   link `<web origin>/pair/<id>`.
+2. The PC shows the link as a QR code with the check code, and polls
+   `POST /devices/pair/requests/:id/poll {pollToken}` every few seconds.
+3. The phone scans it (in the app, or the phone's camera opens the web page). Signed in, you see
+   the PC's name, platform, version and the same check code, then **Approve** or **Decline**
+   (`POST /pairing/requests/:id/approve|decline`, session + trusted origin). Approving only binds
+   the request to your account; it hands out nothing.
+4. The next poll with the right token atomically consumes the approved request, creates the
+   `Device` and returns `deviceId` + `deviceSecret` once (audit `device.paired`, `via: qr`).
+   Without the token nothing is returned; declined, expired and used requests are refused.
+
+The check code guards against approving someone else's QR code: approve only when both screens
+show the same code. Once approved, a request is invisible to other accounts.
+
 Every API query is scoped by `userId` from the session, and every device message by the
 `deviceId` → `userId` binding. Cross-tenant access is a security-test category.
 
@@ -392,6 +411,7 @@ it learns the API address from its registration URL); if that fails, it opens th
 The plan's entities stay. Additions:
 - `AuthSession` (id, userId, tokenHash, expiresAt, userAgent)
 - `PairingCode` (codeHash, userId, expiresAt, consumedAt)
+- `PairingRequest` (QR pairing: pollTokenHash, check, PC name/platform/version, expiresAt, userId on approve, approvedAt/declinedAt/consumedAt, deviceId)
 - `Device.secretHash`, `Device.revokedAt`
 - `AgentSession.mode` (`managed` | `observed`), `capabilities` (JSON), `metadata` (JSON); unique `(deviceId, externalSessionId)` → reconnects don't duplicate sessions
 - `AgentEvent.eventId` unique (dedupe), index `(sessionId, createdAt)`

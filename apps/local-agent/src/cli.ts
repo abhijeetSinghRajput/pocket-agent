@@ -7,7 +7,15 @@ import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ApiRequestError, confirmSecret, pairDevice, rotateSecret } from './api-client.js';
+import {
+  ApiRequestError,
+  confirmSecret,
+  createPairingRequest,
+  pairDevice,
+  pollPairingRequest,
+  rotateSecret,
+} from './api-client.js';
+import QRCode from 'qrcode';
 import {
   autostartCommand,
   autostartCommandRegistered,
@@ -87,7 +95,8 @@ function fail(msg: string, code = 1): never {
   process.exit(code);
 }
 
-const CONNECT_HINT = 'Get a code in the Pocket Agent app (Add device), then run: pocket-agent connect <code>';
+const CONNECT_HINT =
+  'Run `pocket-agent connect` and scan the QR code with the Pocket Agent app (or get a code in the app: Add device, then `pocket-agent connect <code>`).';
 
 async function requirePaired(home: string) {
   const config = await loadConfig(home);
@@ -106,13 +115,59 @@ const setupContext = (): SetupContext => ({
   version,
 });
 
+/** Saves what pairing gave this PC: its id (in the config) and its secret (in the secret store). */
+async function savePairing(apiUrl: string, name: string, res: { deviceId: string; deviceSecret: string }) {
+  const home = agentHome();
+  await saveConfig(home, {
+    apiUrl,
+    deviceId: res.deviceId,
+    deviceName: name,
+    pairedAt: new Date().toISOString(),
+  });
+  await createSecretStore(home).save(res.deviceSecret);
+}
+
+/**
+ * Pairing without typing: shows a QR code for the app to scan (and a check code to compare), then
+ * waits until you approve it on your phone. Ctrl+C stops waiting.
+ */
+async function pairWithQr(apiUrl: string, name: string): Promise<void> {
+  const ask = { name: name.slice(0, 100), platform: currentPlatform(), agentVersion: version };
+  try {
+    const r = await createPairingRequest(apiUrl, ask);
+    const qr = await QRCode.toString(r.link, { type: 'terminal', small: true, errorCorrectionLevel: 'L' });
+    console.log(`
+Scan this with the Pocket Agent app (Devices → Scan QR code):
+
+${qr}`);
+    console.log(`  Check code: ${bold(r.check)}  ${dim('(the app shows the same code)')}`);
+    console.log(dim(`  Or open on your phone: ${r.link}`));
+    console.log(
+      dim(`  It expires in 10 minutes.
+`),
+    );
+    const until = Date.parse(r.expiresAt);
+    const got = await withSpinner('Waiting for you to approve it on your phone…', async () => {
+      while (Date.now() < until) {
+        const done = await pollPairingRequest(apiUrl, r.requestId, r.pollToken);
+        if (done) return done;
+        await new Promise((res) => setTimeout(res, 2500));
+      }
+      return null;
+    });
+    if (!got) fail('The QR code expired. Run `pocket-agent connect` again.');
+    await savePairing(apiUrl, name, got);
+  } catch (e) {
+    fail(e instanceof ApiRequestError ? e.message : `Pairing failed: ${(e as Error).message}`);
+  }
+}
+
 async function pairThisPc(code: string, apiUrl: string, name: string): Promise<void> {
   try {
     validateApiUrl(apiUrl);
   } catch (e) {
     fail((e as Error).message);
   }
-  const home = agentHome();
   try {
     const res = await pairDevice(apiUrl, {
       code,
@@ -120,13 +175,7 @@ async function pairThisPc(code: string, apiUrl: string, name: string): Promise<v
       platform: currentPlatform(),
       agentVersion: version,
     });
-    await saveConfig(home, {
-      apiUrl,
-      deviceId: res.deviceId,
-      deviceName: name,
-      pairedAt: new Date().toISOString(),
-    });
-    await createSecretStore(home).save(res.deviceSecret);
+    await savePairing(apiUrl, name, res);
   } catch (e) {
     fail(e instanceof ApiRequestError ? e.message : `Pairing failed: ${(e as Error).message}`);
   }
@@ -238,7 +287,8 @@ async function connectThisPc(codeArg: string | undefined, opts: ConnectOptions):
   // 2. Which server
   const before = await pairingState(ctx.home);
   const code = codeArg?.trim();
-  if (!code && before.kind !== 'paired') fail(`No pairing code. ${CONNECT_HINT}`);
+  // Not paired and no code: pair with a QR code instead.
+  const qr = !code && before.kind !== 'paired';
   const previousApi = before.kind === 'not-paired' ? undefined : before.apiUrl;
   const apiUrl = opts.api ?? process.env['POCKET_AGENT_API_URL'] ?? previousApi ?? DEFAULT_API_URL;
   try {
@@ -272,6 +322,11 @@ async function connectThisPc(codeArg: string | undefined, opts: ConnectOptions):
         `replaced the previous pairing; remove "${before.deviceName}" in the app if it's still listed`,
       );
     }
+  } else if (qr) {
+    await stopRunning(ctx.home).catch(() => false);
+    await pairWithQr(apiUrl, opts.name);
+    repaired = true;
+    line('ok', 'Paired', `as "${opts.name}"`);
   } else if (before.kind === 'paired') {
     line('ok', 'Paired', `already, as "${before.deviceName}"`);
   }
@@ -625,7 +680,7 @@ export function buildCli(): Command {
     .helpGroup('Commands:')
     .alias('setup')
     .description('Connect this PC to Pocket Agent: everything in one step (safe to run again)')
-    .argument('[code]', 'pairing code from the app (Add device); not needed to repair an existing setup')
+    .argument('[code]', 'pairing code from the app (Add device); without one, a QR code is shown to scan')
     .option('--api <url>', 'Pocket Agent server (default: the hosted one)')
     .option('--name <name>', 'name shown in the app', os.hostname())
     .option('--workspace <folders...>', 'folders where your phone may start Claude sessions')
@@ -759,12 +814,13 @@ export function buildCli(): Command {
 
   program
     .command('pair')
-    .description('Pair this PC using the code shown in the dashboard (Devices → Add device)')
-    .argument('<code>', 'pairing code, e.g. 7KQ2-M9XD')
+    .description('Pair this PC: with the code from the app (Devices → Add device), or by a QR code')
+    .argument('[code]', 'pairing code, e.g. 7KQ2-M9XD; without one, a QR code is shown to scan')
     .option('--api <url>', 'Pocket Agent API URL', process.env['POCKET_AGENT_API_URL'] ?? DEFAULT_API_URL)
     .option('--name <name>', 'name shown in the dashboard', os.hostname())
-    .action(async (code: string, opts: { api: string; name: string }) => {
-      await pairThisPc(code, opts.api, opts.name);
+    .action(async (code: string | undefined, opts: { api: string; name: string }) => {
+      if (code) await pairThisPc(code, opts.api, opts.name);
+      else await pairWithQr(opts.api, opts.name);
       console.log(`Paired as "${opts.name}". Start the agent with: pocket-agent start`);
     });
 

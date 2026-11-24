@@ -11,6 +11,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import type { PairingStep } from '@/features/devices/use-pairing';
+import { ScanPcButton } from '@/features/devices/pair-scanner';
 import { AGENT_NPM_PACKAGE, connectCommand, installCommand } from '@/lib/api';
 import { dur, ease, enter, exit, layout } from '@/lib/motion';
 import { alpha, fonts, radius, useTheme } from '@/lib/theme';
@@ -313,7 +314,7 @@ export function ConnectSteps({
       {step.kind === 'code' && (
         <Animated.View key="share" entering={enter.fade} exiting={exit.fade}>
           <Divider />
-          <View style={{ paddingHorizontal: 20, paddingVertical: 16 }}>
+          <View style={{ paddingHorizontal: 20, paddingVertical: 16, gap: 12 }}>
             <Button
               label="Share commands"
               icon={Share2}
@@ -322,6 +323,15 @@ export function ConnectSteps({
               onPress={() => shareCommands(code)}
               testID="share-commands"
             />
+            {/* No typing: the PC shows a QR code when connect has no code (Pocket Agent 2.0+). */}
+            <T variant="small" tone="muted" center>
+              Or run{' '}
+              <T variant="mono" style={{ fontSize: 13 }}>
+                pocket-agent connect
+              </T>{' '}
+              without a code and scan the QR code it shows:
+            </T>
+            <ScanPcButton />
           </View>
         </Animated.View>
       )}

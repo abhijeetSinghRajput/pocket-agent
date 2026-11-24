@@ -76,17 +76,18 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  authSessions      AuthSession[]
-  pairingCodes      PairingCode[]
-  devices           Device[]
-  commands          Command[]
-  approvals         Approval[]
-  notifications     Notification[]
-  notificationPrefs NotificationPreference[]
+  authSessions         AuthSession[]
+  pairingCodes         PairingCode[]
+  pairingRequests      PairingRequest[]
+  devices              Device[]
+  commands             Command[]
+  approvals            Approval[]
+  notifications        Notification[]
+  notificationPrefs    NotificationPreference[]
   notificationSettings NotificationSettings?
-  attachments       Attachment[]
-  pushSubscriptions PushSubscription[]
-  auditLogs         AuditLog[]
+  attachments          Attachment[]
+  pushSubscriptions    PushSubscription[]
+  auditLogs            AuditLog[]
 
   @@map("users")
 }
@@ -123,32 +124,62 @@ model PairingCode {
   @@map("pairing_codes")
 }
 
+/// A PC asking to be paired with a QR code: it shows the link, you approve it on your phone, and
+/// the PC (holding the poll token) then collects its credentials once.
+model PairingRequest {
+  /// Random (v4): it is in the QR code and the link.
+  id            String    @id @default(uuid(4)) @db.Uuid
+  /// sha256 of the token only the PC has; it alone can collect the credentials.
+  pollTokenHash String    @unique
+  /// Shown on the PC and on the phone, so you can tell it is the same request.
+  check         String
+  name          String
+  platform      Platform
+  agentVersion  String
+  createdAt     DateTime  @default(now())
+  expiresAt     DateTime
+  /// Who approved it (set on approve).
+  userId        String?   @db.Uuid
+  approvedAt    DateTime?
+  declinedAt    DateTime?
+  /// The PC collected its credentials: the request is used up.
+  consumedAt    DateTime?
+  deviceId      String?   @db.Uuid
+
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([expiresAt])
+  @@map("pairing_requests")
+}
+
 model Device {
-  id              String       @id @default(uuid(7)) @db.Uuid
-  userId          String       @db.Uuid
-  name            String
-  platform        Platform
-  agentVersion    String
-  status          DeviceStatus @default(Offline)
+  id                    String       @id @default(uuid(7)) @db.Uuid
+  userId                String       @db.Uuid
+  name                  String
+  platform              Platform
+  agentVersion          String
+  status                DeviceStatus @default(Offline)
   /// sha256 of the high-entropy device secret; the secret itself is never stored.
-  secretHash      String       @unique
+  secretHash            String       @unique
   /// Two-phase rotation: a newly issued secret becomes current the first time the agent
   /// authenticates with it; until then the old secret keeps working (no lock-out on a lost response).
-  pendingSecretHash String?    @unique
+  pendingSecretHash     String?      @unique
   /// Remote approval is opt-in per device (architecture: Approved constraints #3).
-  remoteApprovalEnabled Boolean @default(false)
-  awayMode        Boolean      @default(true)
+  remoteApprovalEnabled Boolean      @default(false)
+  awayMode              Boolean      @default(true)
   /// Reported by the PC (device.settings), which also enforces them. Display-only on the server.
-  projects        Json         @default("[]")
+  projects              Json         @default("[]")
   /// Models the PC's Claude Code offers ([{id,name,description}]), as reported by the PC.
-  models          Json         @default("[]")
+  models                Json         @default("[]")
   /// Claude plan usage reported by the PC ({session, weekly, models, updatedAt}), or null.
-  usage           Json?
-  observedInstructions Boolean @default(false)
-  lastHeartbeatAt DateTime?
-  revokedAt       DateTime?
-  createdAt       DateTime     @default(now())
-  updatedAt       DateTime     @updatedAt
+  usage                 Json?
+  observedInstructions  Boolean      @default(false)
+  /// The PC's own setup checks ({hooks}), reported by PCs from 2.0.0 (the app's health check).
+  health                Json?
+  lastHeartbeatAt       DateTime?
+  revokedAt             DateTime?
+  createdAt             DateTime     @default(now())
+  updatedAt             DateTime     @updatedAt
 
   user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   sessions  AgentSession[]
@@ -269,21 +300,21 @@ model Approval {
 }
 
 model Notification {
-  id        String    @id @default(uuid(7)) @db.Uuid
-  userId    String    @db.Uuid
-  type      String
-  priority  String
-  title     String
-  body      String
+  id          String    @id @default(uuid(7)) @db.Uuid
+  userId      String    @db.Uuid
+  type        String
+  priority    String
+  title       String
+  body        String
   /// Deep-link target etc.
-  data      Json?
+  data        Json?
   /// Prevents duplicate notifications for the same underlying event.
-  dedupeKey String?
-  readAt    DateTime?
+  dedupeKey   String?
+  readAt      DateTime?
   /// Push outcome, shown in history: browsers it was sent to, or why it was not pushed.
-  pushSent    Int     @default(0)
+  pushSent    Int       @default(0)
   pushSkipped String?
-  createdAt DateTime  @default(now())
+  createdAt   DateTime  @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 

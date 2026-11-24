@@ -2,7 +2,9 @@ import {
   ApiError,
   deviceAuthHeader,
   PairDeviceResponse,
+  PairingRequestCreated,
   RotateSecretResponse,
+  type CreatePairingRequest,
   type PairDeviceRequest,
 } from '@pocket-agent/protocol';
 import { validateApiUrl } from './config.js';
@@ -50,6 +52,34 @@ export async function pairDevice(apiUrl: string, req: PairDeviceRequest): Promis
     body: JSON.stringify(req),
   });
   return PairDeviceResponse.parse(body);
+}
+
+/** Pairing with a QR code, step 1: a request whose link the PC shows as a QR code. */
+export async function createPairingRequest(
+  apiUrl: string,
+  req: CreatePairingRequest,
+): Promise<PairingRequestCreated> {
+  const body = await call(apiUrl, '/devices/pair/requests', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(req),
+  });
+  return PairingRequestCreated.parse(body);
+}
+
+/** Step 2, every few seconds: null while it waits for your approval, then the credentials. */
+export async function pollPairingRequest(
+  apiUrl: string,
+  requestId: string,
+  pollToken: string,
+): Promise<PairDeviceResponse | null> {
+  const body = await call(apiUrl, `/devices/pair/requests/${encodeURIComponent(requestId)}/poll`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ pollToken }),
+  });
+  const done = PairDeviceResponse.safeParse(body);
+  return done.success ? done.data : null;
 }
 
 export async function rotateSecret(apiUrl: string, deviceId: string, secret: string): Promise<string> {

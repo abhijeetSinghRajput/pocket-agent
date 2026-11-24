@@ -1,6 +1,6 @@
 // Full stack: browser ↔ real API ↔ real Local Agent CLI (DPAPI credentials, outbound WebSocket).
 import { expect, test } from '@playwright/test';
-import { execFileSync, spawnSync } from 'node:child_process';
+import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { agentEnv, CLI, startAgent } from './agent';
 import { API, registerViaApi } from './helpers';
 
@@ -68,4 +68,36 @@ test('pair a real Local Agent, watch it go online/offline, then revoke it', asyn
   expect(st).toMatchObject({ paired: false, revoked: true });
   const retry = startAgent(env);
   expect(await retry.exited).toBe(1);
+});
+
+test('pair a real Local Agent by its QR code: approve on the web page it links to', async ({
+  page,
+}, info) => {
+  test.setTimeout(90_000);
+  await registerViaApi(page.request, `QR ${info.project.name}`);
+  const deviceName = `QR PC ${info.project.name}`;
+  const env = agentEnv();
+
+  // The PC asks for a pairing and shows the QR code, its link and a check code, then waits.
+  const pc = spawn(process.execPath, [CLI, 'pair', '--api', API, '--name', deviceName], { env });
+  let out = '';
+  pc.stdout.on('data', (d: Buffer) => (out += d.toString()));
+  pc.stderr.on('data', (d: Buffer) => (out += d.toString()));
+  const exited = new Promise<number | null>((done) => pc.on('exit', done));
+  await expect.poll(() => /Or open on your phone: (\S+)/.exec(out)?.[1], { timeout: 20_000 }).toBeTruthy();
+  const link = new URL(/Or open on your phone: (\S+)/.exec(out)![1]!);
+  const check = /Check code: (\S+)/.exec(out)![1]!.replace(/\x1b\[[0-9;]*m/g, '');
+
+  // A new account (no PC yet) still reaches the approve page: it shows the PC and the same code.
+  await page.goto(link.pathname);
+  await expect(page.getByTestId('pair-approve')).toContainText(deviceName);
+  await expect(page.getByTestId('pair-check')).toHaveText(check);
+  await page.getByTestId('pair-approve-button').click();
+  await expect(page.getByTestId('pair-done')).toBeVisible();
+
+  // The PC collects its credentials and finishes.
+  expect(await exited).toBe(0);
+  expect(out).toContain('Paired');
+  const st = JSON.parse(execFileSync(process.execPath, [CLI, 'status', '--json'], { env, encoding: 'utf8' }));
+  expect(st).toMatchObject({ paired: true, deviceName });
 });

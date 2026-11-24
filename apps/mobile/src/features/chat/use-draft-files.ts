@@ -10,14 +10,19 @@ import {
 
 /**
  * The files picked for one message: each starts uploading at once and can be removed before
- * sending. `onError` hears about picking more than `maxFiles`.
+ * sending. `onError` hears about picking more than `maxFiles`. With `keepUploaded` (a chat's
+ * draft keeps them), files already uploaded stay on the server when the screen closes.
  */
-export function useDraftFiles(maxFiles: number, onError: (message: string | null) => void) {
+export function useDraftFiles(
+  maxFiles: number,
+  onError: (message: string | null) => void,
+  { keepUploaded = false }: { keepUploaded?: boolean } = {},
+) {
   const [drafts, setDrafts] = useState<DraftFile[]>([]);
   const uploads = useRef(new Map<string, AbortController>());
 
-  // Leaving with files still in the box: stop their uploads and delete what was stored (they
-  // were never sent). The latest drafts are mirrored for the clean-up.
+  // Leaving with files still in the box: stop their uploads, and delete what was stored unless a
+  // draft keeps it. The latest drafts are mirrored for the clean-up.
   const latest = useRef(drafts);
   useEffect(() => {
     latest.current = drafts;
@@ -27,9 +32,10 @@ export function useDraftFiles(maxFiles: number, onError: (message: string | null
     return () => {
       running.forEach((abort) => abort.abort());
       running.clear();
+      if (keepUploaded) return;
       for (const d of latest.current) if (d.ref) void discardAttachment(d.ref.id);
     };
-  }, []);
+  }, [keepUploaded]);
 
   function add(files: PickedFile[]) {
     onError(null);
@@ -51,7 +57,11 @@ export function useDraftFiles(maxFiles: number, onError: (message: string | null
         .then((ref) => {
           // Removed while the last step was in flight: don't keep the file.
           if (abort.signal.aborted) return void discardAttachment(ref.id);
-          setDrafts((d) => d.map((x) => (x.key === key ? { ...x, status: 'ready', ref, progress: 1 } : x)));
+          setDrafts((d) =>
+            d.map((x) =>
+              x.key === key ? { ...x, status: 'ready', ref, progress: 1, uploadedAt: Date.now() } : x,
+            ),
+          );
         })
         .catch((err: Error) => {
           if (abort.signal.aborted) return;
@@ -82,5 +92,7 @@ export function useDraftFiles(maxFiles: number, onError: (message: string | null
     remove,
     /** Sent: the box is empty again (the files now belong to the message). */
     clear: () => setDrafts([]),
+    /** Files uploaded earlier (a saved draft), back in the box. */
+    restore: (files: DraftFile[]) => setDrafts((d) => [...files, ...d]),
   };
 }

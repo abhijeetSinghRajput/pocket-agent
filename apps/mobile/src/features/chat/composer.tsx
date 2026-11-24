@@ -37,6 +37,7 @@ import { apiRequest } from '@/lib/api';
 import { useDevices } from '@/lib/data';
 import { dur, ease, enter, exit, layout } from '@/lib/motion';
 import { alpha, fonts, radius, useTheme } from '@/lib/theme';
+import { getDraft, saveDraft, useDraft } from '@/lib/drafts';
 import { useStored } from '@/lib/storage';
 import { Button, IconButton, Press, T, buzz, thud } from '@/ui/core';
 import { enableImagePaste, type PastedImage } from '../../../modules/image-paste';
@@ -187,7 +188,9 @@ export function Composer({
 }) {
   const { c } = useTheme();
   // The unsent message is kept on this device: it survives leaving the chat or the app.
-  const [text, setText] = useStored(`pocket-agent:draft:${session.id}`);
+  const { draft, ready: draftReady } = useDraft(session.id);
+  const text = draft?.text ?? '';
+  const setText = (next: string) => saveDraft(session.id, { ...getDraft(session.id), text: next });
   const [pending, setPending] = useState(false);
   const [interrupting, setInterrupting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -200,8 +203,36 @@ export function Composer({
   // disabled and says why (never pretends a message could be delivered).
   const device = useDevices().state.data?.find((d) => d.id === session.deviceId);
   const maxFiles = attachmentLimit(device?.agentVersion);
-  const files = useDraftFiles(maxFiles, setError);
+  const files = useDraftFiles(maxFiles, setError, { keepUploaded: true });
   const { drafts, ready, uploading } = files;
+
+  // The files of the saved draft come back once (when drafts have been read); from then on, the
+  // uploaded files in the box are what the draft keeps.
+  const [restored, setRestored] = useState(false);
+  if (draftReady && !restored) {
+    setRestored(true);
+    const saved = draft?.files ?? [];
+    if (saved.length)
+      files.restore(
+        saved.map((f) => ({
+          key: newId(),
+          file: f.file,
+          ref: f.ref,
+          status: 'ready',
+          progress: 1,
+          uploadedAt: f.uploadedAt,
+        })),
+      );
+  }
+  useEffect(() => {
+    if (!restored) return;
+    const uploaded = drafts.flatMap((d) =>
+      d.status === 'ready' && d.ref
+        ? [{ ref: d.ref, file: d.file, uploadedAt: d.uploadedAt ?? Date.now() }]
+        : [],
+    );
+    saveDraft(session.id, { ...getDraft(session.id), files: uploaded });
+  }, [restored, drafts, session.id]);
   const addFiles = files.add;
   // Ended: sending continues the same conversation on the PC, when that's possible.
   const resuming = !!session.endedAt && resumeBlocker(session, device) === null;

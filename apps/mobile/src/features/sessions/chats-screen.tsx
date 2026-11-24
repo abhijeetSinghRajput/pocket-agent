@@ -12,6 +12,7 @@ import { SessionAvatar, SessionKindBadge, SessionStatusBadge } from '@/features/
 import { NewChatSheet } from '@/features/sessions/new-chat-sheet';
 import { Workspaces } from '@/features/sessions/workspaces';
 import { useApprovals, useDevices, useSessions } from '@/lib/data';
+import { useDrafts, type Draft } from '@/lib/drafts';
 import { exit, layout, settleSpring } from '@/lib/motion';
 import { alpha, fonts, radius, useTheme } from '@/lib/theme';
 import { useArrivals } from '@/ui/arrive';
@@ -34,7 +35,28 @@ function preview(s: AgentSessionDto): string {
   return s.currentTask || (s.endedAt ? 'Session ended' : (PREVIEW[s.status] ?? ''));
 }
 
-function SessionRow({ s, waiting, onPress }: { s: AgentSessionDto; waiting: number; onPress: () => void }) {
+/** What a draft says in the list: its text, or what is attached when there is no text. */
+function draftText(d: Draft): string {
+  const text = d.text
+    .trim()
+    .split(/\s*\n\s*/)
+    .join(' ');
+  if (text) return text;
+  const n = d.files.length;
+  return n === 1 ? (d.files[0]!.file.mime.startsWith('image/') ? 'Photo' : '1 file') : `${n} files`;
+}
+
+function SessionRow({
+  s,
+  waiting,
+  draft,
+  onPress,
+}: {
+  s: AgentSessionDto;
+  waiting: number;
+  draft?: Draft;
+  onPress: () => void;
+}) {
   const { c } = useTheme();
   const busy = !s.endedAt && (s.status === 'Running' || s.status === 'WaitingForPermission');
   return (
@@ -70,17 +92,32 @@ function SessionRow({ s, waiting, onPress }: { s: AgentSessionDto; waiting: numb
           </T>
         </View>
         <View style={{ marginTop: 2, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-          <T
-            variant="small"
-            numberOfLines={1}
-            style={{
-              flex: 1,
-              color: s.currentTask ? alpha(c.foreground, 0.8) : c.mutedForeground,
-              fontStyle: s.currentTask ? 'normal' : 'italic',
-            }}
-          >
-            {preview(s)}
-          </T>
+          {draft ? (
+            // An unsent message waits in this chat: like a messenger, it is what the row shows.
+            <T
+              variant="small"
+              numberOfLines={1}
+              style={{ flex: 1, color: alpha(c.foreground, 0.8) }}
+              testID="chat-draft"
+            >
+              <T variant="smallMedium" tone="primary">
+                Draft:{' '}
+              </T>
+              {draftText(draft)}
+            </T>
+          ) : (
+            <T
+              variant="small"
+              numberOfLines={1}
+              style={{
+                flex: 1,
+                color: s.currentTask ? alpha(c.foreground, 0.8) : c.mutedForeground,
+                fontStyle: s.currentTask ? 'normal' : 'italic',
+              }}
+            >
+              {preview(s)}
+            </T>
+          )}
           {waiting > 0 && (
             <View
               accessibilityLabel={`${waiting} waiting for your decision`}
@@ -131,6 +168,7 @@ function SessionsPage({ scope, query, width }: { scope: Scope; query: string; wi
   const [pulling, setPulling] = useState(false);
   const { state, refresh } = useSessions(scope);
   const approvals = useApprovals('pending').state.data;
+  const drafts = useDrafts();
   const hasDevices = (useDevices().state.data ?? []).some((d) => d.status !== 'Revoked');
 
   const waitingBySession = useMemo(() => {
@@ -245,7 +283,12 @@ function SessionsPage({ scope, query, width }: { scope: Scope; query: string; wi
       itemLayoutAnimation={layout}
       renderItem={({ item, index }) => (
         <Animated.View entering={arriving(item.id, index)} exiting={exit.fade}>
-          <SessionRow s={item} waiting={waitingBySession.get(item.id) ?? 0} onPress={() => open(item.id)} />
+          <SessionRow
+            s={item}
+            waiting={waitingBySession.get(item.id) ?? 0}
+            draft={drafts.get(item.id)}
+            onPress={() => open(item.id)}
+          />
         </Animated.View>
       )}
       ListEmptyComponent={body}

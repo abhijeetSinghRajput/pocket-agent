@@ -26,6 +26,8 @@ export interface DraftFile {
   /** 0..1 while uploading. */
   progress?: number;
   ref?: AttachmentRef;
+  /** When the upload finished (a draft keeps it for less than the server does). */
+  uploadedAt?: number;
   error?: string;
 }
 

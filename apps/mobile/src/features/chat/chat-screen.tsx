@@ -401,7 +401,11 @@ export function ChatScreen({ id }: { id: string }) {
                 items={shown}
                 search={
                   searching
-                    ? { matches: matchSet, current: shownMatch >= 0 ? matches[shownMatch]! : null }
+                    ? {
+                        query,
+                        matches: matchSet,
+                        current: shownMatch >= 0 ? matches[shownMatch]! : null,
+                      }
                     : undefined
                 }
                 typing={typingKind(s) ?? (sending ? 'sending' : null)}

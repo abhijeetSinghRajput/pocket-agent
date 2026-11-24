@@ -13,6 +13,7 @@ import {
   type ReactNode,
 } from 'react';
 import { ScrollView, StyleSheet, Text, useWindowDimensions, View, type TextStyle } from 'react-native';
+import { useMark, type Mark } from '@/features/chat/search-mark';
 import { CodeBlock } from '@/features/chat/code-block';
 import { alpha, fonts, useTheme, type Colors } from '@/lib/theme';
 import { tap } from '@/ui/core';
@@ -42,7 +43,7 @@ const openLink = (href: string) => {
 
 // ── Inline ───────────────────────────────────────────────────────────────────
 
-function inline(tokens: Token[] | undefined, c: Colors, prefix: string): ReactNode[] {
+function inline(tokens: Token[] | undefined, c: Colors, prefix: string, mark: Mark): ReactNode[] {
   if (!tokens) return [];
   const out: ReactNode[] = [];
   tokens.forEach((t, i) => {
@@ -51,30 +52,36 @@ function inline(tokens: Token[] | undefined, c: Colors, prefix: string): ReactNo
       case 'text': {
         const tk = t as Tokens.Text;
         // A list item's text token holds inline children of its own.
-        out.push(tk.tokens ? <Fragment key={key}>{inline(tk.tokens, c, `${key}.`)}</Fragment> : tk.text);
+        out.push(
+          tk.tokens ? (
+            <Fragment key={key}>{inline(tk.tokens, c, `${key}.`, mark)}</Fragment>
+          ) : (
+            <Fragment key={key}>{mark(tk.text, key)}</Fragment>
+          ),
+        );
         break;
       }
       case 'escape':
-        out.push((t as Tokens.Escape).text);
+        out.push(<Fragment key={key}>{mark((t as Tokens.Escape).text, key)}</Fragment>);
         break;
       case 'strong':
         out.push(
           <Text key={key} style={{ fontFamily: fonts.semibold }}>
-            {inline((t as Tokens.Strong).tokens, c, `${key}.`)}
+            {inline((t as Tokens.Strong).tokens, c, `${key}.`, mark)}
           </Text>,
         );
         break;
       case 'em':
         out.push(
           <Text key={key} style={{ fontStyle: 'italic' }}>
-            {inline((t as Tokens.Em).tokens, c, `${key}.`)}
+            {inline((t as Tokens.Em).tokens, c, `${key}.`, mark)}
           </Text>,
         );
         break;
       case 'del':
         out.push(
           <Text key={key} style={{ textDecorationLine: 'line-through' }}>
-            {inline((t as Tokens.Del).tokens, c, `${key}.`)}
+            {inline((t as Tokens.Del).tokens, c, `${key}.`, mark)}
           </Text>,
         );
         break;
@@ -89,7 +96,7 @@ function inline(tokens: Token[] | undefined, c: Colors, prefix: string): ReactNo
               borderRadius: 4,
             }}
           >
-            {` ${(t as Tokens.Codespan).text} `}
+            {mark(` ${(t as Tokens.Codespan).text} `, key)}
           </Text>,
         );
         break;
@@ -102,7 +109,7 @@ function inline(tokens: Token[] | undefined, c: Colors, prefix: string): ReactNo
             onPress={() => openLink(link.href)}
             style={{ fontFamily: fonts.medium, color: c.primary, textDecorationLine: 'underline' }}
           >
-            {inline(link.tokens, c, `${key}.`)}
+            {inline(link.tokens, c, `${key}.`, mark)}
           </Text>,
         );
         break;
@@ -125,7 +132,11 @@ function inline(tokens: Token[] | undefined, c: Colors, prefix: string): ReactNo
         break;
       default: {
         const g = t as Tokens.Generic;
-        out.push(typeof g['text'] === 'string' ? (g['text'] as string) : g.raw);
+        out.push(
+          <Fragment key={key}>
+            {mark(typeof g['text'] === 'string' ? (g['text'] as string) : g.raw, key)}
+          </Fragment>,
+        );
       }
     }
   });
@@ -246,6 +257,7 @@ function cellStyle(header: boolean, align: Tokens.TableCell['align'], color: str
  */
 function Table({ table }: { table: Tokens.Table }) {
   const { c } = useTheme();
+  const mark = useMark();
   const bleed = useContext(BleedContext);
   const { width: screen } = useWindowDimensions();
   const cols = table.header.length;
@@ -311,7 +323,7 @@ function Table({ table }: { table: Tokens.Table }) {
                     { maxWidth: CELL_MAX, paddingHorizontal: CELL_PAD_X },
                   ]}
                 >
-                  {cells[i] ? inline(cells[i].tokens, c, `m${r}.${i}.`) : ''}
+                  {cells[i] ? inline(cells[i].tokens, c, `m${r}.${i}.`, mark) : ''}
                 </Text>
               </View>
             )),
@@ -357,7 +369,7 @@ function Table({ table }: { table: Tokens.Table }) {
                       { width: w, paddingHorizontal: CELL_PAD_X, paddingVertical: CELL_PAD_Y },
                     ]}
                   >
-                    {cells[i] ? inline(cells[i].tokens, c, `t${r}.${i}.`) : ''}
+                    {cells[i] ? inline(cells[i].tokens, c, `t${r}.${i}.`, mark) : ''}
                   </Text>
                 ))}
               </View>
@@ -371,6 +383,8 @@ function Table({ table }: { table: Tokens.Table }) {
 
 function Blocks({ tokens, depth = 0 }: { tokens: Token[]; depth?: number }) {
   const { c } = useTheme();
+  // Searching in the chat: the searched words are marked.
+  const mark = useMark();
   const out: ReactNode[] = [];
   tokens.forEach((t, i) => {
     switch (t.type) {
@@ -378,19 +392,21 @@ function Blocks({ tokens, depth = 0 }: { tokens: Token[]; depth?: number }) {
       case 'def':
         return;
       case 'paragraph':
-        out.push(<Para key={i}>{inline((t as Tokens.Paragraph).tokens, c, `${i}.`)}</Para>);
+        out.push(<Para key={i}>{inline((t as Tokens.Paragraph).tokens, c, `${i}.`, mark)}</Para>);
         return;
       case 'text': {
         // Tight list items hold bare text tokens instead of paragraphs.
         const tk = t as Tokens.Text;
-        out.push(<Para key={i}>{tk.tokens ? inline(tk.tokens, c, `${i}.`) : tk.text}</Para>);
+        out.push(
+          <Para key={i}>{tk.tokens ? inline(tk.tokens, c, `${i}.`, mark) : mark(tk.text, `${i}`)}</Para>,
+        );
         return;
       }
       case 'heading': {
         const h = t as Tokens.Heading;
         out.push(
           <Heading key={i} depth={h.depth}>
-            {inline(h.tokens, c, `${i}.`)}
+            {inline(h.tokens, c, `${i}.`, mark)}
           </Heading>,
         );
         return;

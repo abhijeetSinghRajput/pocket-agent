@@ -74,6 +74,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Path, Svg } from 'react-native-svg';
+import { SearchQuery, useMark } from '@/features/chat/search-mark';
 import { Markdown } from '@/features/chat/markdown';
 import { SelectTextSheet } from '@/features/chat/select-text-sheet';
 import { SentAttachments } from '@/features/chat/sent-attachments';
@@ -232,6 +233,7 @@ export const RetryContext = createContext<(key: string) => void>(() => undefined
 
 function UserMessage({ item }: { item: Of<'user'> }) {
   const { c } = useTheme();
+  const mark = useMark();
   const bubble = useRef<ComponentRef<typeof View>>(null);
   const [menu, setMenu] = useState<Anchor | null>(null);
   const [selecting, setSelecting] = useState(false);
@@ -312,7 +314,7 @@ function UserMessage({ item }: { item: Of<'user'> }) {
             color: c.bubbleOutForeground,
           }}
         >
-          {item.text}
+          {mark(item.text)}
         </Text>
         {long && (
           <Press
@@ -504,6 +506,7 @@ function IoLabel({ children }: { children: string }) {
 function ToolStep({ item, ...join }: { item: Of<'tool'> } & Join) {
   const { c } = useTheme();
   const [open, setOpen] = useState(false);
+  const mark = useMark();
   const target = item.target || '';
   const output = item.output ?? '';
   const shell = SHELL_TOOLS.has(item.toolName);
@@ -532,7 +535,7 @@ function ToolStep({ item, ...join }: { item: Of<'tool'> } & Join) {
             numberOfLines={1}
             style={{ flex: 1, fontFamily: fonts.mono, fontSize: 12.5, lineHeight: 22, color: c.toolLink }}
           >
-            {target}
+            {mark(target)}
           </Text>
         )}
       </View>
@@ -1193,7 +1196,7 @@ function RowContent({ row }: { row: Row }) {
       return (
         <Step dot={alpha(c.mutedForeground, 0.3)} {...join} testID="thought">
           <T variant="small" tone="muted" style={{ fontSize: 13.5, lineHeight: 22 }}>
-            {item.text}
+            <Mark text={item.text} />
           </T>
         </Step>
       );
@@ -1310,12 +1313,25 @@ function same(a: unknown, b: unknown): boolean {
 }
 
 /** One row of the list; a row that arrived after the first render rises into place. */
+/** Text with the searched words marked (for a spot that isn't a component of its own). */
+function Mark({ text }: { text: string }) {
+  return <>{useMark()(text)}</>;
+}
+
 /** A search in the chat: the rows that match, and the one being shown. */
 type Hit = 'current' | 'match' | undefined;
 
 const ListRow = memo(
   function ListRow({ row, fresh, hit }: { row: Row; fresh: number | undefined; hit: Hit }) {
     const { c } = useTheme();
+    // The match the search went to lights up, then fades: the marked words stay.
+    const glow = useSharedValue(0);
+    useEffect(() => {
+      if (hit !== 'current') return;
+      glow.set(1);
+      glow.set(withDelay(700, withTiming(0, { duration: 900, easing: ease.out })));
+    }, [hit, glow]);
+    const flash = useAnimatedStyle(() => ({ opacity: glow.value }));
     return (
       <Animated.View
         entering={fresh === undefined ? undefined : arrive(fresh)}
@@ -1323,24 +1339,26 @@ const ListRow = memo(
           paddingHorizontal: PAD,
           paddingBottom: row.type === 'item' && isQueued(row.item) ? 12 : GAP,
         }}
+        testID={hit === 'current' ? 'search-current' : undefined}
       >
-        {hit ? (
-          // A search match: tinted behind it, the one being shown more.
-          <View
-            testID={hit === 'current' ? 'search-current' : 'search-match'}
-            style={{
-              marginHorizontal: -8,
-              paddingHorizontal: 8,
-              paddingVertical: 4,
-              borderRadius: radius.lg,
-              backgroundColor: alpha(c.primary, hit === 'current' ? 0.16 : 0.06),
-            }}
-          >
-            <RowContent row={row} />
-          </View>
-        ) : (
-          <RowContent row={row} />
+        {hit === 'current' && (
+          <Animated.View
+            pointerEvents="none"
+            style={[
+              {
+                position: 'absolute',
+                left: PAD - 8,
+                right: PAD - 8,
+                top: -4,
+                bottom: GAP - 4,
+                borderRadius: radius.lg,
+                backgroundColor: alpha(c.primary, 0.18),
+              },
+              flash,
+            ]}
+          />
         )}
+        <RowContent row={row} />
       </Animated.View>
     );
   },
@@ -1373,7 +1391,7 @@ export function ChatMessages({
   /** Changes when the user sends a message: the list goes back to the newest message. */
   jumpKey?: number;
   /** Searching in the chat: the matching items' keys, and the one to show (scrolled to). */
-  search?: { matches: ReadonlySet<string>; current: string | null };
+  search?: { query: string; matches: ReadonlySet<string>; current: string | null };
 }) {
   const { c, dark } = useTheme();
   // Newest first: the inverted list draws index 0 at the bottom.
@@ -1462,45 +1480,53 @@ export function ChatMessages({
 
   return (
     <View style={{ flex: 1, minHeight: 0 }}>
-      <FlatList
-        ref={list}
-        inverted
-        testID="timeline"
-        accessibilityLabel="Conversation"
-        data={rows}
-        extraData={[fresh, current, matches]}
-        onScrollToIndexFailed={onScrollToIndexFailed}
-        renderItem={renderItem}
-        keyExtractor={rowKey}
-        // Scrolled up, new messages don't move what you are reading; at the bottom they come in.
-        maintainVisibleContentPosition={{ minIndexForVisible: 0, autoscrollToTopThreshold: NEAR_BOTTOM }}
-        initialNumToRender={14}
-        maxToRenderPerBatch={10}
-        // Rows are heavy (Markdown, code): keep fewer screens mounted around what is visible.
-        windowSize={7}
-        onScroll={onScroll}
-        scrollEventThrottle={32}
-        keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="interactive"
-        showsVerticalScrollIndicator={false}
-        // Inverted, the header sits under the newest message and the footer above the oldest.
-        ListHeaderComponent={
-          // Room between the newest message and the floating message box.
-          <View style={{ paddingBottom: bottomInset + 20 }}>
-            {footer ? <View style={{ paddingHorizontal: PAD, paddingBottom: GAP }}>{footer}</View> : null}
-          </View>
-        }
-        ListFooterComponent={
-          <View style={{ paddingHorizontal: PAD, paddingTop: PAD, paddingBottom: header ? GAP : 0 }}>
-            {header}
-          </View>
-        }
-        ListEmptyComponent={
-          <T variant="small" tone="muted" center style={{ paddingVertical: 40, transform: [{ scaleY: -1 }] }}>
-            No messages yet.
-          </T>
-        }
-      />
+      {/* Searching: every message marks the searched words. */}
+      <SearchQuery.Provider value={search?.query ?? ''}>
+        <FlatList
+          ref={list}
+          inverted
+          testID="timeline"
+          accessibilityLabel="Conversation"
+          data={rows}
+          extraData={[fresh, current, matches]}
+          onScrollToIndexFailed={onScrollToIndexFailed}
+          renderItem={renderItem}
+          keyExtractor={rowKey}
+          // Scrolled up, new messages don't move what you are reading; at the bottom they come in.
+          maintainVisibleContentPosition={{ minIndexForVisible: 0, autoscrollToTopThreshold: NEAR_BOTTOM }}
+          initialNumToRender={14}
+          maxToRenderPerBatch={10}
+          // Rows are heavy (Markdown, code): keep fewer screens mounted around what is visible.
+          windowSize={7}
+          onScroll={onScroll}
+          scrollEventThrottle={32}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="interactive"
+          showsVerticalScrollIndicator={false}
+          // Inverted, the header sits under the newest message and the footer above the oldest.
+          ListHeaderComponent={
+            // Room between the newest message and the floating message box.
+            <View style={{ paddingBottom: bottomInset + 20 }}>
+              {footer ? <View style={{ paddingHorizontal: PAD, paddingBottom: GAP }}>{footer}</View> : null}
+            </View>
+          }
+          ListFooterComponent={
+            <View style={{ paddingHorizontal: PAD, paddingTop: PAD, paddingBottom: header ? GAP : 0 }}>
+              {header}
+            </View>
+          }
+          ListEmptyComponent={
+            <T
+              variant="small"
+              tone="muted"
+              center
+              style={{ paddingVertical: 40, transform: [{ scaleY: -1 }] }}
+            >
+              No messages yet.
+            </T>
+          }
+        />
+      </SearchQuery.Provider>
       {away && (
         <Animated.View
           entering={enter.pop}

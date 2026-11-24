@@ -16,7 +16,7 @@ import { TerminalGuide } from '@/ui/terminal-guide';
 
 type Folder = { name: string; path: string };
 /** A folder being browsed, on one PC. */
-type Place = Folder & { deviceId: string };
+export type Place = Folder & { deviceId: string };
 type Listing =
   { status: 'loading' } | { status: 'error'; error: string } | { status: 'ready'; data: FolderListResponse };
 
@@ -28,7 +28,16 @@ const usableDevices = (all: DeviceDto[] | null) =>
  * opens it (the folders inside it, asked of the PC live); "Open in chat" opens the folder named in
  * the header in a new chat, where the first message starts Claude Code.
  */
-export function NewChatSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function NewChatSheet({
+  open,
+  onClose,
+  start,
+}: {
+  open: boolean;
+  onClose: () => void;
+  /** Open inside this folder (a workspace picked elsewhere); back still goes up to the PCs. */
+  start?: Place;
+}) {
   const router = useRouter();
   const { c } = useTheme();
   const { height } = useWindowDimensions();
@@ -40,16 +49,16 @@ export function NewChatSheet({ open, onClose }: { open: boolean; onClose: () => 
   const seen = useRef(new Map<string, FolderListResponse>());
   const here = trail.at(-1);
 
-  // Opening: the PCs as they are now, from the top.
+  // Opening: the PCs as they are now, from the top (or inside the folder it was opened on).
   useEffect(() => {
     if (!open) return;
     const t = setTimeout(() => {
-      setTrail([]);
+      setTrail(start ? [start] : []);
       seen.current.clear();
       void refresh();
     }, 0);
     return () => clearTimeout(t);
-  }, [open, refresh]);
+  }, [open, refresh, start]);
 
   // Opening a folder: ask the PC what is inside it.
   useEffect(() => {

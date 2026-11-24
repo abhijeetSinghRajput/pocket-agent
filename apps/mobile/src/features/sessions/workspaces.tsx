@@ -1,5 +1,4 @@
 import type { DeviceDto } from '@pocket-agent/protocol';
-import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { View } from 'react-native';
 import { ScrollView } from 'react-native-gesture-handler';
@@ -10,7 +9,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { PLATFORM } from '@/features/devices/device-status';
-import { FolderRow } from '@/features/sessions/new-chat-sheet';
+import { FolderRow, NewChatSheet, type Place } from '@/features/sessions/new-chat-sheet';
 import { useDevices } from '@/lib/data';
 import { dur, ease, enter } from '@/lib/motion';
 import { alpha, radius, useTheme } from '@/lib/theme';
@@ -94,9 +93,10 @@ function DeviceCard({
  * allowed on each PC) below. Tapping a workspace opens a new chat there.
  */
 export function Workspaces() {
-  const router = useRouter();
   const { state } = useDevices();
   const [picked, setPicked] = useState<string | null>(null);
+  // The workspace open in the New chat browser, if any.
+  const [browsing, setBrowsing] = useState<Place | null>(null);
 
   if (state.data === null) {
     return state.error ? (
@@ -117,8 +117,9 @@ export function Workspaces() {
   const starts = shown.map((_, i) => shown.slice(0, i).reduce((n, d) => n + d.projects.length, 0));
   const total = shown.reduce((n, d) => n + d.projects.length, 0);
 
-  const openChat = (d: DeviceDto, p: { name: string; path: string }) =>
-    router.push({ pathname: '/new-chat', params: { deviceId: d.id, path: p.path, name: p.name } });
+  // A workspace opens in the New chat browser, inside that folder: pick a folder in it, or open it.
+  const browse = (d: DeviceDto, p: { name: string; path: string }) =>
+    setBrowsing({ deviceId: d.id, name: p.name, path: p.path });
 
   return (
     <View style={{ gap: 12 }} testID="workspaces">
@@ -176,8 +177,8 @@ export function Workspaces() {
                     key={p.path}
                     folder={p}
                     index={starts[di]! + pi}
-                    hint="Starts a new chat in this folder"
-                    onPress={() => openChat(d, p)}
+                    hint="Shows the folders inside it, or opens it in a new chat"
+                    onPress={() => browse(d, p)}
                   />
                 ))}
               </View>
@@ -185,6 +186,7 @@ export function Workspaces() {
           )}
         </View>
       )}
+      <NewChatSheet open={!!browsing} start={browsing ?? undefined} onClose={() => setBrowsing(null)} />
     </View>
   );
 }

@@ -151,8 +151,9 @@ export function NewChatSheet({ open, onClose }: { open: boolean; onClose: () => 
       <ScrollView
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
-        style={{ maxHeight: Math.max(240, height * 0.62) }}
-        contentContainerStyle={{ paddingBottom: 8, gap: 16 }}
+        // Edge to edge, so the chip rows can scroll under the sheet's sides instead of being cut.
+        style={{ maxHeight: Math.max(240, height * 0.62), marginHorizontal: -20 }}
+        contentContainerStyle={{ paddingBottom: 8, gap: 16, paddingHorizontal: 20 }}
       >
         {devices === null && !state.error && <Skeleton height={160} round={radius.lg} />}
 
@@ -327,9 +328,9 @@ function ChipRow({
       showsHorizontalScrollIndicator={false}
       keyboardShouldPersistTaps="handled"
       accessibilityRole="radiogroup"
-      contentContainerStyle={{ gap: 8 }}
-      style={{ marginHorizontal: -20, paddingHorizontal: 20 }}
-      contentInset={{ right: 40 }}
+      // Runs to the sheet's edges: padding on the content, not the view (that would clip it).
+      contentContainerStyle={{ gap: 8, paddingHorizontal: 20 }}
+      style={{ marginHorizontal: -20 }}
     >
       {options.map((o) => (
         <Chip
@@ -339,7 +340,6 @@ function ChipRow({
           onPress={() => onChange(o.id)}
         />
       ))}
-      <View style={{ width: 20 }} />
     </ScrollView>
   );
 }

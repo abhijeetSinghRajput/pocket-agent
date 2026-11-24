@@ -8,6 +8,7 @@ import { ConnectSteps } from '@/features/devices/connect-steps';
 import { usePairing } from '@/features/devices/use-pairing';
 import { enter } from '@/lib/motion';
 import { alpha, radius, useTheme } from '@/lib/theme';
+import { playSound } from '@/lib/sound';
 import { Button, buzz, Spinner, T } from '@/ui/core';
 import { Sheet } from '@/ui/sheet';
 
@@ -30,7 +31,10 @@ export function AddDeviceSheet({
   const paired = step.kind === 'paired';
 
   useEffect(() => {
-    if (open && paired) buzz(true);
+    if (open && paired) {
+      buzz(true);
+      playSound('landed');
+    }
   }, [open, paired]);
 
   return (

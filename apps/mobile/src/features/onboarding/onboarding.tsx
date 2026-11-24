@@ -9,6 +9,7 @@ import { usePairing } from '@/features/devices/use-pairing';
 import { useAuth, useUser } from '@/lib/auth';
 import { ease, enter, exit } from '@/lib/motion';
 import { alpha, radius, useTheme } from '@/lib/theme';
+import { playSound } from '@/lib/sound';
 import { Avatar, Button, buzz, Divider, IconTile, Press, Spinner, T } from '@/ui/core';
 import { SuccessTick } from '@/ui/feedback';
 import { Sheet } from '@/ui/sheet';
@@ -233,6 +234,7 @@ const riseAfter = (delay: number) =>
 function Connected({ device, onDone }: { device: DeviceDto; onDone: () => void }) {
   useEffect(() => {
     buzz(true);
+    playSound('landed');
   }, []);
   return (
     <View

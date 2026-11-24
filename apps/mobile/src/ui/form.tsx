@@ -9,6 +9,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { dur, ease, settleSpring } from '@/lib/motion';
 import { fonts, radius, useTheme } from '@/lib/theme';
+import { playSound } from '@/lib/sound';
 import { T, tap } from '@/ui/core';
 
 /** A labelled text field. The border warms to the accent while focused; an error shows under it. */
@@ -118,6 +119,7 @@ export function Toggle({
       hitSlop={8}
       onPress={() => {
         tap();
+        playSound('print');
         onChange(!value);
       }}
       style={{ opacity: disabled ? 0.5 : 1 }}
@@ -200,9 +202,10 @@ export function Segmented<V extends string>({
         <Animated.View
           style={[
             {
+              // Inside the border and padding, the same gap on every side.
               position: 'absolute',
-              top: 3,
-              left: 3,
+              top: strong ? 2 : 3,
+              left: strong ? 2 : 3,
               width: seg,
               height: 34,
               borderRadius: radius.md + 1,
@@ -227,7 +230,10 @@ export function Segmented<V extends string>({
             accessibilityLabel={o.label}
             disabled={disabled}
             onPress={() => {
-              if (!selected) tap();
+              if (!selected) {
+                tap();
+                playSound('print');
+              }
               onChange(o.value);
             }}
             style={{ flex: 1, alignItems: 'center', justifyContent: 'center', minWidth: 0 }}

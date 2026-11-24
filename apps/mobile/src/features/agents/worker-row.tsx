@@ -54,7 +54,13 @@ export function WorkerRow({ w, onPress }: { w: WorkerDto; onPress: () => void })
       testID="worker-row"
       onPress={onPress}
       scale={0.99}
-      style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 14, paddingVertical: 12 }}
+      style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+        paddingHorizontal: 14,
+        paddingVertical: 12,
+      }}
     >
       <View
         style={{

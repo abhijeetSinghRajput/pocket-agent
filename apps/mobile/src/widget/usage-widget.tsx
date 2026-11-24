@@ -31,10 +31,10 @@ const LIGHT: Palette = {
   danger: '#d02b31',
 };
 const DARK: Palette = {
-  bg: '#1d1d20',
-  fg: '#eeeef0',
-  muted: '#aeb1b8',
-  track: '#3a3a3f',
+  bg: '#202020',
+  fg: '#f2f2f2',
+  muted: '#a6a6a6',
+  track: '#3a3a3a',
   primary: '#f67f2f',
   warning: '#edb345',
   danger: '#ed5350',

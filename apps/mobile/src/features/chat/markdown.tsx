@@ -126,11 +126,7 @@ function inline(tokens: Token[] | undefined, c: Colors, prefix: string): ReactNo
 
 function Para({ children, style }: { children: ReactNode; style?: TextStyle }) {
   const color = useTextColor();
-  return (
-    <Text selectable style={[BODY, { color }, style]}>
-      {children}
-    </Text>
-  );
+  return <Text style={[BODY, { color }, style]}>{children}</Text>;
 }
 
 const HEADING: Record<number, TextStyle> = {
@@ -143,7 +139,6 @@ function Heading({ depth, children }: { depth: number; children: ReactNode }) {
   const color = useTextColor();
   return (
     <Text
-      selectable
       accessibilityRole="header"
       style={[BODY, HEADING[Math.min(depth, 3)], { color, marginTop: depth <= 2 ? 8 : 4 }]}
     >
@@ -222,7 +217,6 @@ function Table({ table }: { table: Tokens.Table }) {
       {cells.map((cl, i) => (
         <Text
           key={i}
-          selectable
           style={[
             BODY,
             {

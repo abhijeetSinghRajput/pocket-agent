@@ -77,8 +77,7 @@ const ENTITY: Record<string, string> = {
   '&#x27;': "'",
   '&#39;': "'",
 };
-const decode = (s: string) =>
-  s.replace(/&(?:amp|lt|gt|quot|#x27|#39);/g, (m) => ENTITY[m] ?? m);
+const decode = (s: string) => s.replace(/&(?:amp|lt|gt|quot|#x27|#39);/g, (m) => ENTITY[m] ?? m);
 
 /** highlight.js output is escaped text plus nested `<span class="hljs-…">` wrappers; nothing else. */
 export function parseHighlighted(html: string): Span[] {

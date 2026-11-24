@@ -22,6 +22,7 @@ import {
   MessageCircleQuestion,
   ShieldAlert,
   Smartphone,
+  TextSelect,
   type LucideIcon,
 } from 'lucide-react-native';
 import {
@@ -37,6 +38,7 @@ import {
 import {
   FlatList,
   Modal,
+  Dimensions,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -65,6 +67,7 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Path, Svg } from 'react-native-svg';
 import { Markdown } from '@/features/chat/markdown';
+import { SelectTextSheet } from '@/features/chat/select-text-sheet';
 import { SentAttachments } from '@/features/chat/sent-attachments';
 import { dur, ease, enter, exit, STAGGER } from '@/lib/motion';
 import { alpha, fonts, radius, useTheme, type Colors } from '@/lib/theme';
@@ -108,13 +111,32 @@ const MENU_HEIGHT = 48;
  * The menu a long-pressed message opens, like a messenger's: just above the bubble (below it when
  * there is no room), lined up with its right edge. A tap anywhere else closes it.
  */
-function BubbleMenu({ anchor, text, onClose }: { anchor: Anchor | null; text: string; onClose: () => void }) {
+function BubbleMenu({
+  anchor,
+  text,
+  onClose,
+  onSelect,
+}: {
+  anchor: Anchor | null;
+  text: string;
+  onClose: () => void;
+  onSelect: () => void;
+}) {
   const { c, dark } = useTheme();
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   if (!anchor) return null;
-  const above = anchor.y - MENU_HEIGHT - 8 > insets.top + 8;
-  const top = above ? anchor.y - MENU_HEIGHT - 8 : anchor.y + anchor.height + 8;
+  const menuHeight = MENU_HEIGHT * 2;
+  // Above the press when there is room; a tall message that fills the screen gets it on top of
+  // its upper part instead, so the menu is always in view.
+  const above = anchor.y - menuHeight - 8 > insets.top + 8;
+  const below =
+    anchor.y + anchor.height + 8 + menuHeight < Dimensions.get('window').height - insets.bottom - 8;
+  const top = above
+    ? anchor.y - menuHeight - 8
+    : below
+      ? anchor.y + anchor.height + 8
+      : Math.max(insets.top + 8, anchor.y + 8);
   const right = Math.max(12, width - (anchor.x + anchor.width));
   const copy = () => {
     onClose();
@@ -168,6 +190,27 @@ function BubbleMenu({ anchor, text, onClose }: { anchor: Anchor | null; text: st
           <CopyIcon size={18} color={c.foreground} strokeWidth={2} />
           <T variant="bodyMedium">Copy</T>
         </Press>
+        <Divider />
+        <Press
+          accessibilityRole="menuitem"
+          testID="select-message-text"
+          onPress={() => {
+            onClose();
+            onSelect();
+          }}
+          scale={1}
+          haptic={false}
+          style={{
+            height: MENU_HEIGHT,
+            paddingHorizontal: 16,
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 12,
+          }}
+        >
+          <TextSelect size={18} color={c.foreground} strokeWidth={2} />
+          <T variant="bodyMedium">Select text</T>
+        </Press>
       </Animated.View>
     </Modal>
   );
@@ -177,6 +220,7 @@ function UserMessage({ item }: { item: Of<'user'> }) {
   const { c } = useTheme();
   const bubble = useRef<ComponentRef<typeof View>>(null);
   const [menu, setMenu] = useState<Anchor | null>(null);
+  const [selecting, setSelecting] = useState(false);
   const openMenu = () => {
     bubble.current?.measureInWindow((x, y, width, height) => {
       thud();
@@ -219,7 +263,7 @@ function UserMessage({ item }: { item: Of<'user'> }) {
           </Animated.View>
         )}
       </View>
-      {/* Long-press for the message's menu (Copy). */}
+      {/* Long-press for the message's menu (Copy, Select text). */}
       <Pressable
         ref={bubble}
         onLongPress={openMenu}
@@ -269,7 +313,13 @@ function UserMessage({ item }: { item: Of<'user'> }) {
           </Press>
         )}
       </Pressable>
-      <BubbleMenu anchor={menu} text={item.text} onClose={() => setMenu(null)} />
+      <BubbleMenu
+        anchor={menu}
+        text={item.text}
+        onClose={() => setMenu(null)}
+        onSelect={() => setSelecting(true)}
+      />
+      <SelectTextSheet text={item.text} open={selecting} onClose={() => setSelecting(false)} />
       {err && (
         <Animated.View entering={enter.fade}>
           <T variant="caption" tone="danger" style={{ fontSize: 11, textAlign: 'right' }}>
@@ -361,6 +411,15 @@ type Join = { joinAbove: boolean; joinBelow: boolean };
 
 function AssistantMessage({ item, ...join }: { item: Of<'assistant'> } & Join) {
   const { c } = useTheme();
+  const body = useRef<ComponentRef<typeof View>>(null);
+  const [menu, setMenu] = useState<Anchor | null>(null);
+  const [selecting, setSelecting] = useState(false);
+  const openMenu = () => {
+    body.current?.measureInWindow((x, y, width, height) => {
+      thud();
+      setMenu({ x, y, width, height });
+    });
+  };
   return (
     <Step dot={alpha(c.mutedForeground, 0.45)} dotTop={16 + 7} {...join}>
       <View style={{ paddingTop: 16 }}>
@@ -378,9 +437,25 @@ function AssistantMessage({ item, ...join }: { item: Of<'assistant'> } & Join) {
         >
           {clockTime(item.at)}
         </T>
-        <View accessibilityLabel="Claude:">
+        {/* Long-press for Copy and Select text (selecting in place doesn't work in the list). */}
+        <Pressable
+          ref={body}
+          onLongPress={openMenu}
+          delayLongPress={350}
+          accessibilityLabel="Claude:"
+          accessibilityHint="Long-press for options"
+          accessibilityActions={[{ name: 'longpress', label: 'Show options' }]}
+          onAccessibilityAction={openMenu}
+        >
           <Markdown text={item.text} />
-        </View>
+        </Pressable>
+        <BubbleMenu
+          anchor={menu}
+          text={item.text}
+          onClose={() => setMenu(null)}
+          onSelect={() => setSelecting(true)}
+        />
+        <SelectTextSheet text={item.text} open={selecting} onClose={() => setSelecting(false)} />
         {/* As in the editor: the reply that ends a turn can be copied whole. */}
         {!join.joinBelow && (
           <View style={{ flexDirection: 'row', marginTop: 4, marginLeft: -8 }}>
@@ -1149,6 +1224,7 @@ export function ChatMessages({
   header,
   footer,
   bottomInset = 0,
+  jumpKey = 0,
 }: {
   items: ChatItem[];
   typing: 'working' | 'starting' | null;
@@ -1156,6 +1232,8 @@ export function ChatMessages({
   footer?: ReactNode;
   /** Room left under the last message (what floats over the list: the message box). */
   bottomInset?: number;
+  /** Changes when the user sends a message: the list goes back to the newest message. */
+  jumpKey?: number;
 }) {
   const { c, dark } = useTheme();
   // Newest first: the inverted list draws index 0 at the bottom.
@@ -1200,6 +1278,10 @@ export function ChatMessages({
   }, []);
 
   const toBottom = () => list.current?.scrollToOffset({ offset: 0, animated: true });
+  // Sending brings you to the bottom, where your message and the reply arrive.
+  useEffect(() => {
+    if (jumpKey) list.current?.scrollToOffset({ offset: 0, animated: true });
+  }, [jumpKey]);
 
   const renderItem = useCallback(
     ({ item }: ListRenderItemInfo<Row>) => <ListRow row={item} fresh={fresh.get(item.key)} />,

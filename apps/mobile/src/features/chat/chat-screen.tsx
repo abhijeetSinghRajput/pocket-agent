@@ -196,6 +196,8 @@ export function ChatScreen({ id }: { id: string }) {
   );
   const commands = useCommands(id);
   const [infoOpen, setInfoOpen] = useState(false);
+  // Bumped on every send: the conversation scrolls back to the newest message.
+  const [jump, setJump] = useState(0);
   // Height of what floats over the list's foot (the message box), so the last message clears it.
   const [dock, setDock] = useState(0);
   useLiveRefresh(
@@ -267,6 +269,10 @@ export function ChatScreen({ id }: { id: string }) {
   }
 
   const s = state.data;
+  const sent = () => {
+    setJump((j) => j + 1);
+    changed();
+  };
   const changed = () => {
     void refresh();
     void feed.refreshHead();
@@ -309,6 +315,7 @@ export function ChatScreen({ id }: { id: string }) {
               }
               typing={typingKind(s)}
               bottomInset={dock}
+              jumpKey={jump}
               header={
                 feed.hasMore ? (
                   <Button
@@ -374,7 +381,7 @@ export function ChatScreen({ id }: { id: string }) {
                 paddingBottom: 12 + insets.bottom,
               }}
             >
-              <Composer session={s} onSent={changed} onInfo={() => setInfoOpen(true)} />
+              <Composer session={s} onSent={sent} onInfo={() => setInfoOpen(true)} />
             </Animated.View>
           </View>
         </View>

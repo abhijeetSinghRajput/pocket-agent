@@ -111,7 +111,13 @@ export function CopyButton({
       haptic={false}
       scale={0.9}
       hitSlop={6}
-      style={{ width: size, height: size, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' }}
+      style={{
+        width: size,
+        height: size,
+        borderRadius: radius.sm,
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
     >
       <CopyMark copied={copied} size={Math.round(size * 0.44)} color={color ?? c.mutedForeground} />
     </Press>

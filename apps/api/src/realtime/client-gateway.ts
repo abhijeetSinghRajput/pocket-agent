@@ -84,15 +84,29 @@ export async function clientGateway(app: FastifyInstance, ctx: AppContext & { bu
       websocket: true,
       preValidation: async (req, reply) => {
         const origin = req.headers.origin;
-        if (!origin || !ctx.env.WEB_ORIGINS.includes(origin)) {
-          return reply.code(403).send({ error: 'untrusted_origin' });
-        }
         const ticket = (req.query as { ticket?: unknown } | undefined)?.ticket;
         if (typeof ticket === 'string') {
+          // A one-time ticket, issued to a signed-in request from the web app or the phone app.
+          // Still never from another website: a web origin must be the web app's. The phone's
+          // WebSocket sends the API's own address as its origin (or none).
+          const own = (() => {
+            try {
+              return !!origin && new URL(origin).host === req.headers.host;
+            } catch {
+              return false;
+            }
+          })();
+          if (origin && !own && !ctx.env.WEB_ORIGINS.includes(origin)) {
+            return reply.code(403).send({ error: 'untrusted_origin' });
+          }
           const t = await redeem(ticket);
           if (!t) return reply.code(401).send({ error: 'unauthenticated' });
           authed.set(req, t);
           return;
+        }
+        // The cookie is sent by any site the browser visits: only the web app's origins may use it.
+        if (!origin || !ctx.env.WEB_ORIGINS.includes(origin)) {
+          return reply.code(403).send({ error: 'untrusted_origin' });
         }
         await loadUser(ctx, req);
         if (!req.user) return reply.code(401).send({ error: 'unauthenticated' });

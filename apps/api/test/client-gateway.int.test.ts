@@ -118,6 +118,19 @@ describe('/ws/client', () => {
       await expect(
         wsClient(`${clientUrl}?ticket=${tk}`, { origin: 'https://evil.example' }).opened,
       ).rejects.toThrow('HTTP 403');
+      // The phone app: a ticket from a bearer request (no origin), then a socket whose origin is
+      // the API's own address (what Android's WebSocket sends) or none.
+      const token = u.cookie.split('=')[1]!;
+      const phone = { 'x-pocket-agent-client': 'mobile', authorization: `Bearer ${token}` };
+      const apiOrigin = new URL(clientUrl.replace(/^ws/, 'http')).origin;
+      for (const origin of [apiOrigin, null]) {
+        const res = await t.app.inject({ method: 'POST', url: '/ws/tickets', headers: phone });
+        expect(res.statusCode).toBe(200);
+        const { ticket: pk } = res.json() as { ticket: string };
+        const socket = wsClient(`${clientUrl}?ticket=${pk}`, origin ? { origin } : {});
+        await socket.opened;
+        socket.ws.close();
+      }
       // A ticket minted before sign-out is dead after it.
       const { ticket: tk2 } = (await ticket(u.cookie)).json() as { ticket: string };
       await t.app.inject({ method: 'POST', url: '/auth/logout', headers: browser(u.cookie) });

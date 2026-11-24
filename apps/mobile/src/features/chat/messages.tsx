@@ -1295,10 +1295,17 @@ export function ChatMessages({
   }, []);
 
   const toBottom = () => list.current?.scrollToOffset({ offset: 0, animated: true });
-  // Sending brings you to the bottom, where your message and the reply arrive.
+  // Sending brings you to the bottom at once, and again when the message shows up there: rows
+  // arriving mid-scroll keep the visible ones in place, which would stop the first scroll short.
+  const following = useRef(0);
   useEffect(() => {
-    if (jumpKey) list.current?.scrollToOffset({ offset: 0, animated: true });
+    if (!jumpKey) return;
+    following.current = Date.now() + 4000;
+    list.current?.scrollToOffset({ offset: 0, animated: true });
   }, [jumpKey]);
+  useEffect(() => {
+    if (Date.now() < following.current) list.current?.scrollToOffset({ offset: 0, animated: true });
+  }, [rows]);
 
   const renderItem = useCallback(
     ({ item }: ListRenderItemInfo<Row>) => <ListRow row={item} fresh={fresh.get(item.key)} />,

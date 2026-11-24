@@ -259,10 +259,6 @@ export function ChatScreen({ id }: { id: string }) {
   }
 
   const s = state.data;
-  const sent = () => {
-    setJump((j) => j + 1);
-    changed();
-  };
   const changed = () => {
     void refresh();
     void feed.refreshHead();
@@ -371,7 +367,12 @@ export function ChatScreen({ id }: { id: string }) {
                 paddingBottom: 12 + insets.bottom,
               }}
             >
-              <Composer session={s} onSent={sent} onInfo={() => setInfoOpen(true)} />
+              <Composer
+                session={s}
+                onSending={() => setJump((j) => j + 1)}
+                onSent={changed}
+                onInfo={() => setInfoOpen(true)}
+              />
             </Animated.View>
           </View>
         </View>

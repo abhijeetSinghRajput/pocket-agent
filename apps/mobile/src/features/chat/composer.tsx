@@ -171,10 +171,14 @@ export function AttachButton({ disabled, onPress }: { disabled: boolean; onPress
 /** Message box pinned to the bottom of a chat. The button sends; files attach from the +. */
 export function Composer({
   session,
+  onSending,
   onSent,
   onInfo,
 }: {
   session: AgentSessionDto;
+  /** A message is on its way: the chat goes to its newest message, where it will show up. */
+  onSending?: () => void;
+  /** Something was sent (a message, a stop, a new mode): the chat refreshes. */
   onSent: () => void;
   onInfo?: () => void;
 }) {
@@ -266,6 +270,7 @@ export function Composer({
     setPending(true);
     setError(null);
     thud();
+    onSending?.();
     try {
       const choices = {
         ...(model && !modelLocked ? { model } : {}),

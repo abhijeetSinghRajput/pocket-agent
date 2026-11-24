@@ -29,8 +29,10 @@ changes), then waits for the owner's go-ahead before the next.
   the first time and is used only while the mic is on.
 
 ## M4 — Clearer feedback
-- **Turn summary card** when Claude finishes: files changed, commands run, duration.
-- **Live agent progress** in the agent map: what each running agent is doing now.
+- **Turn summary card** when Claude finishes: files changed, commands run, duration (built in
+  core from the chat's own events, phone and web; only for turns that used tools).
+- **Live agent progress** in the agent map: what each running agent is doing now (the tool call it
+  waits on, or "Thinking…"), read live from the PC (agent 0.1.10+; older PCs show nothing).
 
 ## M5 — Setup
 - **Pair with a QR code**: the PC shows a code, the app scans it (no typing).

@@ -9,6 +9,7 @@ import {
   SHELL_TOOLS,
   TOOL_STATE,
   STATUS_LABEL,
+  summaryParts,
   type AskedQuestion,
   type ChatItem,
 } from '@pocket-agent/core';
@@ -20,6 +21,7 @@ import {
   Check,
   CheckCheck,
   CircleAlert,
+  CircleCheck,
   Clock,
   Copy as CopyIcon,
   Laptop,
@@ -1203,7 +1205,84 @@ function RowContent({ row }: { row: Row }) {
       return <Pill>{controlText(item.command)}</Pill>;
     case 'notice':
       return <Pill tone={item.tone}>{item.text}</Pill>;
+    case 'summary':
+      return <TurnSummary item={item} />;
   }
+}
+
+/** Where a path ends: its file name, and the folder it is in (short). */
+function splitPath(p: string): { name: string; dir: string } {
+  const parts = p.split(/[\\/]/).filter(Boolean);
+  return { name: parts.at(-1) ?? p, dir: parts.slice(-3, -1).join('/') };
+}
+
+/**
+ * Claude finished a turn: how long it took, the files it changed and the commands it ran, at a
+ * glance (the steps themselves are above). A long file list folds.
+ */
+function TurnSummary({ item }: { item: Of<'summary'> }) {
+  const { c, dark } = useTheme();
+  const [open, setOpen] = useState(false);
+  const [first, ...rest] = summaryParts(item);
+  const FOLDED = 3;
+  const shown = open ? item.files : item.files.slice(0, FOLDED);
+  const more = item.files.length - shown.length;
+  return (
+    <View
+      testID="turn-summary"
+      accessibilityLabel={`Claude finished: ${summaryParts(item).join(', ')}`}
+      style={{
+        borderRadius: radius.xl,
+        borderWidth: dark ? 0 : StyleSheet.hairlineWidth,
+        borderColor: c.border,
+        backgroundColor: c.card,
+        paddingHorizontal: 14,
+        paddingVertical: 12,
+        gap: 8,
+      }}
+    >
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+        <CircleCheck size={16} color={item.failed ? c.warning : c.success} strokeWidth={2.4} />
+        <T variant="smallMedium" style={{ flexShrink: 0 }}>
+          Done in {first}
+        </T>
+        {rest.length > 0 && (
+          <T variant="small" tone="muted" numberOfLines={1} style={{ flex: 1, minWidth: 0 }}>
+            · {rest.join(' · ')}
+          </T>
+        )}
+      </View>
+      {shown.length > 0 && (
+        <View style={{ gap: 4, paddingLeft: 24 }}>
+          {shown.map((f) => {
+            const { name, dir } = splitPath(f);
+            return (
+              <Text
+                key={f}
+                numberOfLines={1}
+                style={{ fontFamily: fonts.mono, fontSize: 12.5, lineHeight: 18 }}
+              >
+                <Text style={{ color: c.foreground }}>{name}</Text>
+                {dir ? <Text style={{ color: c.mutedForeground }}>{`  ${dir}`}</Text> : null}
+              </Text>
+            );
+          })}
+          {(more > 0 || open) && item.files.length > FOLDED && (
+            <Press
+              accessibilityRole="button"
+              onPress={() => setOpen((o) => !o)}
+              hitSlop={6}
+              style={{ alignSelf: 'flex-start', marginTop: 2 }}
+            >
+              <T variant="captionMedium" tone="primary">
+                {open ? 'Show less' : `${more} more`}
+              </T>
+            </Press>
+          )}
+        </View>
+      )}
+    </View>
+  );
 }
 
 /** A row that arrives while the chat is open rises into place (the list is inverted: up is -y). */

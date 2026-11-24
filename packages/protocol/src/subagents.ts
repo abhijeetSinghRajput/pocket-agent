@@ -11,6 +11,8 @@ const iso = z.iso.datetime({ offset: true });
 
 /** First Local Agent version that reads a session's sub-agents for the app. */
 export const SUBAGENTS_AGENT_VERSION = '0.1.8';
+/** First Local Agent version that says what each running sub-agent is doing now. */
+export const SUBAGENT_PROGRESS_AGENT_VERSION = '0.1.10';
 
 /** Most sub-agents listed for one session. */
 export const SUBAGENTS_MAX = 100;
@@ -38,6 +40,15 @@ export const SubagentInfo = z.object({
   lastActivityAt: iso.nullable(),
   /** Tool calls it made so far. */
   toolCalls: z.number().int().min(0),
+  /**
+   * What it is doing right now: the tool call it is waiting on (summarised input, as in a chat's
+   * tool steps). Null when it is thinking or writing, or has finished. Absent from PCs before
+   * 0.1.10 (then nothing is said about it).
+   */
+  current: z
+    .object({ toolName: z.string().max(100), input: z.string().max(2000) })
+    .nullable()
+    .optional(),
 });
 export type SubagentInfo = z.infer<typeof SubagentInfo>;
 

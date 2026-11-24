@@ -1,9 +1,11 @@
-import { timeAgo } from '@pocket-agent/core';
+import { nowDoing, timeAgo } from '@pocket-agent/core';
 import type { SubagentInfo, WorkerDto, WorkerStatus } from '@pocket-agent/protocol';
 import { ChevronRight } from 'lucide-react-native';
 import { View } from 'react-native';
+import Animated from 'react-native-reanimated';
 import { duration } from '@/features/sessions/badges';
-import { alpha, radius, useTheme } from '@/lib/theme';
+import { enter, exit } from '@/lib/motion';
+import { alpha, fonts, radius, useTheme } from '@/lib/theme';
 import { Dot, Press, T, toneColor, type Tone } from '@/ui/core';
 import { Roll } from '@/ui/feedback';
 
@@ -50,12 +52,15 @@ function AgentRow({
   meta,
   time,
   summary,
+  now,
   status,
   accessibilityLabel,
   onPress,
 }: {
   title: string;
   meta: string;
+  /** What it is doing right now (running agents, read live from the PC). */
+  now?: string | null;
   /** How long it has run, or when it ended: beside its status. */
   time: string | null;
   summary?: string | null;
@@ -94,6 +99,18 @@ function AgentRow({
         <T variant="caption" tone="muted" numberOfLines={1} style={{ fontVariant: ['tabular-nums'] }}>
           {meta}
         </T>
+        {now ? (
+          // Each new step rolls in over the last.
+          <Animated.View key={now} entering={enter.roll} exiting={exit.fade} testID="agent-now">
+            <T
+              variant="small"
+              numberOfLines={1}
+              style={{ fontFamily: fonts.mono, fontSize: 12.5, color: toneColor(c, 'success') }}
+            >
+              {now}
+            </T>
+          </Animated.View>
+        ) : null}
         {summary ? (
           <T variant="small" numberOfLines={2} style={{ color: alpha(c.foreground, 0.75) }}>
             {summary}
@@ -128,7 +145,7 @@ const when = (status: WorkerStatus, startedAt: string, endedAt: string | null) =
   status === 'running' ? `for ${duration(startedAt, null)}` : timeAgo(endedAt ?? startedAt);
 
 /** A background worker of a chat (sub-agent or workflow), as the agent map lists it. */
-export function WorkerRow({ w, onPress }: { w: WorkerDto; onPress: () => void }) {
+export function WorkerRow({ w, now, onPress }: { w: WorkerDto; now?: string | null; onPress: () => void }) {
   const kind = w.kind === 'workflow' ? 'Workflow' : 'Sub-agent';
   const meta = [w.label && w.label !== w.title ? w.label : kind, w.background ? 'background' : null]
     .filter(Boolean)
@@ -139,6 +156,7 @@ export function WorkerRow({ w, onPress }: { w: WorkerDto; onPress: () => void })
       meta={meta}
       time={when(w.status, w.startedAt, w.finishedAt)}
       summary={w.status === 'running' ? null : w.summary}
+      now={w.status === 'running' ? now : null}
       status={w.status}
       accessibilityLabel={`${kind}: ${w.title}, ${STATUS[w.status].label}, in ${w.projectName}. ${w.kind === 'subagent' ? 'Open' : 'Open chat'}`}
       onPress={onPress}
@@ -155,6 +173,7 @@ export function SubagentRow({ agent: a, onPress }: { agent: SubagentInfo; onPres
       title={a.description || a.type}
       meta={meta}
       time={a.startedAt ? when(status, a.startedAt, a.lastActivityAt) : null}
+      now={nowDoing(a)}
       status={status}
       accessibilityLabel={`${a.type}: ${a.description}, ${STATUS[status].label}. Open`}
       onPress={onPress}

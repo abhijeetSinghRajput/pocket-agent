@@ -1,4 +1,5 @@
 import type { AgentEventDto, WorkerKind, WorkerStatus } from '@pocket-agent/protocol';
+import { toolTarget } from './chat.js';
 
 /**
  * The workers Claude started in one session — sub-agents (the Agent/Task tool) and workflows — and
@@ -144,4 +145,18 @@ export function buildWorkers(events: AgentEventDto[]): Worker[] {
     }
   }
   return [...workers.values()];
+}
+
+/**
+ * What a running sub-agent is doing now, in a few words ("Bash · npm test", "Thinking…"); null
+ * when it finished or its PC doesn't say (before 0.1.10).
+ */
+export function nowDoing(a: {
+  finished: boolean;
+  current?: { toolName: string; input: string } | null | undefined;
+}): string | null {
+  if (a.finished || a.current === undefined) return null;
+  if (a.current === null) return 'Thinking…';
+  const target = toolTarget(a.current.input);
+  return target ? `${a.current.toolName} · ${target}` : a.current.toolName;
 }

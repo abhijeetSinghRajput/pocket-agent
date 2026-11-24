@@ -91,19 +91,28 @@ async function scan(dir: string, agentId: string): Promise<Scan | null> {
   let lastActivityAt: string | null = null;
   let toolCalls = 0;
   const spawned: string[] = [];
+  // The newest tool call, until its result comes back: what the agent is doing now.
+  let pending: { id: string; name: string; input: unknown } | null = null;
   for await (const entry of lines(path.join(dir, `agent-${agentId}.jsonl`))) {
     const at = str(entry['timestamp']);
     if (at) {
       startedAt ??= at;
       lastActivityAt = at;
     }
+    if (entry['type'] === 'user') {
+      for (const b of blocks(entry))
+        if (b['type'] === 'tool_result' && pending && str(b['tool_use_id']) === pending.id) pending = null;
+      continue;
+    }
     if (entry['type'] !== 'assistant') continue;
     for (const b of blocks(entry)) {
       if (b['type'] !== 'tool_use') continue;
       toolCalls++;
+      pending = { id: str(b['id']), name: str(b['name']), input: b['input'] };
       if (SPAWN_TOOLS.has(str(b['name'])) && str(b['id'])) spawned.push(str(b['id']));
     }
   }
+  const finished = meta['finished'] === true;
   const depth = typeof meta['spawnDepth'] === 'number' ? Math.max(1, Math.min(20, meta['spawnDepth'])) : 1;
   return {
     info: {
@@ -113,7 +122,7 @@ async function scan(dir: string, agentId: string): Promise<Scan | null> {
       description: truncate(str(meta['description']), 500),
       model: str(meta['model']) ? truncate(str(meta['model']), 100) : null,
       background: meta['requestShape'] === 'background',
-      finished: meta['finished'] === true,
+      finished,
       depth,
       startedAt: startedAt && !Number.isNaN(Date.parse(startedAt)) ? new Date(startedAt).toISOString() : null,
       lastActivityAt:
@@ -121,6 +130,13 @@ async function scan(dir: string, agentId: string): Promise<Scan | null> {
           ? new Date(lastActivityAt).toISOString()
           : null,
       toolCalls,
+      current:
+        pending && !finished
+          ? {
+              toolName: truncate(pending.name || 'Tool', 100),
+              input: truncate(summarizeToolInput(pending.name, pending.input), 2000),
+            }
+          : null,
     },
     spawned,
   };

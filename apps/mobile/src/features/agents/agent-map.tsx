@@ -1,8 +1,10 @@
+import { nowDoing } from '@pocket-agent/core';
 import type { WorkerDto } from '@pocket-agent/protocol';
 import { useRouter } from 'expo-router';
 import { MessagesSquare } from 'lucide-react-native';
 import { View } from 'react-native';
 import Animated from 'react-native-reanimated';
+import { useSubagent } from '@/lib/data';
 import { enter, layout } from '@/lib/motion';
 import { alpha, useTheme } from '@/lib/theme';
 import { Press, T } from '@/ui/core';
@@ -82,8 +84,33 @@ function ChatNode({ chat, onPress }: { chat: Chat; onPress: () => void }) {
   );
 }
 
-/** One chat's branch: the chat, then its agents. */
+type NowOf = (toolUseId: string) => string | null;
+const NOTHING: NowOf = () => null;
+
+/**
+ * A chat with sub-agents running: what each is doing now, read live from its PC (one read gives
+ * the chat's whole agent list). Nothing is shown when the PC can't be asked.
+ */
+function LiveBranch({ chat, index, probe }: { chat: Chat; index: number; probe: string }) {
+  const agents = useSubagent(chat.sessionId, probe).state.data?.agents ?? [];
+  const nowOf: NowOf = (id) => {
+    const a = agents.find((x) => x.toolUseId === id);
+    return a ? nowDoing(a) : null;
+  };
+  return <BranchView chat={chat} index={index} nowOf={nowOf} />;
+}
+
+/** One chat's branch: the chat, then its agents (with what the running ones are doing now). */
 function ChatBranch({ chat, index }: { chat: Chat; index: number }) {
+  const probe = chat.workers.find((w) => w.kind === 'subagent' && w.status === 'running');
+  return probe ? (
+    <LiveBranch chat={chat} index={index} probe={probe.id} />
+  ) : (
+    <BranchView chat={chat} index={index} nowOf={NOTHING} />
+  );
+}
+
+function BranchView({ chat, index, nowOf }: { chat: Chat; index: number; nowOf: NowOf }) {
   const router = useRouter();
   const openAgent = useOpenAgent(chat.sessionId);
   return (
@@ -98,6 +125,7 @@ function ChatBranch({ chat, index }: { chat: Chat; index: number }) {
         render={(w) => (
           <WorkerRow
             w={w}
+            now={nowOf(w.id)}
             // A sub-agent opens its own page (prompt, tool calls, transcript); a workflow its chat.
             onPress={() =>
               w.kind === 'subagent'

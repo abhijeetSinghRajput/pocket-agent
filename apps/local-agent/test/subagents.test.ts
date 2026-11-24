@@ -96,7 +96,16 @@ function fixture() {
       requestShape: 'background',
       finished: false,
     },
-    [{ type: 'user', timestamp: at(3), message: { role: 'user', content: 'Read src/upload.ts' } }],
+    [
+      { type: 'user', timestamp: at(3), message: { role: 'user', content: 'Read src/upload.ts' } },
+      {
+        type: 'assistant',
+        timestamp: at(5),
+        message: {
+          content: [{ type: 'tool_use', id: 'toolu_test', name: 'Bash', input: { command: 'npm test' } }],
+        },
+      },
+    ],
   );
   return config;
 }
@@ -123,6 +132,12 @@ describe('sub-agents read from Claude Code’s records', () => {
         finished: false,
       },
     ]);
+  });
+
+  it('says what a running sub-agent is doing now (the tool call it waits on)', async () => {
+    const [done, running] = (await listSubagents(SESSION, fixture()))!.agents;
+    expect(done!.current).toBeNull();
+    expect(running!.current).toEqual({ toolName: 'Bash', input: expect.stringContaining('npm test') });
   });
 
   it('turns a transcript into session events: prompt, replies, tool calls and their results', async () => {

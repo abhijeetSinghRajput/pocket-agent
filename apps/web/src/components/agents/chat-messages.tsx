@@ -6,6 +6,7 @@ import {
   Check,
   CheckCheck,
   CircleAlert,
+  CircleCheck,
   Clock,
   Laptop,
   MessageCircleQuestion,
@@ -16,7 +17,15 @@ import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 're
 import { ClaudeSpinner } from '@/components/agents/claude-spinner';
 import { SentAttachments } from '@/components/agents/attachments';
 import { Markdown } from '@/components/agents/markdown';
-import { isQueued, readAnswer, SHELL_TOOLS, TOOL_STATE, type AskedQuestion, type ChatItem } from '@/lib/chat';
+import {
+  isQueued,
+  readAnswer,
+  SHELL_TOOLS,
+  summaryParts,
+  TOOL_STATE,
+  type AskedQuestion,
+  type ChatItem,
+} from '@/lib/chat';
 import { commandError, controlText, STATUS_LABEL } from '@/lib/commands';
 import { clockTime, dayLabel, daysAgo } from '@/lib/format';
 import { cn } from '@/lib/utils';
@@ -482,6 +491,9 @@ function renderItems(items: ChatItem[]): ReactNode[] {
           </Pill>,
         );
         break;
+      case 'summary':
+        out.push(<TurnSummary key={item.key} item={item} />);
+        break;
     }
   }
   return out;
@@ -587,6 +599,58 @@ export function ChatMessages({
         >
           <ArrowDown className="size-4.5" aria-hidden />
         </button>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Claude finished a turn: how long it took, the files it changed and the commands it ran, at a
+ * glance (the steps themselves are above). A long file list folds.
+ */
+function TurnSummary({ item }: { item: Extract<ChatItem, { kind: 'summary' }> }) {
+  const [open, setOpen] = useState(false);
+  const parts = summaryParts(item);
+  const [first, ...rest] = parts;
+  const FOLDED = 3;
+  const shown = open ? item.files : item.files.slice(0, FOLDED);
+  return (
+    <div
+      data-testid="turn-summary"
+      aria-label={`Claude finished: ${parts.join(', ')}`}
+      className="rounded-xl border bg-card px-4 py-3 text-sm"
+    >
+      <div className="flex items-center gap-2">
+        <CircleCheck
+          className={cn('size-4 shrink-0', item.failed ? 'text-amber-500' : 'text-emerald-600')}
+          aria-hidden
+        />
+        <span className="shrink-0 font-medium">Done in {first}</span>
+        {rest.length > 0 && <span className="truncate text-muted-foreground">· {rest.join(' · ')}</span>}
+      </div>
+      {shown.length > 0 && (
+        <ul className="mt-2 space-y-0.5 pl-6 font-mono text-[12.5px]">
+          {shown.map((f) => {
+            const parts = f.split(/[\\/]/).filter(Boolean);
+            return (
+              <li key={f} className="truncate" title={f}>
+                {parts.at(-1)}
+                <span className="text-muted-foreground"> {parts.slice(-3, -1).join('/')}</span>
+              </li>
+            );
+          })}
+          {item.files.length > FOLDED && (
+            <li>
+              <button
+                type="button"
+                onClick={() => setOpen((o) => !o)}
+                className="font-sans text-xs font-medium text-primary hover:underline"
+              >
+                {open ? 'Show less' : `${item.files.length - FOLDED} more`}
+              </button>
+            </li>
+          )}
+        </ul>
       )}
     </div>
   );

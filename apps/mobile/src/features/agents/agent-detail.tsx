@@ -1,4 +1,4 @@
-import { buildChat, type ChatItem } from '@pocket-agent/core';
+import { buildChat, nowDoing, type ChatItem } from '@pocket-agent/core';
 import type { SubagentInfo, WorkerStatus } from '@pocket-agent/protocol';
 import { useRouter } from 'expo-router';
 import { FileText } from 'lucide-react-native';
@@ -172,6 +172,23 @@ export function AgentDetailScreen({ sessionId, toolUseId }: { sessionId: string;
                 In the background
               </T>
             )}
+          </Animated.View>
+        )}
+
+        {/* What it is doing this moment (refreshes as the chat reports its steps). */}
+        {agent && nowDoing(agent) && (
+          <Animated.View entering={enter.rise(1)}>
+            <Section title="NOW">
+              <Animated.View key={nowDoing(agent)} entering={enter.roll} testID="agent-detail-now">
+                <T
+                  variant="small"
+                  numberOfLines={3}
+                  style={{ fontFamily: fonts.mono, fontSize: 13, lineHeight: 19 }}
+                >
+                  {nowDoing(agent)}
+                </T>
+              </Animated.View>
+            </Section>
           </Animated.View>
         )}
 

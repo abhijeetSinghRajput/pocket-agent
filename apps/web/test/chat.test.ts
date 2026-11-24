@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { answerText } from '@/components/approvals/approval-card';
 import { typeOver } from '@/components/agents/chat-messages';
 import { resetLabel } from '@/components/claude-usage';
-import { buildChat, cleanPrompt, isQueued, readAnswer } from '@/lib/chat';
+import { buildChat, cleanPrompt, isQueued, readAnswer, summaryParts } from '@/lib/chat';
 import { chatListTime, dayLabel, daysAgo, recentSections } from '@/lib/format';
 import { openChatId } from '@/lib/nav';
 
@@ -438,5 +438,54 @@ describe('readAnswer', () => {
   });
   it('nothing chosen without an answer', () => {
     expect(readAnswer(q, undefined).chosen.size).toBe(0);
+  });
+});
+
+describe('turn summary', () => {
+  const edit = (file: string) => JSON.stringify({ file_path: file });
+  const turn = (start: number) => [
+    ev(start, 'agent.output', { role: 'user', text: 'Fix the upload' }),
+    ev(start + 2, 'agent.tool.started', {
+      toolUseId: `r${start}`,
+      toolName: 'Read',
+      input: edit('src/a.ts'),
+    }),
+    ev(start + 3, 'agent.tool.completed', { toolUseId: `r${start}`, toolName: 'Read', output: '' }),
+    ev(start + 4, 'agent.tool.started', {
+      toolUseId: `e${start}`,
+      toolName: 'Edit',
+      input: edit('src/a.ts'),
+    }),
+    ev(start + 5, 'agent.tool.completed', { toolUseId: `e${start}`, toolName: 'Edit', output: '' }),
+    ev(start + 6, 'agent.tool.started', {
+      toolUseId: `w${start}`,
+      toolName: 'Edit',
+      input: edit('src/a.ts'),
+    }),
+    ev(start + 7, 'agent.tool.completed', { toolUseId: `w${start}`, toolName: 'Edit', output: '' }),
+    ev(start + 8, 'agent.tool.started', { toolUseId: `b${start}`, toolName: 'Bash', input: bash }),
+    ev(start + 9, 'agent.tool.failed', { toolUseId: `b${start}`, toolName: 'Bash', error: 'exit 1' }),
+    ev(start + 10, 'agent.output', { role: 'assistant', text: 'Done.' }),
+    ev(start + 74, 'agent.session.updated', { externalSessionId: 'x', status: 'WaitingForInput' }),
+  ];
+
+  it('closes a finished turn with what it did', () => {
+    const items = buildChat(turn(0));
+    const last = items.at(-1)!;
+    expect(last.kind).toBe('summary');
+    if (last.kind !== 'summary') return;
+    expect(last).toMatchObject({ files: ['src/a.ts'], commands: 1, steps: 4, failed: 1, durationMs: 74_000 });
+    expect(summaryParts(last)).toEqual(['1m 14s', '1 file changed', '1 command', '1 failed']);
+  });
+
+  it('one per turn, none for a turn without tools or still running', () => {
+    const items = buildChat([
+      ...turn(0),
+      ev(100, 'agent.output', { role: 'user', text: 'Thanks' }),
+      ev(101, 'agent.output', { role: 'assistant', text: 'Any time.' }),
+      ev(102, 'agent.session.updated', { externalSessionId: 'x', status: 'WaitingForInput' }),
+      ...turn(200).slice(0, -1),
+    ]);
+    expect(items.filter((i) => i.kind === 'summary')).toHaveLength(1);
   });
 });

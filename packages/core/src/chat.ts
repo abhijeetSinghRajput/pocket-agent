@@ -1,5 +1,6 @@
 import type { AgentEventDto, CommandDto } from '@pocket-agent/protocol';
 import { isControl } from './commands.js';
+import { spanText } from './format.js';
 import { AttachmentRefs, type AttachmentRef } from '@pocket-agent/protocol';
 
 type P = Record<string, unknown>;
@@ -140,7 +141,25 @@ export type ChatItem =
   | { kind: 'control'; key: string; at: string; command: CommandDto }
   /** "Thought for 2s": how long Claude thought before its next step (never the thinking itself). */
   | { kind: 'thought'; key: string; at: string; text: string }
-  | { kind: 'notice'; key: string; at: string; text: string; tone: 'muted' | 'danger' };
+  | { kind: 'notice'; key: string; at: string; text: string; tone: 'muted' | 'danger' }
+  /** A turn finished: what it did, at a glance (only for turns that used tools). */
+  | {
+      kind: 'summary';
+      key: string;
+      at: string;
+      /** From your message (or the turn's first step) to Claude finishing. */
+      durationMs: number;
+      /** Files it edited or wrote, in the order first touched. */
+      files: string[];
+      /** Shell commands it ran. */
+      commands: number;
+      /** Tool steps in all, and how many of them failed. */
+      steps: number;
+      failed: number;
+    };
+
+/** Tools that change a file (their target is the file). */
+export const EDIT_TOOLS: ReadonlySet<string> = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit']);
 
 /** The PC reports thinking time as a system note with exactly this shape. */
 const THOUGHT = /^Thought for (\d+m )?\d+s$/;
@@ -190,6 +209,11 @@ export function buildChat(events: AgentEventDto[], commands: CommandDto[] = []):
   const userItems: Extract<ChatItem, { kind: 'user' }>[] = [];
   let started = false;
   let ended = false;
+  // The turn in progress: when it began and its tool steps (finished turns get a summary).
+  type Tool = Extract<ChatItem, { kind: 'tool' }>;
+  let turnStart: string | null = null;
+  let turnTools: Tool[] = [];
+  const turns: { key: string; at: string; startedAt: string; tools: Tool[] }[] = [];
 
   for (const e of sorted) {
     const p = e.payload;
@@ -218,6 +242,7 @@ export function buildChat(events: AgentEventDto[], commands: CommandDto[] = []):
           };
           userItems.push(item);
           items.push(item);
+          turnStart ??= at;
           break;
         }
         const text = str(p['text']);
@@ -262,6 +287,8 @@ export function buildChat(events: AgentEventDto[], commands: CommandDto[] = []):
           };
           tools.set(id, item);
           items.push(item);
+          turnStart ??= at;
+          turnTools.push(item);
         }
         break;
       }
@@ -313,6 +340,13 @@ export function buildChat(events: AgentEventDto[], commands: CommandDto[] = []):
         });
         break;
       case 'agent.session.updated':
+        // Claude finished and waits for you: the turn is over.
+        if (p['status'] === 'WaitingForInput' && turnStart) {
+          if (turnTools.length)
+            turns.push({ key: `sum-${e.id}`, at, startedAt: turnStart, tools: turnTools });
+          turnStart = null;
+          turnTools = [];
+        }
         if (p['status'] === 'Failed')
           items.push({ kind: 'notice', key: e.id, at, text: 'Turn failed', tone: 'danger' });
         break;
@@ -354,6 +388,25 @@ export function buildChat(events: AgentEventDto[], commands: CommandDto[] = []):
     }
   }
 
+  // Each finished turn's summary, made now that its steps' final states are known.
+  for (const t of turns) {
+    const files = [
+      ...new Set(
+        t.tools.filter((x) => EDIT_TOOLS.has(x.toolName) && x.state === 'done').map((x) => x.target),
+      ),
+    ].filter(Boolean);
+    items.push({
+      kind: 'summary',
+      key: t.key,
+      at: t.at,
+      durationMs: Math.max(0, Date.parse(t.at) - Date.parse(t.startedAt)),
+      files,
+      commands: t.tools.filter((x) => x.toolName === 'Bash' || x.toolName === 'PowerShell').length,
+      steps: t.tools.length,
+      failed: t.tools.filter((x) => x.state === 'failed').length,
+    });
+  }
+
   // Claude's questions to the user read as questions, not as tool calls.
   const shaped = items.map((i): ChatItem =>
     i.kind === 'tool' && i.toolName === 'AskUserQuestion'
@@ -367,7 +420,7 @@ export function buildChat(events: AgentEventDto[], commands: CommandDto[] = []):
         }
       : i,
   );
-  return extra.length ? [...shaped, ...extra].sort(byTime) : shaped;
+  return extra.length || turns.length ? [...shaped, ...extra].sort(byTime) : shaped;
 }
 
 /** Tools whose step shows an IN/OUT block (the command, then its output). */
@@ -413,3 +466,15 @@ export const QUICK_REPLIES = [
   'Commit this',
   'Explain what you changed',
 ] as const;
+
+/** A finished turn in a few words: "2m 14s · 3 files changed · 5 commands · 1 failed". */
+export function summaryParts(s: Extract<ChatItem, { kind: 'summary' }>): string[] {
+  const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+  return [
+    spanText(s.durationMs),
+    ...(s.files.length ? [plural(s.files.length, 'file changed', 'files changed')] : []),
+    ...(s.commands ? [plural(s.commands, 'command', 'commands')] : []),
+    ...(!s.files.length && !s.commands ? [plural(s.steps, 'step', 'steps')] : []),
+    ...(s.failed ? [`${s.failed} failed`] : []),
+  ];
+}

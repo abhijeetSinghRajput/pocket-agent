@@ -12,8 +12,7 @@ import {
   type ComponentRef,
   type ReactNode,
 } from 'react';
-import { StyleSheet, Text, useWindowDimensions, View, type TextStyle } from 'react-native';
-import { ScrollView as GHScrollView } from 'react-native-gesture-handler';
+import { ScrollView, StyleSheet, Text, useWindowDimensions, View, type TextStyle } from 'react-native';
 import { CodeBlock } from '@/features/chat/code-block';
 import { alpha, fonts, useTheme, type Colors } from '@/lib/theme';
 import { tap } from '@/ui/core';
@@ -243,8 +242,7 @@ function cellStyle(header: boolean, align: Tokens.TableCell['align'], color: str
  * past which text wraps), and cells follow the column's `:--`/`:-:`/`--:` alignment.
  *
  * In the chat it uses the whole screen width: it starts in line with the message's text and
- * scrolls sideways out to both screen edges (a gesture-handler scroll view, so a sideways drag
- * goes to the table and an upward one to the chat).
+ * scrolls sideways out to both screen edges, over the chat's timeline line.
  */
 function Table({ table }: { table: Tokens.Table }) {
   const { c } = useTheme();
@@ -321,14 +319,19 @@ function Table({ table }: { table: Tokens.Table }) {
         </View>
       )}
       {widths && (
-        <GHScrollView
+        // Android's own sideways scroll view, nested in the chat's list: it takes a sideways drag
+        // and leaves an upward one to the list. Opaque, so the chat's timeline line passes behind.
+        <ScrollView
           horizontal
           nestedScrollEnabled
           directionalLockEnabled
           bounces={false}
           overScrollMode="never"
           showsHorizontalScrollIndicator={false}
-          style={bleed && gutter ? { marginLeft: -gutter.left, marginRight: -gutter.right } : undefined}
+          style={[
+            { backgroundColor: c.background },
+            bleed && gutter ? { marginLeft: -gutter.left, marginRight: -gutter.right } : null,
+          ]}
           contentContainerStyle={
             bleed && gutter
               ? { paddingLeft: Math.max(0, inset.left), paddingRight: Math.max(0, inset.right) }
@@ -361,7 +364,7 @@ function Table({ table }: { table: Tokens.Table }) {
               </View>
             ))}
           </View>
-        </GHScrollView>
+        </ScrollView>
       )}
     </View>
   );

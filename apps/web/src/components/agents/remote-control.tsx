@@ -387,11 +387,8 @@ export function Composer({
   };
 
   // Something typed or attached: the button sends. Nothing, and Claude is working: it stops Claude.
-  const hint = locked
-    ? ''
-    : resuming
-      ? `This session has ended. Sending continues it on ${session.deviceName} with the whole conversation${device?.status === 'Online' ? '' : ' (your PC is offline right now)'}.`
-      : deliveryHint(session);
+  // An ended chat says so in its placeholder ("Continue this session…"): no line under the box.
+  const hint = locked || resuming ? '' : deliveryHint(session);
   const hasContent = !!text.trim() || ready.length > 0;
   const stopMode = !hasContent && showStop;
 

@@ -409,3 +409,38 @@ describe('continuing an ended session', () => {
     s.agent.ws.close();
   });
 });
+
+describe('switching mode or model mid-task', () => {
+  const configure = (s: { session: { id: string }; cookie: string }, body: object) =>
+    post(`/sessions/${s.session.id}/configure`, s.cookie, { idempotencyKey: randomUUID(), ...body });
+
+  it('reaches a running session the PC runs for Pocket Agent at once (PC agents from 0.1.8)', async () => {
+    const s = await setup();
+    await t.ctx.prisma.device.update({ where: { id: s.deviceId }, data: { agentVersion: '0.1.7' } });
+    const old = await configure(s, { permissionMode: 'auto' });
+    expect(old.statusCode).toBe(409);
+    expect(old.json().error).toBe('agent_outdated');
+
+    await t.ctx.prisma.device.update({ where: { id: s.deviceId }, data: { agentVersion: '0.1.8' } });
+    expect((await configure(s, {})).statusCode).toBe(400); // a mode or a model
+    const res = await configure(s, { permissionMode: 'auto' });
+    expect(res.statusCode).toBe(201);
+    expect(CommandResponse.parse(res.json()).command).toMatchObject({
+      commandType: 'session.configure',
+      permissionMode: 'auto',
+    });
+    const frame = await s.agent.next((m) => m['eventType'] === 'command.execute');
+    expect(frame['sessionId']).toBe(s.ext);
+    expect(frame['payload']).toMatchObject({ commandType: 'session.configure', permissionMode: 'auto' });
+    s.agent.ws.close();
+  });
+
+  it('is refused for a session started in the editor (it keeps the editor’s settings)', async () => {
+    const s = await setup(MANAGED_CAPS, 'observed');
+    await t.ctx.prisma.device.update({ where: { id: s.deviceId }, data: { agentVersion: '0.1.8' } });
+    const res = await configure(s, { permissionMode: 'auto' });
+    expect(res.statusCode).toBe(409);
+    expect(res.json().error).toBe('not_supported');
+    s.agent.ws.close();
+  });
+});

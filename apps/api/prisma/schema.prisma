@@ -206,6 +206,7 @@ model AgentEvent {
 
   @@index([sessionId, createdAt])
   @@index([deviceId, createdAt])
+  @@index([createdAt])
   @@map("agent_events")
 }
 
@@ -263,6 +264,7 @@ model Approval {
 
   @@unique([sessionId, requestId])
   @@index([userId, status])
+  @@index([status, expiresAt])
   @@map("approvals")
 }
 

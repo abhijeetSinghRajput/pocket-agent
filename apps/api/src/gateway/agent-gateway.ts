@@ -28,6 +28,8 @@ import {
 const MAX_INVALID_FRAMES = 10;
 const PING_INTERVAL_MS = 15_000;
 const SWEEP_INTERVAL_MS = 15_000;
+/** On shutdown, how long a PC gets to answer the close frame before its socket is cut. */
+const CLOSE_WAIT_MS = 2_000;
 
 /** Tells every API instance to drop the device's live connection. */
 export async function publishRevocation(ctx: AppContext, deviceId: string): Promise<void> {
@@ -50,6 +52,17 @@ export async function agentGateway(app: FastifyInstance, ctx: GatewayServices): 
   const sockets = new Map<string, WebSocket>();
   const authed = new WeakMap<FastifyRequest, Device>();
   const presenceKey = (deviceId: string) => redisKey(ctx, 'presence', deviceId);
+  // Writes started by closing sockets; shutdown waits for them before the DB and Redis go away.
+  const pending = new Set<Promise<void>>();
+  const track = (work: Promise<unknown>) => {
+    const p: Promise<void> = work
+      .then(
+        () => undefined,
+        () => undefined,
+      )
+      .finally(() => pending.delete(p));
+    pending.add(p);
+  };
 
   const send = (socket: WebSocket, msg: unknown) => {
     // Outgoing messages are validated too, so a server bug can't emit an off-contract frame.
@@ -120,7 +133,17 @@ export async function agentGateway(app: FastifyInstance, ctx: GatewayServices): 
 
   app.addHook('onClose', async () => {
     clearInterval(sweeper);
-    for (const s of sockets.values()) s.close(WS_CLOSE.GOING_AWAY, 'server shutting down');
+    await Promise.all(
+      [...sockets.values()].map(
+        (s) =>
+          new Promise<void>((resolve) => {
+            s.once('close', () => resolve());
+            s.close(WS_CLOSE.GOING_AWAY, 'server shutting down');
+            setTimeout(() => s.terminate(), CLOSE_WAIT_MS).unref();
+          }),
+      ),
+    );
+    await Promise.allSettled([...pending]);
   });
 
   app.get(
@@ -261,17 +284,20 @@ export async function agentGateway(app: FastifyInstance, ctx: GatewayServices): 
 
       socket.on('close', (code) => {
         clearInterval(pinger);
+        track(chain); // frames still being handled
         if (sockets.get(device.id) !== socket) return; // replaced: the new socket owns presence
         sockets.delete(device.id);
         log.info({ code }, 'agent disconnected');
-        void (async () => {
-          await ctx.prisma.device.updateMany({
-            where: { id: device.id, revokedAt: null },
-            data: { status: 'Offline' },
-          });
-          await ctx.redis.del(presenceKey(device.id)).catch(() => undefined);
-          await goOffline(device.id);
-        })().catch(() => undefined);
+        track(
+          (async () => {
+            await ctx.prisma.device.updateMany({
+              where: { id: device.id, revokedAt: null },
+              data: { status: 'Offline' },
+            });
+            await ctx.redis.del(presenceKey(device.id)).catch(() => undefined);
+            await goOffline(device.id);
+          })(),
+        );
       });
 
       log.info('agent connected');

@@ -20,6 +20,9 @@ export class ApiClientError extends Error {
   }
 }
 
+/** The free server can take most of a minute to wake up; past this a request has stalled. */
+const REQUEST_TIMEOUT_MS = 60_000;
+
 const FRIENDLY: Record<string, string> = {
   not_found: 'Not found',
   unreachable: 'Cannot reach Pocket Agent. Check your connection and try again.',
@@ -47,11 +50,21 @@ export async function apiRequest<S extends z.ZodType>(
 ): Promise<z.infer<S>> {
   let res: Response;
   const hadToken = !!getToken();
+  // A stalled network never answers: give up after a while (long enough for the server to wake).
+  const timeout = new AbortController();
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    timeout.abort();
+  }, REQUEST_TIMEOUT_MS);
+  const cancel = () => timeout.abort();
+  if (init.signal?.aborted) timeout.abort();
+  init.signal?.addEventListener('abort', cancel);
   try {
     res = await fetch(`${API_URL}${path}`, {
       method: init.method ?? 'GET',
       credentials: 'omit',
-      signal: init.signal,
+      signal: timeout.signal,
       headers: {
         ...authHeaders(),
         ...(init.body === undefined ? {} : { 'content-type': 'application/json' }),
@@ -59,8 +72,11 @@ export async function apiRequest<S extends z.ZodType>(
       body: init.body === undefined ? undefined : JSON.stringify(init.body),
     });
   } catch (err) {
-    if ((err as Error).name === 'AbortError') throw err;
+    if ((err as Error).name === 'AbortError' && !timedOut) throw err;
     throw new ApiClientError(0, 'unreachable', FRIENDLY['unreachable']!);
+  } finally {
+    clearTimeout(timer);
+    init.signal?.removeEventListener('abort', cancel);
   }
   if (res.status === 204) return undefined as z.infer<S>;
   const body: unknown = await res.json().catch(() => null);

@@ -34,6 +34,8 @@ function fakeSdk() {
   let release: (() => void) | null = null;
   let hold = false;
   let interrupted = false;
+  /** Settings switched on the running session (setPermissionMode / setModel), in order. */
+  const switched: string[] = [];
   const fn: QueryFn = (args) => {
     const gen = (async function* (): AsyncGenerator<SDKMessage> {
       yield { type: 'system', subtype: 'init' } as SDKMessage;
@@ -49,9 +51,11 @@ function fakeSdk() {
         interrupted = true;
         release?.();
       },
+      setPermissionMode: async (mode: string) => void switched.push(`mode:${mode}`),
+      setModel: async (model?: string) => void switched.push(`model:${model}`),
     }) as unknown as Query;
   };
-  return { fn, turns, holdTurns: (v: boolean) => (hold = v), finishTurn: () => release?.() };
+  return { fn, turns, switched, holdTurns: (v: boolean) => (hold = v), finishTurn: () => release?.() };
 }
 
 function harness(policy: Partial<Policy> = {}) {
@@ -242,6 +246,24 @@ describe('managed sessions: one instruction per turn', () => {
     expect(h.managed.isManaged(sid)).toBe(true); // session stays open
   });
 
+  it('a new mode reaches the running turn at once, without waiting for the next message', async () => {
+    const h = harness();
+    h.sdk.holdTurns(true);
+    const sid = await h.managed.start({ projectPath: os.tmpdir(), prompt: 'edit many files' });
+    await h.tick();
+    const auto = cmd({ commandType: 'session.configure', permissionMode: 'auto' }, sid);
+    await h.router.handle(auto);
+    expect(h.sdk.switched).toEqual(['mode:auto']);
+    expect(h.sdk.turns).toEqual(['edit many files']); // still the same turn
+    expect(h.statuses(auto.payload.commandId)).toEqual(['Delivered', 'Completed']);
+
+    // A session started in the editor keeps the editor's settings.
+    const other = cmd({ commandType: 'session.configure', permissionMode: 'auto' }, 'editor-session');
+    await h.router.handle(other);
+    expect(h.acks.at(-1)).toMatchObject({ status: 'Failed', extra: { error: 'not_a_managed_session' } });
+    h.sdk.finishTurn();
+  });
+
   it('stop ends the session and fails anything still queued', async () => {
     const h = harness();
     h.sdk.holdTurns(true);
@@ -327,7 +349,13 @@ describe('continuing an ended session', () => {
       },
     });
     const c = cmd(
-      { commandType: 'session.start', projectPath: h.dir, text: 'Read this', resume: true, attachments: [ref] },
+      {
+        commandType: 'session.start',
+        projectPath: h.dir,
+        text: 'Read this',
+        resume: true,
+        attachments: [ref],
+      },
       OLD,
     );
     await h.router.handle(c);

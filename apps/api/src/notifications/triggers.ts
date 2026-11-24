@@ -73,6 +73,13 @@ export async function notifyFromEvents(ctx: NotifyServices, events: BackendToWeb
       if (!s) continue;
       const base = { userId: s.device.userId, link: `/agents/${s.id}` };
       const { status, previous } = e.payload;
+      // Answered on the PC: its "Answer it on the PC" notification is done with.
+      if (previous === 'WaitingForPermission' && status !== 'WaitingForPermission') {
+        await ctx.prisma.notification.updateMany({
+          where: { userId: base.userId, dedupeKey: { startsWith: `on-pc:${s.id}:` }, readAt: null },
+          data: { readAt: ctx.now() },
+        });
+      }
       if (status === 'WaitingForPermission' && previous !== 'WaitingForPermission') {
         // Held for Pocket Agent: approval.created already notifies (with Allow / Deny).
         const held = await ctx.prisma.approval.count({ where: { sessionId: s.id, status: 'Pending' } });
@@ -141,16 +148,28 @@ export async function notifyOfflineDevices(ctx: NotifyServices): Promise<number>
     },
     take: 200,
   });
+  // One notification per offline episode: skip the ones already sent, in one query.
+  const keyOf = (d: (typeof devices)[number]) => `offline:${d.id}:${d.lastHeartbeatAt!.toISOString()}`;
+  const sent = devices.length
+    ? await ctx.prisma.notification.findMany({
+        where: {
+          userId: { in: [...new Set(devices.map((d) => d.userId))] },
+          dedupeKey: { in: devices.map(keyOf) },
+        },
+        select: { userId: true, dedupeKey: true },
+      })
+    : [];
+  const done = new Set(sent.map((x) => `${x.userId} ${x.dedupeKey}`));
   let n = 0;
   for (const d of devices) {
+    if (done.has(`${d.userId} ${keyOf(d)}`)) continue;
     const r = await notify(ctx, {
       userId: d.userId,
       category: 'device_disconnected',
       title: `PC offline · ${d.name}`,
       body: 'Pocket Agent lost contact with this PC. Its sessions can’t be reached until it’s back.',
       link: '/devices',
-      // One notification per offline episode.
-      dedupeKey: `offline:${d.id}:${d.lastHeartbeatAt!.toISOString()}`,
+      dedupeKey: keyOf(d),
     });
     if (r) n++;
   }

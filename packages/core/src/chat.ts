@@ -1,4 +1,5 @@
 import type { AgentEventDto, CommandDto } from '@pocket-agent/protocol';
+import { isControl } from './commands.js';
 import { AttachmentRefs, type AttachmentRef } from '@pocket-agent/protocol';
 
 type P = Record<string, unknown>;
@@ -318,7 +319,7 @@ export function buildChat(events: AgentEventDto[], commands: CommandDto[] = []):
   const claimed = new Set<object>();
   const extra: ChatItem[] = [];
   for (const c of [...commands].sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt))) {
-    if (c.commandType === 'interrupt' || c.commandType === 'session.stop') {
+    if (isControl(c)) {
       extra.push({ kind: 'control', key: `cmd-${c.id}`, at: c.createdAt, command: c });
       continue;
     }
@@ -361,3 +362,13 @@ export function buildChat(events: AgentEventDto[], commands: CommandDto[] = []):
   );
   return extra.length ? [...shaped, ...extra].sort(byTime) : shaped;
 }
+
+/** Tools whose step shows an IN/OUT block (the command, then its output). */
+export const SHELL_TOOLS: ReadonlySet<string> = new Set(['Bash', 'PowerShell', 'BashOutput']);
+
+/** A tool step's state, as read out to screen readers. */
+export const TOOL_STATE: Record<Extract<ChatItem, { kind: 'tool' }>['state'], string> = {
+  running: 'running',
+  done: 'finished',
+  failed: 'failed',
+};

@@ -71,7 +71,8 @@ If the PC is offline, the command is recorded as `Failed` with `error: "device_o
 | POST | `/sessions/:id/instructions` | `{text ≤20 000, idempotencyKey}` | Needs `instructAnytime` (managed) or `instructBetweenTurns` (observed, PC opt-in). Otherwise `409 not_supported`. `409 session_ended` if the session has ended. |
 | POST | `/sessions/:id/interrupt` | `{idempotencyKey}` | Managed sessions only (`interrupt` capability). Ends the current turn; the session stays open. |
 | POST | `/sessions/:id/stop` | `{idempotencyKey}` | Managed sessions only. Ends the session. |
-| POST | `/devices/:id/sessions` | `{projectPath, text, idempotencyKey}` | Starts a managed session. `projectPath` must be on the PC's allow-list (`400 project_not_allowed`), and the PC checks again. |
+| POST | `/sessions/:id/configure` | `{permissionMode?, model?, idempotencyKey}` | Managed sessions only, PC agent 0.1.8+ (`409 agent_outdated`). Switches the running session's mode or model at once, mid-turn too. Sessions started in the editor answer `409 not_supported`: the choice goes with the next message instead. |
+| POST | `/devices/:id/sessions` | `{projectPath, text, model?, permissionMode?, effort?, attachmentIds?, idempotencyKey}` | Starts a managed session. `projectPath` must be on the PC's allow-list (`400 project_not_allowed`), and the PC checks again. Files need PC agent 0.1.6+. The apps start new chats in Auto mode with Opus. |
 | GET | `/sessions/:id/commands` | | The last 50 commands for the session, newest first |
 | GET | `/commands/:id` | | One command, the caller's own only. `session.start` gains a `sessionId` once the PC reports the new session. |
 

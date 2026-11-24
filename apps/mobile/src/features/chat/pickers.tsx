@@ -1,4 +1,5 @@
-import type { AgentSessionDto, ModelOption } from '@pocket-agent/protocol';
+import { EFFORTS, MODES } from '@pocket-agent/core';
+import type { ModelOption } from '@pocket-agent/protocol';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import {
@@ -21,32 +22,6 @@ import { Divider, IconTile, Press, T, tap } from '@/ui/core';
 import { Notice } from '@/ui/feedback';
 import { Segmented } from '@/ui/form';
 import { Sheet } from '@/ui/sheet';
-
-const isBusy = (s: AgentSessionDto) => s.status === 'Running' || s.status === 'WaitingForPermission';
-
-/** How Claude Code asks before acting. "Bypass permissions" is never offered here. */
-export const MODES = [
-  { id: 'default', name: 'Manual', description: 'Asks before each edit' },
-  { id: 'acceptEdits', name: 'Edit automatically', description: 'Edits files without asking' },
-  { id: 'plan', name: 'Plan', description: 'Explores and plans, changes nothing' },
-  { id: 'auto', name: 'Auto', description: 'Safe actions run, risky ones ask' },
-] as const;
-export const EFFORTS = [
-  { id: 'low', name: 'Low' },
-  { id: 'medium', name: 'Medium' },
-  { id: 'high', name: 'High' },
-  { id: 'xhigh', name: 'Extra high' },
-  { id: 'max', name: 'Max' },
-] as const;
-
-/** Why the model can't be chosen right now, or null if it can. */
-export function modelLock(s: AgentSessionDto): string | null {
-  if (s.mode === 'managed') return null;
-  if (!s.capabilities.instructAnytime)
-    return 'This session runs in your editor with its own settings. Turn on wake on the PC to run turns from here with others.';
-  if (isBusy(s)) return 'Claude is mid-turn in your editor; that turn keeps the editor’s settings.';
-  return null;
-}
 
 // ── Pieces ───────────────────────────────────────────────────────────────────
 

@@ -8,6 +8,7 @@ import {
 import { useQueryClient } from '@tanstack/react-query';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { ApiClientError, apiRequest } from '@/lib/api';
+import { pushSignedOut } from '@/lib/push';
 import { loadToken, onTokenChange, saveToken, signedOut } from '@/lib/session';
 import { widgetSignedOut } from '@/widget/sync';
 
@@ -77,6 +78,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       register: (input) => start('/auth/register', input),
       loginWithGoogle: (idToken) => start('/auth/google', { idToken }),
       async logout() {
+        await pushSignedOut().catch(() => undefined);
         await apiRequest('/auth/logout', null, { method: 'POST' }).catch(() => undefined);
         signedOut();
         // The home-screen widget stops showing this account's numbers.

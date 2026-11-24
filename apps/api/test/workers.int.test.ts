@@ -123,4 +123,30 @@ describe('GET /workers', () => {
     expect(WorkerListResponse.parse(r.json()).workers).toEqual([]);
     agent.ws.close();
   });
+
+  it('keeps the newest events when there are more than it reads', async () => {
+    const u = await createUserWithSession(t.ctx);
+    users.push(u.user.id);
+    const d = await pairDevice(t, u.cookie);
+    const agent = await connectAgent(t, d);
+    const ext = `sess-${crypto.randomUUID()}`;
+    await agent.send(sessionStarted(ext, { projectName: 'busy' }));
+    const s = await t.ctx.prisma.agentSession.findFirstOrThrow({ where: { externalSessionId: ext } });
+    // Lots of older worker updates (more than the 5000 read), then a fresh sub-agent.
+    const old = Date.now() - 60 * 60_000;
+    await t.ctx.prisma.agentEvent.createMany({
+      data: Array.from({ length: 5001 }, (_, i) => ({
+        eventId: crypto.randomUUID(),
+        deviceId: d.deviceId,
+        sessionId: s.id,
+        eventType: 'agent.worker.updated',
+        payload: { toolUseId: 'tu_old', status: 'running' },
+        createdAt: new Date(old + i),
+      })),
+    });
+    await agent.send(tool('started', ext, 'tu_new', 'Agent', { description: 'Fresh one' }));
+    const r = await t.app.inject({ method: 'GET', url: '/workers', headers: browser(u.cookie) });
+    expect(WorkerListResponse.parse(r.json()).workers.map((w) => w.id)).toContain('tu_new');
+    agent.ws.close();
+  });
 });

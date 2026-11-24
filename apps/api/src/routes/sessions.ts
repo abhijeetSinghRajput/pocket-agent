@@ -107,8 +107,12 @@ export async function sessionRoutes(app: FastifyInstance, ctx: AppContext): Prom
   const user = requireUser(ctx);
   const owned = (userId: string) => ({ device: { userId } });
 
-  app.get('/sessions', { preHandler: user }, async (req) => {
-    const { scope } = ListQuery.parse(req.query ?? {});
+  app.get('/sessions', { preHandler: user }, async (req, reply) => {
+    const q = ListQuery.safeParse(req.query ?? {});
+    if (!q.success) {
+      return reply.code(400).send({ error: 'invalid_request', message: q.error.issues[0]?.message });
+    }
+    const { scope } = q.data;
     const sessions = await ctx.prisma.agentSession.findMany({
       where: { ...owned(req.user!.id), ...(scope === 'active' ? { endedAt: null } : {}) },
       include: { device: { select: { name: true } } },
@@ -138,7 +142,9 @@ export async function sessionRoutes(app: FastifyInstance, ctx: AppContext): Prom
     });
     if (!s) return reply.code(404).send({ error: 'not_found' });
     const q = PageQuery.safeParse(req.query ?? {});
-    if (!q.success) return reply.code(400).send({ error: 'invalid_request' });
+    if (!q.success) {
+      return reply.code(400).send({ error: 'invalid_request', message: q.error.issues[0]?.message });
+    }
     return eventPage(ctx, { sessionId: s.id }, req.query, false);
   });
 
@@ -172,9 +178,11 @@ export async function sessionRoutes(app: FastifyInstance, ctx: AppContext): Prom
           { eventType: 'agent.session.ended' },
         ],
       },
-      orderBy: { createdAt: 'asc' },
+      // Newest first so the cap drops the oldest, then back to oldest first for buildWorkers.
+      orderBy: { createdAt: 'desc' },
       take: 5000,
     });
+    events.reverse();
     const bySession = new Map<string, AgentEvent[]>();
     for (const e of events) {
       if (!e.sessionId) continue;
@@ -199,7 +207,9 @@ export async function sessionRoutes(app: FastifyInstance, ctx: AppContext): Prom
 
   app.get('/activity', { preHandler: user }, async (req, reply) => {
     const q = PageQuery.safeParse(req.query ?? {});
-    if (!q.success) return reply.code(400).send({ error: 'invalid_request' });
+    if (!q.success) {
+      return reply.code(400).send({ error: 'invalid_request', message: q.error.issues[0]?.message });
+    }
     return eventPage(ctx, { session: owned(req.user!.id) }, req.query, true);
   });
 

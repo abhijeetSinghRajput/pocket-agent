@@ -10,7 +10,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scheduleOnRN } from 'react-native-worklets';
 import { SessionAvatar, SessionKindBadge, SessionStatusBadge } from '@/features/sessions/badges';
 import { NewChatSheet } from '@/features/sessions/new-chat-sheet';
-import { useApprovals, useSessions } from '@/lib/data';
+import { Workspaces } from '@/features/sessions/workspaces';
+import { useApprovals, useDevices, useSessions } from '@/lib/data';
 import { exit, layout, settleSpring } from '@/lib/motion';
 import { alpha, fonts, radius, useTheme } from '@/lib/theme';
 import { useArrivals } from '@/ui/arrive';
@@ -130,6 +131,7 @@ function SessionsPage({ scope, query, width }: { scope: Scope; query: string; wi
   const [pulling, setPulling] = useState(false);
   const { state, refresh } = useSessions(scope);
   const approvals = useApprovals('pending').state.data;
+  const hasDevices = (useDevices().state.data ?? []).some((d) => d.status !== 'Revoked');
 
   const waitingBySession = useMemo(() => {
     const m = new Map<string, number>();
@@ -184,6 +186,19 @@ function SessionsPage({ scope, query, width }: { scope: Scope; query: string; wi
       <View style={{ paddingHorizontal: 20 }}>
         <Notice>{state.error}</Notice>
       </View>
+    );
+  } else if (!state.data.length && scope === 'active' && hasDevices) {
+    // Nothing running: the PCs and their workspaces, to start a chat in one.
+    body = (
+      <Animated.View entering={arriving('workspaces', 0)} style={{ paddingHorizontal: 12, gap: 16 }}>
+        <View style={{ gap: 2 }}>
+          <T variant="subheading">No active chats</T>
+          <T variant="small" tone="muted">
+            Pick a workspace to start one. Claude Code starts there on your PC.
+          </T>
+        </View>
+        <Workspaces />
+      </Animated.View>
     );
   } else if (!state.data.length) {
     body = (

@@ -16,7 +16,8 @@ const run = (cmd, args, opts = {}) =>
   execFileSync(cmd, args, { cwd: root, stdio: 'inherit', shell: win, ...opts });
 
 const creds = JSON.parse(readFileSync(path.join(root, 'credentials.json'), 'utf8')).android?.keystore;
-if (!creds) throw new Error('credentials.json has no android keystore: run `eas credentials -p android` → download');
+if (!creds)
+  throw new Error('credentials.json has no android keystore: run `eas credentials -p android` → download');
 const env = {
   ...process.env,
   EXPO_PUBLIC_API_URL: process.env.EXPO_PUBLIC_API_URL || 'https://pocket-agent-api.onrender.com',
@@ -54,10 +55,14 @@ if (!gradle.includes('pocketAgentRelease')) {
 }
 
 // 3. Build. Phones are arm64; x86_64 is for the emulator.
-run(win ? path.join(root, 'android', 'gradlew.bat') : './gradlew', ['assembleRelease', '-PreactNativeArchitectures=arm64-v8a,x86_64'], {
-  cwd: path.join(root, 'android'),
-  env,
-});
+run(
+  win ? path.join(root, 'android', 'gradlew.bat') : './gradlew',
+  ['assembleRelease', '-PreactNativeArchitectures=arm64-v8a,x86_64'],
+  {
+    cwd: path.join(root, 'android'),
+    env,
+  },
+);
 
 const { version } = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8'));
 mkdirSync(path.join(root, 'dist'), { recursive: true });

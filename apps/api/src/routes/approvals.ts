@@ -21,8 +21,12 @@ export async function approvalRoutes(app: FastifyInstance, ctx: Services): Promi
   const user = requireUser(ctx);
   const trusted = requireTrustedOrigin(ctx);
 
-  app.get('/approvals', { preHandler: user }, async (req) => {
-    const { status } = ListQuery.parse(req.query ?? {});
+  app.get('/approvals', { preHandler: user }, async (req, reply) => {
+    const q = ListQuery.safeParse(req.query ?? {});
+    if (!q.success) {
+      return reply.code(400).send({ error: 'invalid_request', message: q.error.issues[0]?.message });
+    }
+    const { status } = q.data;
     const approvals = await ctx.prisma.approval.findMany({
       where: {
         userId: req.user!.id,

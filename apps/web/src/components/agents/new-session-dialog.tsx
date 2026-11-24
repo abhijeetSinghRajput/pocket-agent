@@ -7,7 +7,9 @@ import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/dialog';
 import { TerminalGuide } from '@/components/ui/terminal-guide';
 import { apiRequest } from '@/lib/api';
-import { commandError } from '@/lib/commands';
+import { commandError, NEW_CHAT_MODE, newChatModel, waitForSession } from '@/lib/commands';
+
+const fetchCommand = (id: string) => apiRequest(`/commands/${id}`, CommandResponse).then((r) => r.command);
 
 const select =
   'h-11 w-full rounded-md border bg-background px-3 text-base shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/40 sm:h-10 sm:text-sm';
@@ -64,14 +66,16 @@ export function NewSessionDialog({
     try {
       let { command } = await apiRequest(`/devices/${device.id}/sessions`, CommandResponse, {
         method: 'POST',
-        body: { projectPath, text: text.trim(), idempotencyKey: key.current },
+        body: {
+          projectPath,
+          text: text.trim(),
+          idempotencyKey: key.current,
+          // New chats start in Auto with Opus, like on the phone.
+          permissionMode: NEW_CHAT_MODE,
+          ...(newChatModel(device.models) ? { model: newChatModel(device.models) } : {}),
+        },
       });
-      // Wait for the PC to start Claude and report the new session.
-      const deadline = Date.now() + 60_000;
-      while (!command.sessionId && !['Failed', 'Expired'].includes(command.status) && Date.now() < deadline) {
-        await new Promise((r) => setTimeout(r, 1000));
-        command = (await apiRequest(`/commands/${command.id}`, CommandResponse)).command;
-      }
+      command = await waitForSession(command, fetchCommand);
       if (command.sessionId) {
         onOpenChange(false);
         setText('');

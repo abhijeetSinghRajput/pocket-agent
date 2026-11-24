@@ -107,3 +107,10 @@ export function recentSections<T extends { createdAt: string }>(
   ];
   return { sections: all.filter((x) => x.items.length > 0), earlier };
 }
+
+/** A file's size as people read it: 512 B, 84 KB, 3.2 MB. */
+export function fileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}

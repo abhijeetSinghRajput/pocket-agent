@@ -138,3 +138,6 @@ export default function RootLayout() {
     </GestureHandlerRootView>
   );
 }
+
+/** A screen that fails to draw shows a way out instead of closing the app. */
+export { CrashScreen as ErrorBoundary } from '@/ui/crash';

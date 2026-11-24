@@ -299,6 +299,13 @@ export const CommandExecute = defineEvent(
       attachments: AttachmentRefs.optional(),
       expiresAt,
     }),
+    z.object({
+      commandId: z.uuid(),
+      commandType: z.literal('session.configure'),
+      permissionMode: TurnMode.optional(),
+      model: ModelId.optional(),
+      expiresAt,
+    }),
     z.object({ commandId: z.uuid(), commandType: z.literal('interrupt'), expiresAt }),
     z.object({ commandId: z.uuid(), commandType: z.literal('session.stop'), expiresAt }),
   ]),

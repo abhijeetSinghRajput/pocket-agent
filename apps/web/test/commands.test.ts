@@ -1,8 +1,6 @@
 import type { CommandDto } from '@pocket-agent/protocol';
 import { describe, expect, it } from 'vitest';
-import { canInstruct } from '@/components/agents/remote-control';
-import { capabilityRows } from '@/components/agents/capabilities';
-import { commandError, commandTitle, isOpen } from '@/lib/commands';
+import { canInstruct, capabilityRows, commandError, commandTitle, isOpen } from '@/lib/commands';
 
 const cmd = (over: Partial<CommandDto>): CommandDto => ({
   id: '1',

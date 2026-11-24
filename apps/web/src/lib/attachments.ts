@@ -15,14 +15,8 @@ export const attachmentProblem = (file: { name: string; size: number }) => proto
 /** The type to declare for a file the browser can't name (code, Markdown…). */
 export const mimeOf = (file: File) => file.type || 'application/octet-stream';
 
-export const isPdf = (a: { mime: string }) => a.mime === 'application/pdf';
-export { fileExtension, isPreviewable } from '@pocket-agent/protocol';
-
-export function fileSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
-  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-}
+export { fileExtension, isPdf, isPreviewable } from '@pocket-agent/protocol';
+export { fileSize } from '@pocket-agent/core';
 
 /**
  * Uploads one file: the API reserves it and signs the upload, the file goes straight to storage,

@@ -186,8 +186,12 @@ describe('remote approvals', () => {
 
   it('expired requests cannot be approved', async () => {
     const s = await setup();
-    const { approval } = await request(s, { expiresIn: 50 });
-    await new Promise((r) => setTimeout(r, 120));
+    const { approval } = await request(s);
+    // Past its deadline (set directly: a real 50ms deadline can pass before the test sees it).
+    await t.ctx.prisma.approval.update({
+      where: { id: approval!.id },
+      data: { expiresAt: new Date(Date.now() - 1000) },
+    });
     const res = await decide(s.cookie, approval!.id, 'allow');
     expect(res.statusCode).toBe(409);
     expect(res.json().error).toBe('expired');
@@ -209,10 +213,15 @@ describe('remote approvals', () => {
   it('a request answered on the PC closes the approval', async () => {
     const s = await setup();
     const { requestId, approval } = await request(s);
+    const notice = () =>
+      t.ctx.prisma.notification.findFirst({ where: { dedupeKey: `approval:${approval!.id}` } });
+    await waitFor(async () => !!(await notice()));
     await s.agent.send(
       createEvent('agent.permission.resolved', { requestId, outcome: 'local' }, { sessionId: s.ext }),
     );
     expect((await dbApproval(approval!.id)).status).toBe('Cancelled');
+    // Its "Permission needed" notification no longer counts as unread.
+    expect((await notice())?.readAt).not.toBeNull();
     expect((await decide(s.cookie, approval!.id, 'allow')).statusCode).toBe(409);
     s.agent.ws.close();
   });

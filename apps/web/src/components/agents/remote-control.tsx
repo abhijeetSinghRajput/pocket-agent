@@ -1,14 +1,24 @@
 'use client';
 
 import {
+  canConfigureLive,
+  canInstruct,
+  capabilityRows,
+  deliveryHint,
+  EFFORTS,
+  END_TEXT,
+  isBusy,
+  MODES,
+  modelLock,
+  resumeBlocker,
+} from '@pocket-agent/core';
+import {
   CommandListResponse,
   CommandResponse,
   attachmentLimit,
   DeviceListResponse,
-  isWithinFolder,
-  RESUME_ANY_FOLDER_AGENT_VERSION,
   RESUME_FILES_AGENT_VERSION,
-  RESUME_MIN_AGENT_VERSION,
+  versionBelow,
   type AgentSessionDto,
   type DeviceDto,
   type ModelOption,
@@ -17,7 +27,6 @@ import { ArrowUp, Check, ChevronDown, CircleStop, Hand, Lock, Plus, Power, Squar
 import { DropdownMenu } from 'radix-ui';
 import { createPortal } from 'react-dom';
 import { DraftFiles, type DraftFile } from '@/components/agents/attachments';
-import { capabilityRows } from '@/components/agents/capabilities';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/dialog';
@@ -27,29 +36,6 @@ import { commandError } from '@/lib/commands';
 import { useLiveRefresh } from '@/lib/live';
 import { usePoll } from '@/lib/use-poll';
 import { cn } from '@/lib/utils';
-
-export function canInstruct(s: AgentSessionDto): boolean {
-  return !s.endedAt && (s.capabilities.instructAnytime || s.capabilities.instructBetweenTurns);
-}
-
-const isBusy = (s: AgentSessionDto) => s.status === 'Running' || s.status === 'WaitingForPermission';
-
-/** When the instruction will actually reach Claude — stated honestly per session type. */
-function deliveryHint(s: AgentSessionDto): string {
-  if (s.capabilities.instructAnytime) {
-    if (isBusy(s)) {
-      return s.capabilities.interrupt
-        ? 'Claude is busy: this runs as soon as the current task finishes (or interrupt it).'
-        : 'Claude is busy: it reads this at its next step, or when the current turn finishes.';
-    }
-    return s.mode === 'managed'
-      ? 'Claude starts on this right away.'
-      : 'Claude starts on this right away on your PC. Your editor won’t show it live; follow it here.';
-  }
-  return s.status === 'WaitingForInput'
-    ? 'Claude is idle, so this waits for the next turn you start on the PC. To run it at once, turn on wake on the PC: pocket-agent instructions wake enable'
-    : '';
-}
 
 /** Commands sent to one session (newest first), refreshed live. */
 export function useCommands(sessionId: string) {
@@ -84,32 +70,6 @@ function useDevice(deviceId: string): DeviceDto | undefined {
   return state.data?.find((d) => d.id === deviceId);
 }
 
-/** `a < b` for plain x.y.z versions. */
-function versionBelow(a: string, b: string): boolean {
-  const x = a.split('-')[0]!.split('.').map(Number);
-  const y = b.split('-')[0]!.split('.').map(Number);
-  for (let i = 0; i < 3; i++) if ((x[i] ?? 0) !== (y[i] ?? 0)) return (x[i] ?? 0) < (y[i] ?? 0);
-  return false;
-}
-
-/**
- * An ended Claude Code session can be continued from here: the PC reopens the same conversation.
- * Returns why not when it can't (shown in place of the message box), or null when it can.
- */
-export function resumeBlocker(s: AgentSessionDto, device: DeviceDto | undefined): string | null {
-  const ended = 'This session has ended.';
-  if (s.provider !== 'claude-code' || !device || device.status === 'Revoked') return ended;
-  if (versionBelow(device.agentVersion, RESUME_MIN_AGENT_VERSION))
-    return `${ended} To continue it from here, update Pocket Agent on the PC: \`pocket-agent update\``;
-  // Agents from 0.1.5 continue any session in its own folder; older ones need it on the list.
-  if (
-    versionBelow(device.agentVersion, RESUME_ANY_FOLDER_AGENT_VERSION) &&
-    !device.projects.some((p) => isWithinFolder(s.projectPath, p.path))
-  )
-    return `${ended} To continue it from here, allow its folder on the PC: \`pocket-agent projects add "${s.projectPath}"\``;
-  return null;
-}
-
 /** A choice made for this chat, remembered on this device ('' = leave the session as it is). */
 function useStoredChoice(key: string) {
   const [value, setValue] = useState('');
@@ -139,30 +99,6 @@ function useStoredChoice(key: string) {
 function useChosenModel(sessionId: string, models: ModelOption[]) {
   const [model, choose] = useStoredChoice(`pocket-agent:model:${sessionId}`);
   return [models.some((m) => m.id === model) ? model : '', choose] as const;
-}
-
-/** How Claude Code asks before acting. "Bypass permissions" is never offered here. */
-const MODES = [
-  { id: 'default', name: 'Manual', description: 'Asks before each edit' },
-  { id: 'acceptEdits', name: 'Edit automatically', description: 'Edits files without asking' },
-  { id: 'plan', name: 'Plan', description: 'Explores and plans, changes nothing' },
-  { id: 'auto', name: 'Auto', description: 'Safe actions run, risky ones ask' },
-] as const;
-const EFFORTS = [
-  { id: 'low', name: 'Low' },
-  { id: 'medium', name: 'Medium' },
-  { id: 'high', name: 'High' },
-  { id: 'xhigh', name: 'Extra high' },
-  { id: 'max', name: 'Max' },
-] as const;
-
-/** Why the model can't be chosen right now, or null if it can. */
-function modelLock(s: AgentSessionDto): string | null {
-  if (s.mode === 'managed') return null;
-  if (!s.capabilities.instructAnytime)
-    return 'This session runs in your editor with its own settings. Turn on wake on the PC to run turns from here with others.';
-  if (isBusy(s)) return 'Claude is mid-turn in your editor; that turn keeps the editor’s settings.';
-  return null;
 }
 
 const chip =
@@ -424,6 +360,32 @@ export function Composer({
   const [effort, setEffort] = useStoredChoice(`pocket-agent:effort:${session.id}`);
   const modelLocked = resuming ? null : modelLock(session);
 
+  // A session Pocket Agent runs switches mode or model at once, mid-task too (the chat shows
+  // "You switched to …"); any other takes the choice with the next message sent from here.
+  const live = canConfigureLive(session, device);
+  async function applyNow(change: { permissionMode: string } | { model: string }) {
+    if (!live) return;
+    setError(null);
+    try {
+      const { command } = await apiRequest(`/sessions/${session.id}/configure`, CommandResponse, {
+        method: 'POST',
+        body: { idempotencyKey: crypto.randomUUID(), ...change },
+      });
+      if (command.status === 'Failed') setError(commandError(command));
+      onSent();
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  }
+  const chooseMode = (value: string) => {
+    setMode(value);
+    if (value) void applyNow({ permissionMode: value });
+  };
+  const chooseModel = (value: string) => {
+    setModel(value);
+    if (value) void applyNow({ model: value });
+  };
+
   // Something typed or attached: the button sends. Nothing, and Claude is working: it stops Claude.
   const hint = locked
     ? ''
@@ -664,11 +626,11 @@ export function Composer({
             )}
             {!locked && (
               <>
-                <ModePicker value={mode} onChange={setMode} locked={modelLocked} />
+                <ModePicker value={mode} onChange={chooseMode} locked={modelLocked} />
                 <ModelPicker
                   models={models}
                   value={model}
-                  onChange={setModel}
+                  onChange={chooseModel}
                   effort={effort}
                   onEffort={setEffort}
                   locked={modelLocked}
@@ -788,11 +750,6 @@ export function SessionControls({ session, onDone }: { session: AgentSessionDto;
     </div>
   );
 }
-
-const END_TEXT = (s: AgentSessionDto) =>
-  s.mode === 'managed'
-    ? 'Claude stops immediately and the session closes. Queued instructions are not run.'
-    : 'This closes the session’s Claude Code process on your PC, whatever it is doing. The conversation is kept: you can resume it in your editor.';
 
 /** Header button: ends the session (after asking). Only shown when this session can be ended. */
 export function EndSessionButton({ session, onDone }: { session: AgentSessionDto; onDone: () => void }) {

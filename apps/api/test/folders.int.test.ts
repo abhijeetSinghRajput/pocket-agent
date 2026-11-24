@@ -28,7 +28,11 @@ async function setup(agentVersion = '0.1.7') {
   const d = await pairDevice(t, u.cookie);
   const agent = await connectAgent(t, d);
   await agent.send(
-    createEvent('device.connected', { agentVersion, platform: 'windows', hostname: 'pc' }, { deviceId: d.deviceId }),
+    createEvent(
+      'device.connected',
+      { agentVersion, platform: 'windows', hostname: 'pc' },
+      { deviceId: d.deviceId },
+    ),
   );
   await agent.send(
     createEvent('device.settings', { projects: [{ name: 'work', path: WS }], observedInstructions: false }),

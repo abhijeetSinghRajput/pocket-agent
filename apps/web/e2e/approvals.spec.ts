@@ -16,10 +16,28 @@ async function setup(page: Page, opts: { approvals: boolean }) {
   });
   cli(env, 'pair', ((await res.json()) as { code: string }).code, '--api', API, '--name', 'E2E PC');
   cli(env, 'hooks', 'install');
-  if (opts.approvals) cli(env, 'approvals', 'enable');
+  // On by default on a new PC: "off" must be set.
+  cli(env, 'approvals', opts.approvals ? 'enable' : 'disable');
   const agent = startAgent(env);
   await expect.poll(() => agent.output()).toContain('Connected to');
   return { env, agent };
+}
+
+/**
+ * Puts this PC in or out of Away mode from the Devices page, whatever it starts as, and waits until
+ * the PC has applied it. Already there: switched away and back, so the PC is seen to take it.
+ */
+async function setAway(page: Page, agent: ReturnType<typeof startAgent>, on: boolean) {
+  await page.goto('/devices');
+  const away = page.getByTestId('away-switch');
+  await expect(away).toBeVisible();
+  if ((await away.getAttribute('aria-checked')) === String(on)) {
+    await away.click();
+    await expect(away).toHaveAttribute('aria-checked', String(!on));
+  }
+  await away.click();
+  await expect(away).toHaveAttribute('aria-checked', String(on));
+  await expect.poll(() => agent.output()).toContain(on ? 'Away mode ON' : 'Away mode off');
 }
 
 /** Starts the real relay for a hook without waiting (a held PermissionRequest blocks until decided). */
@@ -51,13 +69,7 @@ test('in Away mode, a permission request is decided from the dashboard and reach
   const h = hookPayloads(randomUUID(), String.raw`C:\work\deploy-scripts`);
   relay(env, h['SessionStart']!);
 
-  // Turn on Away mode for this PC.
-  await page.goto('/devices');
-  const away = page.getByTestId('away-switch');
-  await expect(away).toHaveAttribute('aria-checked', 'false');
-  await away.click();
-  await expect(away).toHaveAttribute('aria-checked', 'true');
-  await expect.poll(() => agent.output()).toContain('Away mode ON');
+  await setAway(page, agent, true);
 
   // Claude asks for permission → the hook waits for the phone.
   const allowCall = toolCall(h, 'npm run deploy');
@@ -98,9 +110,7 @@ test('in Away mode, a permission request is decided from the dashboard and reach
   );
 
   // Away mode off → requests are not held: Claude Code asks on the PC (relay answers nothing).
-  await page.goto('/devices');
-  await page.getByTestId('away-switch').click();
-  await expect.poll(() => agent.output()).toContain('Away mode off');
+  await setAway(page, agent, false);
   const localCall = toolCall(h, 'git push');
   relay(env, localCall.pre);
   expect(await relayAsync(env, localCall.perm)).toBe('');
@@ -139,9 +149,7 @@ test('in Away mode, Claude’s question in a session started in the editor is an
   const h = hookPayloads(sessionId, String.raw`C:\work\rps`);
   relay(env, h['SessionStart']!);
   relay(env, h['UserPromptSubmit']!);
-  await page.goto('/devices');
-  await page.getByTestId('away-switch').click();
-  await expect.poll(() => agent.output()).toContain('Away mode ON');
+  await setAway(page, agent, true);
 
   const questions = [
     {
@@ -168,7 +176,8 @@ test('in Away mode, Claude’s question in a session started in the editor is an
   await page.getByRole('link', { name: 'Open chat' }).click();
   const sheet = page.getByTestId('question-sheet');
   await expect(sheet).toBeVisible({ timeout: 15_000 });
-  await expect(page.getByTestId('composer')).toHaveCount(0); // the question takes the message box's place
+  // The question takes the message box's place (hidden, not removed: a typed message is kept).
+  await expect(page.getByTestId('composer')).toBeHidden();
   const send = sheet.getByRole('button', { name: 'Choose an answer' });
   await expect(send).toBeDisabled();
   await sheet.getByRole('radio', { name: /^📄 Paper/ }).click();

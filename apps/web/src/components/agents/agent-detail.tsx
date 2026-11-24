@@ -1,6 +1,6 @@
 'use client';
 
-import { SessionResponse, type AgentSessionDto, type ApprovalDto } from '@pocket-agent/protocol';
+import { SessionResponse, type AgentSessionDto } from '@pocket-agent/protocol';
 import { ArrowLeft, FolderOpen, Laptop, X } from 'lucide-react';
 import Link from 'next/link';
 import { Dialog } from 'radix-ui';
@@ -18,7 +18,7 @@ import {
 import { QuestionSheet } from '@/components/approvals/question-sheet';
 import { PermissionSheet } from '@/components/approvals/permission-sheet';
 import { useApprovals } from '@/lib/use-approvals';
-import { parseQuestions } from '@/lib/chat';
+import { pendingQuestion } from '@/lib/commands';
 import { Button } from '@/components/ui/button';
 import { apiRequest, NOT_FOUND_MESSAGE } from '@/lib/api';
 import { useBackToClose } from '@/components/ui/dialog';
@@ -165,16 +165,6 @@ function useVisibleHeight() {
       root.style.removeProperty('--chat-height');
     };
   }, []);
-}
-
-/** A question from Claude waiting for this chat (the first one, if several). */
-function pendingQuestion(list: ApprovalDto[] | null | undefined, sessionId: string) {
-  for (const a of list ?? []) {
-    if (a.sessionId !== sessionId || a.toolName !== 'AskUserQuestion') continue;
-    const questions = parseQuestions(a.input);
-    if (questions.length) return { approval: a, questions };
-  }
-  return null;
 }
 
 export function AgentDetail({ id }: { id: string }) {

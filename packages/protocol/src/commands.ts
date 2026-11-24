@@ -5,7 +5,14 @@ import { INSTRUCTION_MAX, ModelId, TurnEffort, TurnMode } from './events.js';
 
 const iso = z.iso.datetime({ offset: true });
 
-export const CommandKind = z.enum(['instruction', 'session.start', 'interrupt', 'session.stop']);
+export const CommandKind = z.enum([
+  'instruction',
+  'session.start',
+  'interrupt',
+  'session.stop',
+  // Mode or model of a running session, applied at once (PC agents from 0.1.8).
+  'session.configure',
+]);
 export type CommandKind = z.infer<typeof CommandKind>;
 
 export const CommandDto = z.object({
@@ -59,15 +66,14 @@ export const StartSessionRequest = z.object({
   model: ModelId.optional(),
   permissionMode: TurnMode.optional(),
   effort: TurnEffort.optional(),
+  /** Uploaded attachments to send with the first message (PC agents from 0.1.6). */
+  attachmentIds: z.array(z.uuid()).max(ATTACHMENT_MAX_PER_MESSAGE).optional(),
   idempotencyKey,
 });
 export type StartSessionRequest = z.infer<typeof StartSessionRequest>;
 
 /** Continue an ended session from the app: same conversation, reopened on the PC. */
-export const ResumeSessionRequest = StartSessionRequest.omit({ projectPath: true }).extend({
-  /** Uploaded attachments to send with the message (PC agents from 0.1.6). */
-  attachmentIds: z.array(z.uuid()).max(ATTACHMENT_MAX_PER_MESSAGE).optional(),
-});
+export const ResumeSessionRequest = StartSessionRequest.omit({ projectPath: true });
 export type ResumeSessionRequest = z.infer<typeof ResumeSessionRequest>;
 
 /** First Local Agent version that can continue an ended session. */
@@ -80,10 +86,27 @@ export const RESUME_MIN_AGENT_VERSION = '0.1.4';
  */
 export const RESUME_ANY_FOLDER_AGENT_VERSION = '0.1.5';
 
-/** First Local Agent version that takes files with the message that continues an ended session. */
+/**
+ * First Local Agent version that takes files with the message that starts a session (a new chat,
+ * or the message that continues an ended one).
+ */
 export const RESUME_FILES_AGENT_VERSION = '0.1.6';
 
 export const SessionControlRequest = z.object({ idempotencyKey });
+
+/**
+ * Change how a running session works, at once: its mode (how Claude asks before acting) or its
+ * model. The turn that is running uses it from its next step.
+ */
+export const ConfigureSessionRequest = z
+  .object({ permissionMode: TurnMode.optional(), model: ModelId.optional(), idempotencyKey })
+  .refine((r) => r.permissionMode !== undefined || r.model !== undefined, {
+    message: 'Choose a mode or a model',
+  });
+export type ConfigureSessionRequest = z.infer<typeof ConfigureSessionRequest>;
+
+/** First Local Agent version that switches a running session's mode or model at once. */
+export const CONFIGURE_AGENT_VERSION = '0.1.8';
 export type SessionControlRequest = z.infer<typeof SessionControlRequest>;
 
 /** How long a command may wait for the PC before it expires (never executed late). */
@@ -94,6 +117,7 @@ export const COMMAND_TTL_MS: Record<CommandKind, number> = {
   // A session the user started stops at Claude's next step, which can take a while.
   interrupt: 5 * 60 * 1000,
   'session.stop': 60 * 1000,
+  'session.configure': 60 * 1000,
 };
 
 /** A folder path in one form for comparing: forward slashes, no trailing slash, Windows case-folded. */

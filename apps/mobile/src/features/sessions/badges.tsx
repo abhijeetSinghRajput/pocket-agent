@@ -1,3 +1,4 @@
+import { hooksAreConnected } from '@pocket-agent/core';
 import type { AgentSessionDto, AgentStatus, ProviderId } from '@pocket-agent/protocol';
 import { Bot, Code, EyeOff, SquareTerminal } from 'lucide-react-native';
 import { useEffect } from 'react';
@@ -210,18 +211,6 @@ export function SessionStatusBadge({ status }: { status: AgentStatus }) {
 /** Tone of a status, for anything else that wants to colour itself like the badge. */
 export function statusTone(status: AgentStatus): Tone {
   return TONE[STATUS[status].variant];
-}
-
-/**
- * Whether an observed session reports through Pocket Agent hooks. The PC records this in metadata;
- * capabilities can't be used for it because instructions/approvals are separate PC opt-ins.
- */
-export function hooksAreConnected(s: Pick<AgentSessionDto, 'metadata' | 'capabilities'>): boolean {
-  return (
-    s.metadata?.['hooks'] === 'connected' ||
-    s.capabilities.remoteApproval ||
-    s.capabilities.instructBetweenTurns
-  );
 }
 
 /** How the session is connected, in user terms. */

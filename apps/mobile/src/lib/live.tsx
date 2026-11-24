@@ -12,6 +12,7 @@ import {
 import { AppState } from 'react-native';
 import { z } from 'zod';
 import { ApiClientError, apiRequest, WS_URL } from '@/lib/api';
+import { setLiveConnected } from '@/lib/push';
 
 const WsTicket = z.object({ ticket: z.string().min(1) });
 
@@ -41,6 +42,9 @@ export function LiveProvider({ children }: { children: ReactNode }) {
     let retry: ReturnType<typeof setTimeout> | undefined;
     let disposed = false;
     let active = AppState.currentState === 'active';
+    // Each connect() gets a number; only the latest may open a socket (a quick trip to the
+    // background and back can leave an older one still waiting for its ticket).
+    let generation = 0;
 
     const scheduleRetry = () => {
       if (disposed || !active) return;
@@ -51,6 +55,7 @@ export function LiveProvider({ children }: { children: ReactNode }) {
 
     const connect = async () => {
       clearTimeout(retry);
+      const mine = ++generation;
       let ticket: string;
       try {
         ticket = (await apiRequest('/ws/tickets', WsTicket, { method: 'POST' })).ticket;
@@ -58,7 +63,8 @@ export function LiveProvider({ children }: { children: ReactNode }) {
         if (disposed || (err instanceof ApiClientError && err.status === 401)) return; // signed out
         return scheduleRetry();
       }
-      if (disposed || !active) return;
+      if (disposed || !active || mine !== generation) return;
+      ws?.close();
       const socket = new WebSocket(`${WS_URL}?ticket=${encodeURIComponent(ticket)}`);
       ws = socket;
       socket.onopen = () => {
@@ -76,7 +82,9 @@ export function LiveProvider({ children }: { children: ReactNode }) {
         }
       };
       socket.onclose = (e) => {
-        if (ws === socket) ws = null;
+        // A socket closed on purpose (background, replaced) doesn't schedule a reconnect.
+        if (ws !== socket) return;
+        ws = null;
         if (disposed || e.code === 4401) return; // signed out: the auth layer takes over
         scheduleRetry();
       };
@@ -89,8 +97,10 @@ export function LiveProvider({ children }: { children: ReactNode }) {
       active = now;
       if (!active) {
         clearTimeout(retry);
-        ws?.close();
+        generation++; // a connect() still waiting for its ticket gives up
+        const closing = ws;
         ws = null;
+        closing?.close();
       } else {
         attempt = 0;
         void connect();
@@ -102,9 +112,17 @@ export function LiveProvider({ children }: { children: ReactNode }) {
       disposed = true;
       sub.remove();
       clearTimeout(retry);
-      ws?.close();
+      const closing = ws;
+      ws = null;
+      closing?.close();
     };
   }, []);
+
+  // Notifications that arrive in the foreground show only when the app can't show them itself.
+  useEffect(() => {
+    setLiveConnected(state === 'live');
+    return () => setLiveConnected(false);
+  }, [state]);
 
   const subscribe = useCallback((listener: Listener) => {
     listeners.current.add(listener);
@@ -121,8 +139,16 @@ export function useLiveState(): LiveState {
   return useContext(LiveContext)?.state ?? 'connecting';
 }
 
-/** Calls `onChange` (debounced) when a matching live event arrives, and after every reconnect. */
-export function useLiveRefresh(onChange: () => void, filter: (e: BackendToWeb) => boolean = () => true) {
+/**
+ * Calls `onChange` when a matching live event arrives, and after every reconnect. A burst (Claude
+ * streaming tool steps) is throttled: the first event refreshes soon, then at most once every
+ * `everyMs`, with a last refresh after the burst so nothing is missed.
+ */
+export function useLiveRefresh(
+  onChange: () => void,
+  filter: (e: BackendToWeb) => boolean = () => true,
+  everyMs = 1000,
+) {
   const subscribe = useContext(LiveContext)?.subscribe;
   const cb = useRef(onChange);
   const match = useRef(filter);
@@ -133,16 +159,23 @@ export function useLiveRefresh(onChange: () => void, filter: (e: BackendToWeb) =
   useEffect(() => {
     if (!subscribe) return;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    let last = 0;
+    const run = () => {
+      timer = undefined;
+      last = Date.now();
+      cb.current();
+    };
     const unsubscribe = subscribe((e) => {
       if (e && !match.current(e)) return;
-      clearTimeout(timer);
-      timer = setTimeout(() => cb.current(), 250);
+      if (timer) return; // a refresh is already due and will see this event too
+      // Events often come in twos (status + event): a short wait catches the pair in one fetch.
+      timer = setTimeout(run, Math.max(150, last + everyMs - Date.now()));
     });
     return () => {
       clearTimeout(timer);
       unsubscribe();
     };
-  }, [subscribe]);
+  }, [subscribe, everyMs]);
 }
 
 /** Calls `onEvent` with each live event as it arrives (no batching, unlike useLiveRefresh). */

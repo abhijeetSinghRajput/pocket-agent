@@ -49,3 +49,6 @@ credentials/
 # Gradle output of local native modules
 /modules/*/android/build/
 /modules/*/android/.cxx/
+
+# Firebase config for local builds (EAS gets it as a file env var)
+google-services.json

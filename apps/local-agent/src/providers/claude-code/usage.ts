@@ -102,15 +102,19 @@ export function planName(type: unknown, tier: unknown): string | null {
  * Code's credentials file (never the tokens); where it keeps them elsewhere (the macOS keychain)
  * the plan comes from the SDK and the end date is unknown.
  */
-async function signIn(q: Record<string, unknown>): Promise<{ plan: string | null; loginExpiresAt: string | null }> {
+async function signIn(
+  q: Record<string, unknown>,
+): Promise<{ plan: string | null; loginExpiresAt: string | null }> {
   let type: unknown;
   let tier: unknown;
   let end: unknown;
   try {
     const dir = process.env['CLAUDE_CONFIG_DIR'] || path.join(os.homedir(), '.claude');
-    const oauth = (JSON.parse(readFileSync(path.join(dir, '.credentials.json'), 'utf8')) as {
-      claudeAiOauth?: Record<string, unknown>;
-    }).claudeAiOauth;
+    const oauth = (
+      JSON.parse(readFileSync(path.join(dir, '.credentials.json'), 'utf8')) as {
+        claudeAiOauth?: Record<string, unknown>;
+      }
+    ).claudeAiOauth;
     type = oauth?.['subscriptionType'];
     tier = oauth?.['rateLimitTier'];
     end = oauth?.['refreshTokenExpiresAt'];

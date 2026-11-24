@@ -1,13 +1,20 @@
-import { commandError } from '@pocket-agent/core';
+import {
+  canConfigureLive,
+  canInstruct,
+  capabilityRows,
+  commandError,
+  deliveryHint,
+  END_TEXT,
+  isBusy,
+  modelLock,
+  resumeBlocker,
+} from '@pocket-agent/core';
 import {
   attachmentLimit,
   CommandResponse,
-  isWithinFolder,
-  RESUME_ANY_FOLDER_AGENT_VERSION,
   RESUME_FILES_AGENT_VERSION,
-  RESUME_MIN_AGENT_VERSION,
+  versionBelow,
   type AgentSessionDto,
-  type DeviceDto,
   type ModelOption,
 } from '@pocket-agent/protocol';
 import { ArrowUp, CircleStop, Hand, Lock, Plus, Power, Square } from 'lucide-react-native';
@@ -21,17 +28,11 @@ import Animated, {
   withRepeat,
   withTiming,
 } from 'react-native-reanimated';
-import { capabilityRows, Ticks } from '@/features/chat/capabilities';
+import { Ticks } from '@/features/chat/capabilities';
 import { DraftFiles } from '@/features/chat/draft-files';
-import { AttachMenu, ModelPicker, ModePicker, modelLock } from '@/features/chat/pickers';
-import {
-  attachmentProblem,
-  discardAttachment,
-  newId,
-  uploadAttachment,
-  type DraftFile,
-  type PickedFile,
-} from '@/features/chat/upload';
+import { AttachMenu, ModelPicker, ModePicker } from '@/features/chat/pickers';
+import { newId } from '@/features/chat/upload';
+import { useDraftFiles } from '@/features/chat/use-draft-files';
 import { apiRequest } from '@/lib/api';
 import { useDevices } from '@/lib/data';
 import { dur, ease, enter, exit, layout } from '@/lib/motion';
@@ -42,29 +43,6 @@ import { enableImagePaste, type PastedImage } from '../../../modules/image-paste
 import { Notice } from '@/ui/feedback';
 import { Sheet } from '@/ui/sheet';
 
-export function canInstruct(s: AgentSessionDto): boolean {
-  return !s.endedAt && (s.capabilities.instructAnytime || s.capabilities.instructBetweenTurns);
-}
-
-const isBusy = (s: AgentSessionDto) => s.status === 'Running' || s.status === 'WaitingForPermission';
-
-/** When the instruction will actually reach Claude — stated honestly per session type. */
-function deliveryHint(s: AgentSessionDto): string {
-  if (s.capabilities.instructAnytime) {
-    if (isBusy(s)) {
-      return s.capabilities.interrupt
-        ? 'Claude is busy: this runs as soon as the current task finishes (or interrupt it).'
-        : 'Claude is busy: it reads this at its next step, or when the current turn finishes.';
-    }
-    return s.mode === 'managed'
-      ? 'Claude starts on this right away.'
-      : 'Claude starts on this right away on your PC. Your editor won’t show it live; follow it here.';
-  }
-  return s.status === 'WaitingForInput'
-    ? 'Claude is idle, so this waits for the next turn you start on the PC. To run it at once, turn on wake on the PC: pocket-agent instructions wake enable'
-    : '';
-}
-
 async function control(session: AgentSessionDto, action: 'interrupt' | 'stop'): Promise<string | null> {
   const { command } = await apiRequest(`/sessions/${session.id}/${action}`, CommandResponse, {
     method: 'POST',
@@ -73,42 +51,11 @@ async function control(session: AgentSessionDto, action: 'interrupt' | 'stop'): 
   return command.status === 'Failed' ? commandError(command) : null;
 }
 
-/** `a < b` for plain x.y.z versions. */
-function versionBelow(a: string, b: string): boolean {
-  const x = a.split('-')[0]!.split('.').map(Number);
-  const y = b.split('-')[0]!.split('.').map(Number);
-  for (let i = 0; i < 3; i++) if ((x[i] ?? 0) !== (y[i] ?? 0)) return (x[i] ?? 0) < (y[i] ?? 0);
-  return false;
-}
-
-/**
- * An ended Claude Code session can be continued from here: the PC reopens the same conversation.
- * Returns why not when it can't (shown in place of the message box), or null when it can.
- */
-export function resumeBlocker(s: AgentSessionDto, device: DeviceDto | undefined): string | null {
-  const ended = 'This session has ended.';
-  if (s.provider !== 'claude-code' || !device || device.status === 'Revoked') return ended;
-  if (versionBelow(device.agentVersion, RESUME_MIN_AGENT_VERSION))
-    return `${ended} To continue it from here, update Pocket Agent on the PC: \`pocket-agent update\``;
-  // Agents from 0.1.5 continue any session in its own folder; older ones need it on the list.
-  if (
-    versionBelow(device.agentVersion, RESUME_ANY_FOLDER_AGENT_VERSION) &&
-    !device.projects.some((p) => isWithinFolder(s.projectPath, p.path))
-  )
-    return `${ended} To continue it from here, allow its folder on the PC: \`pocket-agent projects add "${s.projectPath}"\``;
-  return null;
-}
-
 /** The model picked for this chat. A model the PC no longer offers is never sent. */
 function useChosenModel(sessionId: string, models: ModelOption[]) {
   const [model, choose] = useStored(`pocket-agent:model:${sessionId}`);
   return [models.some((m) => m.id === model) ? model : '', choose] as const;
 }
-
-export const END_TEXT = (s: AgentSessionDto) =>
-  s.mode === 'managed'
-    ? 'Claude stops immediately and the session closes. Queued instructions are not run.'
-    : 'This closes the session’s Claude Code process on your PC, whatever it is doing. The conversation is kept: you can resume it in your editor.';
 
 // ── Send / stop ──────────────────────────────────────────────────────────────
 
@@ -192,6 +139,33 @@ export function SendButton({
   );
 }
 
+/** The + that opens the attach menu: the same size and shape as Send, in the quiet colour. */
+export function AttachButton({ disabled, onPress }: { disabled: boolean; onPress: () => void }) {
+  const { c } = useTheme();
+  return (
+    <Press
+      accessibilityRole="button"
+      accessibilityLabel="Attach files"
+      testID="attach-button"
+      disabled={disabled}
+      onPress={onPress}
+      scale={0.92}
+      hitSlop={4}
+      style={{
+        width: SEND_SIZE,
+        height: SEND_SIZE,
+        borderRadius: SEND_RADIUS,
+        backgroundColor: c.secondary,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginRight: 4,
+      }}
+    >
+      <Plus size={21} color={c.secondaryForeground} strokeWidth={2.2} />
+    </Press>
+  );
+}
+
 // ── Composer ─────────────────────────────────────────────────────────────────
 
 /** Message box pinned to the bottom of a chat. The button sends; files attach from the +. */
@@ -213,60 +187,15 @@ export function Composer({
   // One key per message: retrying after a network error can never send it twice.
   const key = useRef(newId());
   const box = useRef<ComponentRef<typeof TextInput>>(null);
-  const [drafts, setDrafts] = useState<DraftFile[]>([]);
-  const uploads = useRef(new Map<string, AbortController>());
   const [attachOpen, setAttachOpen] = useState(false);
-  const uploading = drafts.some((d) => d.status === 'uploading');
-
-  /** Removed before sending: stop the upload, and delete what was already stored. */
-  function removeDraft(draftKey: string) {
-    uploads.current.get(draftKey)?.abort();
-    uploads.current.delete(draftKey);
-    const ref = drafts.find((d) => d.key === draftKey)?.ref;
-    if (ref) void discardAttachment(ref.id);
-    setDrafts((d) => d.filter((x) => x.key !== draftKey));
-  }
-  const ready = drafts.filter((d) => d.status === 'ready' && d.ref);
-
-  /** Picked files start uploading at once; each can be removed before sending. */
-  function addFiles(files: PickedFile[]) {
-    setError(null);
-    const room = maxFiles - drafts.length;
-    if (files.length > room) setError(`At most ${maxFiles} files per message.`);
-    for (const file of files.slice(0, Math.max(0, room))) {
-      const draftKey = newId();
-      const problem = attachmentProblem(file);
-      if (problem) {
-        setDrafts((d) => [...d, { key: draftKey, file, status: 'error', error: problem }]);
-        continue;
-      }
-      setDrafts((d) => [...d, { key: draftKey, file, status: 'uploading', progress: 0 }]);
-      const abort = new AbortController();
-      uploads.current.set(draftKey, abort);
-      uploadAttachment(file, abort.signal, (progress) =>
-        setDrafts((d) => d.map((x) => (x.key === draftKey ? { ...x, progress } : x))),
-      )
-        .then((ref) => {
-          // Removed while the last step was in flight: don't keep the file.
-          if (abort.signal.aborted) return void discardAttachment(ref.id);
-          setDrafts((d) =>
-            d.map((x) => (x.key === draftKey ? { ...x, status: 'ready', ref, progress: 1 } : x)),
-          );
-        })
-        .catch((err: Error) => {
-          if (abort.signal.aborted) return;
-          setDrafts((d) =>
-            d.map((x) => (x.key === draftKey ? { ...x, status: 'error', error: err.message } : x)),
-          );
-        })
-        .finally(() => uploads.current.delete(draftKey));
-    }
-  }
 
   // The box is always there, like any chat app; when this session can't take messages it is
   // disabled and says why (never pretends a message could be delivered).
   const device = useDevices().state.data?.find((d) => d.id === session.deviceId);
   const maxFiles = attachmentLimit(device?.agentVersion);
+  const files = useDraftFiles(maxFiles, setError);
+  const { drafts, ready, uploading } = files;
+  const addFiles = files.add;
   // Ended: sending continues the same conversation on the PC, when that's possible.
   const resuming = !!session.endedAt && resumeBlocker(session, device) === null;
   const locked =
@@ -293,6 +222,32 @@ export function Composer({
   const [mode, setMode] = useStored(`pocket-agent:mode:${session.id}`);
   const [effort, setEffort] = useStored(`pocket-agent:effort:${session.id}`);
   const modelLocked = resuming ? null : modelLock(session);
+
+  // A session Pocket Agent runs switches mode or model at once, mid-task too (the chat shows
+  // "You switched to …"); any other takes the choice with the next message sent from here.
+  const live = canConfigureLive(session, device);
+  async function applyNow(change: { permissionMode: string } | { model: string }) {
+    if (!live) return;
+    setError(null);
+    try {
+      const { command } = await apiRequest(`/sessions/${session.id}/configure`, CommandResponse, {
+        method: 'POST',
+        body: { idempotencyKey: newId(), ...change },
+      });
+      if (command.status === 'Failed') setError(commandError(command));
+      onSent();
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  }
+  const chooseMode = (value: string) => {
+    setMode(value);
+    if (value) void applyNow({ permissionMode: value });
+  };
+  const chooseModel = (value: string) => {
+    setModel(value);
+    if (value) void applyNow({ model: value });
+  };
 
   // Something typed or attached: the button sends. Nothing, and Claude is working: it stops Claude.
   const hint = locked
@@ -325,7 +280,7 @@ export function Composer({
               text: value,
               idempotencyKey: key.current,
               ...choices,
-              ...(ready.length ? { attachmentIds: ready.map((d) => d.ref!.id) } : {}),
+              ...(ready.length ? { attachmentIds: files.ids } : {}),
             },
           })
         : await apiRequest(`/sessions/${session.id}/instructions`, CommandResponse, {
@@ -334,12 +289,12 @@ export function Composer({
               text: value,
               idempotencyKey: key.current,
               ...choices,
-              ...(ready.length ? { attachmentIds: ready.map((d) => d.ref!.id) } : {}),
+              ...(ready.length ? { attachmentIds: files.ids } : {}),
             },
           });
       key.current = newId();
       setText('');
-      setDrafts([]);
+      files.clear();
       if (command.status === 'Failed') {
         setError(commandError(command));
         buzz(false);
@@ -399,7 +354,7 @@ export function Composer({
           disabled={!!locked}
           style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
         />
-        <DraftFiles drafts={drafts} onRemove={removeDraft} />
+        <DraftFiles drafts={drafts} onRemove={files.remove} />
         <TextInput
           ref={box}
           value={text}
@@ -478,36 +433,14 @@ export function Composer({
           }}
         >
           {/* Files can't be sent with the message that continues an ended session. */}
-          {canAttach && (
-            // The same size and shape as Send, in the quiet colour.
-            <Press
-              accessibilityRole="button"
-              accessibilityLabel="Attach files"
-              testID="attach-button"
-              disabled={drafts.length >= maxFiles}
-              onPress={() => setAttachOpen(true)}
-              scale={0.92}
-              hitSlop={4}
-              style={{
-                width: SEND_SIZE,
-                height: SEND_SIZE,
-                borderRadius: SEND_RADIUS,
-                backgroundColor: c.secondary,
-                alignItems: 'center',
-                justifyContent: 'center',
-                marginRight: 4,
-              }}
-            >
-              <Plus size={21} color={c.secondaryForeground} strokeWidth={2.2} />
-            </Press>
-          )}
+          {canAttach && <AttachButton disabled={files.room <= 0} onPress={() => setAttachOpen(true)} />}
           {!locked && (
             <>
-              <ModePicker value={mode} onChange={setMode} locked={modelLocked} />
+              <ModePicker value={mode} onChange={chooseMode} locked={modelLocked} />
               <ModelPicker
                 models={models}
                 value={model}
-                onChange={setModel}
+                onChange={chooseModel}
                 effort={effort}
                 onEffort={setEffort}
                 locked={modelLocked}
@@ -540,7 +473,7 @@ export function Composer({
         open={attachOpen}
         onClose={() => setAttachOpen(false)}
         onPick={addFiles}
-        room={maxFiles - drafts.length}
+        room={files.room}
       />
     </Animated.View>
   );

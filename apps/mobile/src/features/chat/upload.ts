@@ -8,6 +8,8 @@ import { File, UploadType } from 'expo-file-system';
 import { uuid } from 'expo-modules-core';
 import { apiRequest } from '@/lib/api';
 
+export { fileSize } from '@pocket-agent/core';
+
 /** A file picked on the phone, before and while it uploads. */
 export interface PickedFile {
   uri: string;
@@ -37,12 +39,6 @@ export const attachmentProblem = (file: { name: string; size: number }) => proto
 export const mimeOf = (mime: string | null | undefined) => mime || 'application/octet-stream';
 
 export const isImage = (file: { mime: string }) => file.mime.startsWith('image/');
-
-export function fileSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
-  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-}
 
 const BY_EXTENSION: Record<string, string> = {
   png: 'image/png',

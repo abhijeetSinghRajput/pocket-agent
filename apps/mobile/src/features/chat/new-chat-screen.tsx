@@ -1,16 +1,32 @@
-import { buildChat, commandError } from '@pocket-agent/core';
-import { CommandResponse, type CommandDto, type TurnEffort, type TurnMode } from '@pocket-agent/protocol';
+import { buildChat, commandError, NEW_CHAT_MODE, newChatModel, waitForSession } from '@pocket-agent/core';
+import {
+  attachmentLimit,
+  CommandResponse,
+  RESUME_FILES_AGENT_VERSION,
+  versionBelow,
+  type CommandDto,
+  type TurnEffort,
+  type TurnMode,
+} from '@pocket-agent/protocol';
 import { useRouter } from 'expo-router';
 import { ArrowLeft } from 'lucide-react-native';
-import { useEffect, useMemo, useRef, useState, type ComponentRef, type RefObject } from 'react';
-import { Pressable, TextInput, View } from 'react-native';
+import { useEffect, useEffectEvent, useMemo, useRef, useState, type ComponentRef } from 'react';
+import { findNodeHandle, Pressable, TextInput, View } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
-import Animated, { interpolateColor, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import Animated, {
+  interpolateColor,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { SendButton } from '@/features/chat/composer';
+import { AttachButton, SendButton } from '@/features/chat/composer';
+import { DraftFiles } from '@/features/chat/draft-files';
 import { ChatMessages } from '@/features/chat/messages';
-import { ModelPicker, ModePicker } from '@/features/chat/pickers';
+import { AttachMenu, ModelPicker, ModePicker } from '@/features/chat/pickers';
 import { newId } from '@/features/chat/upload';
+import { useDraftFiles } from '@/features/chat/use-draft-files';
+import { enableImagePaste, type PastedImage } from '../../../modules/image-paste';
 import { AgentLogo, AGENT_LOGOS } from '@/features/sessions/badges';
 import { apiRequest } from '@/lib/api';
 import { useDevices } from '@/lib/data';
@@ -19,20 +35,7 @@ import { alpha, fonts, radius, useTheme } from '@/lib/theme';
 import { buzz, IconButton, T, thud } from '@/ui/core';
 import { Notice, Roll } from '@/ui/feedback';
 
-/** Waits (up to a minute) for the PC to start Claude and report the new session. */
-async function waitForSession(command: CommandDto, alive: RefObject<boolean>): Promise<CommandDto> {
-  const deadline = Date.now() + 60_000;
-  while (
-    alive.current &&
-    !command.sessionId &&
-    !['Failed', 'Expired'].includes(command.status) &&
-    Date.now() < deadline
-  ) {
-    await new Promise((r) => setTimeout(r, 1000));
-    command = (await apiRequest(`/commands/${command.id}`, CommandResponse)).command;
-  }
-  return command;
-}
+const fetchCommand = (id: string) => apiRequest(`/commands/${id}`, CommandResponse).then((r) => r.command);
 
 function ClaudeAvatar({ size }: { size: number }) {
   return (
@@ -63,8 +66,9 @@ export function NewChatScreen({ deviceId, path, name }: { deviceId: string; path
   const router = useRouter();
   const device = useDevices().state.data?.find((d) => d.id === deviceId);
   const [text, setText] = useState('');
-  const [model, setModel] = useState('');
-  const [mode, setMode] = useState('');
+  // null until picked: the new-chat default (Opus) applies; '' is the PC's own default.
+  const [model, setModel] = useState<string | null>(null);
+  const [mode, setMode] = useState<string>(NEW_CHAT_MODE);
   const [effort, setEffort] = useState('');
   // The first message once sent: shown as sent while the PC starts Claude.
   const [command, setCommand] = useState<CommandDto | null>(null);
@@ -82,7 +86,8 @@ export function NewChatScreen({ deviceId, path, name }: { deviceId: string; path
 
   const models = device?.models ?? [];
   // A model the PC no longer offers is never sent.
-  const chosenModel = models.some((m) => m.id === model) ? model : '';
+  const chosenModel =
+    model !== null && (model === '' || models.some((m) => m.id === model)) ? model : newChatModel(models);
   const starting = command !== null;
   const locked = !device
     ? 'This PC is no longer paired.'
@@ -91,9 +96,26 @@ export function NewChatScreen({ deviceId, path, name }: { deviceId: string; path
       : null;
   const items = useMemo(() => (command ? buildChat([], [command]) : []), [command]);
 
+  // Photos and files go with the first message (PC agents from 0.1.6 take them).
+  const [attachOpen, setAttachOpen] = useState(false);
+  const files = useDraftFiles(attachmentLimit(device?.agentVersion), setError);
+  const canAttach =
+    !locked && !starting && !versionBelow(device?.agentVersion ?? '0', RESUME_FILES_AGENT_VERSION);
+  const onPasted = useEffectEvent((pasted: PastedImage[]) => files.add(pasted));
+  useEffect(() => {
+    const tag = canAttach && box.current ? findNodeHandle(box.current) : null;
+    if (tag == null) return;
+    return enableImagePaste(tag, onPasted);
+  }, [canAttach]);
+  const hasContent = !!text.trim() || files.ready.length > 0;
+
   async function start() {
-    const value = text.trim();
-    if (!value || starting || locked) return;
+    // A first message can be just files: Claude is then told what they are called.
+    const value =
+      text.trim() ||
+      (files.ready.length ? `Attached: ${files.ready.map((d) => d.ref!.name).join(', ')}` : '');
+    if (!value || starting || locked || files.uploading) return;
+    const typed = text;
     setError(null);
     thud();
     try {
@@ -106,11 +128,14 @@ export function NewChatScreen({ deviceId, path, name }: { deviceId: string; path
           ...(chosenModel ? { model: chosenModel } : {}),
           ...(mode ? { permissionMode: mode as TurnMode } : {}),
           ...(effort ? { effort: effort as TurnEffort } : {}),
+          ...(files.ready.length ? { attachmentIds: files.ids } : {}),
         },
       });
       setCommand(sent);
       setText('');
-      sent = await waitForSession(sent, alive);
+      // The files now belong to the message (shown in it while the PC starts Claude).
+      files.clear();
+      sent = await waitForSession(sent, fetchCommand, () => alive.current);
       if (!alive.current) return;
       if (sent.sessionId) {
         buzz(true);
@@ -119,14 +144,14 @@ export function NewChatScreen({ deviceId, path, name }: { deviceId: string; path
       }
       buzz(false);
       setError(commandError(sent) ?? 'Your PC did not start the session in time.');
-      setText(value);
+      setText(typed);
       setCommand(null);
       key.current = newId();
     } catch (err) {
       if (!alive.current) return;
       buzz(false);
       setError((err as Error).message);
-      setText(value);
+      setText(typed);
       setCommand(null);
     }
   }
@@ -249,6 +274,7 @@ export function NewChatScreen({ deviceId, path, name }: { deviceId: string; path
                 disabled={!!locked || starting}
                 style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
               />
+              <DraftFiles drafts={files.drafts} onRemove={files.remove} />
               <TextInput
                 ref={box}
                 value={text}
@@ -285,6 +311,7 @@ export function NewChatScreen({ deviceId, path, name }: { deviceId: string; path
                   paddingBottom: 8,
                 }}
               >
+                {canAttach && <AttachButton disabled={files.room <= 0} onPress={() => setAttachOpen(true)} />}
                 {!locked && (
                   <>
                     <ModePicker value={mode} onChange={setMode} locked={null} />
@@ -301,7 +328,7 @@ export function NewChatScreen({ deviceId, path, name }: { deviceId: string; path
                 <View style={{ flex: 1 }} />
                 <SendButton
                   stopMode={false}
-                  disabled={starting || !text.trim() || !!locked}
+                  disabled={starting || files.uploading || !hasContent || !!locked}
                   busy={starting}
                   label={starting ? 'Starting on your PC…' : 'Start session'}
                   onPress={() => void start()}
@@ -311,6 +338,12 @@ export function NewChatScreen({ deviceId, path, name }: { deviceId: string; path
           </View>
         </View>
       </KeyboardAvoidingView>
+      <AttachMenu
+        open={attachOpen}
+        onClose={() => setAttachOpen(false)}
+        onPick={files.add}
+        room={files.room}
+      />
     </View>
   );
 }

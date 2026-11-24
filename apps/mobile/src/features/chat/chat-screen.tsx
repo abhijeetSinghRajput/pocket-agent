@@ -1,5 +1,5 @@
-import { buildChat, parseQuestions, timeAgo } from '@pocket-agent/core';
-import type { AgentSessionDto, ApprovalDto } from '@pocket-agent/protocol';
+import { buildChat, pendingQuestion, timeAgo } from '@pocket-agent/core';
+import type { AgentSessionDto } from '@pocket-agent/protocol';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import { ArrowLeft } from 'lucide-react-native';
@@ -49,16 +49,6 @@ function typingKind(s: AgentSessionDto): 'working' | 'starting' | null {
   if (s.endedAt) return null;
   if (s.status === 'Running') return 'working';
   if (s.status === 'Starting') return 'starting';
-  return null;
-}
-
-/** A question from Claude waiting for this chat (the first one, if several). */
-function pendingQuestion(list: ApprovalDto[] | null | undefined, sessionId: string) {
-  for (const a of list ?? []) {
-    if (a.sessionId !== sessionId || a.toolName !== 'AskUserQuestion') continue;
-    const questions = parseQuestions(a.input);
-    if (questions.length) return { approval: a, questions };
-  }
   return null;
 }
 

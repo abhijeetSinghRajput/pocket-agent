@@ -36,17 +36,23 @@ export function toApprovalDto(a: ApprovalRow): ApprovalDto {
   };
 }
 
+/**
+ * Answered (here or on the PC), expired or cancelled: its "Permission needed" / "Claude is asking
+ * you" notification is done with, so it no longer counts as unread.
+ */
+async function markApprovalNotificationRead(db: Db, a: Pick<Approval, 'id' | 'userId'>, now: Date) {
+  await db.notification
+    .updateMany({
+      where: { userId: a.userId, dedupeKey: `approval:${a.id}`, readAt: null },
+      data: { readAt: now },
+    })
+    .catch(() => undefined);
+}
+
 async function notifyApproval(ctx: Services, a: Approval, kind: 'approval.created' | 'approval.updated') {
   const extra = { deviceId: a.deviceId, sessionId: a.sessionId };
-  // Answered (here or on the PC), expired or cancelled: its "Permission needed" / "Claude is
-  // asking you" notification is done with, so it no longer counts as unread.
   if (kind === 'approval.updated' && a.status !== 'Pending') {
-    await ctx.prisma.notification
-      .updateMany({
-        where: { userId: a.userId, dedupeKey: `approval:${a.id}`, readAt: null },
-        data: { readAt: ctx.now() },
-      })
-      .catch(() => undefined);
+    await markApprovalNotificationRead(ctx.prisma, a, ctx.now());
   }
   await notifyUser(
     ctx.bus,
@@ -102,7 +108,9 @@ export async function closeApprovalFromPc(
   const a = await tx.approval.findUnique({ where: { sessionId_requestId: { sessionId, requestId } } });
   if (!a || a.status !== 'Pending') return null;
   const r = await tx.approval.updateMany({ where: { id: a.id, status: 'Pending' }, data: { status } });
-  return r.count ? { ...a, status } : null;
+  if (!r.count) return null;
+  await markApprovalNotificationRead(tx, a, new Date());
+  return { ...a, status };
 }
 
 export class DecisionError extends Error {

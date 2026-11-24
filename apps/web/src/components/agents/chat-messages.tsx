@@ -1,6 +1,6 @@
 'use client';
 
-import type { CommandDto, CommandStatus } from '@pocket-agent/protocol';
+import type { CommandStatus } from '@pocket-agent/protocol';
 import {
   ArrowDown,
   Check,
@@ -16,8 +16,8 @@ import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 're
 import { ClaudeSpinner } from '@/components/agents/claude-spinner';
 import { SentAttachments } from '@/components/agents/attachments';
 import { Markdown } from '@/components/agents/markdown';
-import { isQueued, type AskedQuestion, type ChatItem } from '@/lib/chat';
-import { commandError, STATUS_LABEL } from '@/lib/commands';
+import { isQueued, SHELL_TOOLS, TOOL_STATE, type AskedQuestion, type ChatItem } from '@/lib/chat';
+import { commandError, controlText, STATUS_LABEL } from '@/lib/commands';
 import { clockTime, dayLabel, daysAgo } from '@/lib/format';
 import { cn } from '@/lib/utils';
 
@@ -131,14 +131,6 @@ const DOT: Record<Of<'tool'>['state'], string> = {
   done: 'bg-success',
   failed: 'bg-destructive',
 };
-const TOOL_STATE: Record<Of<'tool'>['state'], string> = {
-  running: 'running',
-  done: 'finished',
-  failed: 'failed',
-};
-
-const SHELL = new Set(['Bash', 'PowerShell', 'BashOutput']);
-
 /**
  * A tool call as Claude Code shows it. Shell commands get an IN/OUT block (one line of command,
  * the first lines of output, tap for all); other tools a single line: the name, then the file,
@@ -148,7 +140,7 @@ function ToolStep({ item }: { item: Of<'tool'> }) {
   const [open, setOpen] = useState(false);
   const target = item.target || '';
   const output = item.output ?? '';
-  const shell = SHELL.has(item.toolName);
+  const shell = SHELL_TOOLS.has(item.toolName);
   const block = shell ? !!(target || output) : !!output;
   const more = shell && (target.length > 48 || target.includes('\n') || output.split('\n').length > 3);
   return (
@@ -343,11 +335,6 @@ function Pill({ children, tone = 'muted' }: { children: ReactNode; tone?: 'muted
       </span>
     </li>
   );
-}
-
-function controlText(c: CommandDto): string {
-  const what = c.commandType === 'interrupt' ? 'You interrupted Claude' : 'You ended the session';
-  return `${what} · ${commandError(c) ?? STATUS_LABEL[c.status]}`;
 }
 
 function DaySeparator({ at }: { at: string }) {

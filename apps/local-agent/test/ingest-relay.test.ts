@@ -51,7 +51,9 @@ function relay(home: string | null, stdin: string, env: NodeJS.ProcessEnv = {}) 
   return new Promise<{ code: number | null; stdout: string; ms: number }>((resolve) => {
     const t0 = Date.now();
     const args = [TSX, RELAY, '--pocket-agent-hook', ...(home ? ['--home', home] : [])];
-    const child = spawn(process.execPath, args, { env: { ...process.env, ...env } });
+    // Not inherited from the shell: a test run inside a Pocket Agent session would skip every hook.
+    const { POCKET_AGENT_MANAGED_SESSION: _managed, ...inherited } = process.env;
+    const child = spawn(process.execPath, args, { env: { ...inherited, ...env } });
     let stdout = '';
     child.stdout.on('data', (d) => (stdout += d));
     child.on('exit', (code) => resolve({ code, stdout, ms: Date.now() - t0 }));

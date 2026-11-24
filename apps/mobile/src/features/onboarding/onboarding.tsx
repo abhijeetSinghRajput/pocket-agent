@@ -1,7 +1,7 @@
 import type { DeviceDto } from '@pocket-agent/protocol';
 import { ArrowLeft, Download, KeyRound, LogOut, Monitor, Plus, Zap } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
-import { Image, ScrollView, StyleSheet, View } from 'react-native';
+import { BackHandler, Image, ScrollView, StyleSheet, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ConnectSteps } from '@/features/devices/connect-steps';
@@ -273,6 +273,16 @@ export function Onboarding({ knownDeviceIds, onDone }: { knownDeviceIds: string[
   const { step, now, regenerate } = usePairing({ active: started, knownDeviceIds });
   const paired = started && step.kind === 'paired';
   const connected = paired && step.device.status === 'Online';
+
+  // Android back on the commands goes back to the welcome page instead of closing the app.
+  useEffect(() => {
+    if (!started || connected) return;
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      setStarted(false);
+      return true;
+    });
+    return () => sub.remove();
+  }, [started, connected]);
 
   return (
     <View style={{ flex: 1, backgroundColor: c.background, paddingTop: insets.top }}>

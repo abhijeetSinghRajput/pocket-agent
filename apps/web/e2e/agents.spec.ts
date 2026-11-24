@@ -20,6 +20,9 @@ async function pairedAgent(page: Page) {
   ).code as string;
   cli(env, 'pair', code, '--api', API, '--name', 'E2E PC');
   cli(env, 'hooks', 'install'); // into the isolated CLAUDE_CONFIG_DIR
+  // Permission requests are answered on the PC here (approvals from the phone are on by default
+  // and new PCs start in Away mode; approvals.spec covers that).
+  cli(env, 'approvals', 'disable');
   return env;
 }
 

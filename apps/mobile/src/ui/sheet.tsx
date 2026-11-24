@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { BackHandler, Modal, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { Modal, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { GestureDetector, GestureHandlerRootView, usePanGesture } from 'react-native-gesture-handler';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
@@ -20,6 +20,7 @@ export function Sheet({
   description,
   children,
   dismissable = true,
+  onBack,
 }: {
   open: boolean;
   onClose: () => void;
@@ -28,6 +29,11 @@ export function Sheet({
   children: ReactNode;
   /** False for something that must be answered (a confirmation in progress). */
   dismissable?: boolean;
+  /**
+   * The back button, when the sheet has its own way back (a folder browser going up). Return true
+   * when handled; otherwise back closes the sheet.
+   */
+  onBack?: () => boolean;
 }) {
   const { c } = useTheme();
   const insets = useSafeAreaInsets();
@@ -54,14 +60,11 @@ export function Sheet({
     }
   }, [open, mounted, height, y, dim]);
 
-  useEffect(() => {
-    if (!open) return;
-    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      if (dismissable) onClose();
-      return true;
-    });
-    return () => sub.remove();
-  }, [open, dismissable, onClose]);
+  // A Modal takes the back button itself (it never reaches BackHandler): handled here.
+  const back = () => {
+    if (onBack?.()) return;
+    if (dismissable) onClose();
+  };
 
   const pan = usePanGesture({
     enabled: dismissable,
@@ -89,7 +92,7 @@ export function Sheet({
       statusBarTranslucent
       navigationBarTranslucent
       animationType="none"
-      onRequestClose={onClose}
+      onRequestClose={back}
     >
       {/* A Modal is its own window on Android: gestures inside it need their own root. */}
       <GestureHandlerRootView style={{ flex: 1, justifyContent: 'flex-end' }}>

@@ -305,6 +305,18 @@ export class ManagedSessions {
     return true;
   }
 
+  /**
+   * A new mode or model, at once: the turn that is running uses it from its next step (a mode
+   * switched to Auto stops asking for what Auto allows), and so do the turns after it.
+   */
+  async configure(id: string, change: { permissionMode?: TurnMode; model?: string }): Promise<boolean> {
+    const m = this.sessions.get(id);
+    if (!m?.query || m.closed) return false;
+    if (change.permissionMode) await m.query.setPermissionMode(change.permissionMode);
+    if (change.model) await m.query.setModel(change.model);
+    return true;
+  }
+
   /** Stops the current turn; the session stays open for further instructions. */
   async interrupt(id: string): Promise<boolean> {
     const m = this.sessions.get(id);

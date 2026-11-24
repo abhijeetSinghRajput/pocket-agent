@@ -16,7 +16,7 @@ import { authenticateDevice } from '../auth/device-auth.js';
 import { requireTrustedOrigin, requireUser } from '../auth/session.js';
 import { limit, redisKey, type AppContext } from '../context.js';
 import { CHANNELS, notifyUser, type Bus } from '../realtime/bus.js';
-import { versionBelow } from './commands.js';
+import { versionBelow } from '@pocket-agent/protocol';
 import { FOLDER_LIST_WAIT_MS, folderReplyKey } from '../devices/folders.js';
 import { publishRevocation } from '../gateway/agent-gateway.js';
 import type { Device } from '../generated/prisma/client.js';
@@ -159,8 +159,7 @@ export async function deviceRoutes(app: FastifyInstance, ctx: AppContext & { bus
       where: { id: params.data.id, userId: req.user!.id },
     });
     if (!device) return reply.code(404).send({ error: 'not_found' });
-    const fail = (code: number, error: string, message: string) =>
-      reply.code(code).send({ error, message });
+    const fail = (code: number, error: string, message: string) => reply.code(code).send({ error, message });
     if (device.revokedAt) return fail(409, 'device_revoked', 'This device was revoked.');
     const dto = toDeviceDto(device);
     if (!dto.projects.some((p) => isWithinFolder(query.data.path, p.path)))

@@ -14,6 +14,8 @@ import { apiRequest } from '@/lib/api';
  */
 
 const TOKEN_KEY = 'pocket-agent.push.token';
+/** Set at sign-out when push was on: the next account to sign in gets it back on this phone. */
+const RESUME_KEY = 'pocket-agent.push.resume';
 
 export type PushState =
   | { status: 'unsupported'; reason: string }
@@ -38,13 +40,23 @@ export async function ensureChannels(): Promise<void> {
   });
 }
 
-/** Foreground: the system shows nothing; the app handles it (toast / open chat). */
+/** Whether live updates are connected (set by the live connection). */
+let liveConnected = false;
+export function setLiveConnected(connected: boolean): void {
+  liveConnected = connected;
+}
+
+/**
+ * Foreground: while live updates are connected the app shows its own toast, so the system shows
+ * nothing. While they are down (reconnecting, the server waking), the app would miss it: the
+ * system shows it as usual.
+ */
 export function installForegroundHandler(): void {
   Notifications.setNotificationHandler({
     handleNotification: async () => ({
-      shouldShowBanner: false,
-      shouldShowList: false,
-      shouldPlaySound: false,
+      shouldShowBanner: !liveConnected,
+      shouldShowList: !liveConnected,
+      shouldPlaySound: !liveConnected,
       shouldSetBadge: false,
     }),
   });
@@ -89,6 +101,17 @@ export async function enablePush(): Promise<PushState> {
   return { status: 'on', token };
 }
 
+/**
+ * Signing out: this phone stops getting the account's notifications (they name chats and ask for
+ * decisions). Must run while the session is still valid. Push comes back at the next sign-in.
+ */
+export async function pushSignedOut(): Promise<void> {
+  const token = await AsyncStorage.getItem(TOKEN_KEY).catch(() => null);
+  if (!token) return;
+  await disablePush();
+  await AsyncStorage.setItem(RESUME_KEY, '1').catch(() => undefined);
+}
+
 /** Stops notifications to this phone (the registration is removed from the account). */
 export async function disablePush(): Promise<void> {
   const token = await AsyncStorage.getItem(TOKEN_KEY).catch(() => null);
@@ -105,6 +128,13 @@ export async function disablePush(): Promise<void> {
  * and a new one must reach the account. Call once per app start while signed in.
  */
 export async function refreshPushRegistration(): Promise<void> {
+  // Signed out with push on: register this phone with the account that signed in now.
+  if (await AsyncStorage.getItem(RESUME_KEY).catch(() => null)) {
+    await AsyncStorage.removeItem(RESUME_KEY).catch(() => undefined);
+    const { status } = await Notifications.getPermissionsAsync().catch(() => ({ status: 'undetermined' }));
+    if (status === 'granted') await enablePush().catch(() => undefined);
+    return;
+  }
   const state = await currentPushState();
   if (state.status !== 'on') return;
   try {

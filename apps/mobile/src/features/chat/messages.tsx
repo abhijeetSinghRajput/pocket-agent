@@ -1,14 +1,17 @@
 import {
   clockTime,
   commandError,
+  controlText,
   dayLabel,
   daysAgo,
   isQueued,
+  SHELL_TOOLS,
+  TOOL_STATE,
   STATUS_LABEL,
   type AskedQuestion,
   type ChatItem,
 } from '@pocket-agent/core';
-import type { CommandDto, CommandStatus } from '@pocket-agent/protocol';
+import type { CommandStatus } from '@pocket-agent/protocol';
 import * as Clipboard from 'expo-clipboard';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
@@ -467,14 +470,6 @@ function AssistantMessage({ item, ...join }: { item: Of<'assistant'> } & Join) {
   );
 }
 
-const TOOL_STATE: Record<Of<'tool'>['state'], string> = {
-  running: 'running',
-  done: 'finished',
-  failed: 'failed',
-};
-
-const SHELL = new Set(['Bash', 'PowerShell', 'BashOutput']);
-
 const ioRow = { flexDirection: 'row', gap: 12, paddingHorizontal: 10, paddingVertical: 6 } as const;
 
 function IoLabel({ children }: { children: string }) {
@@ -499,14 +494,18 @@ function ToolStep({ item, ...join }: { item: Of<'tool'> } & Join) {
   const [open, setOpen] = useState(false);
   const target = item.target || '';
   const output = item.output ?? '';
-  const shell = SHELL.has(item.toolName);
+  const shell = SHELL_TOOLS.has(item.toolName);
   const block = shell ? !!(target || output) : !!output;
-  const more = shell && (target.length > 48 || target.includes('\n') || output.split('\n').length > 3);
+  // Output can be tens of KB (a build log, a file read): folded, only its first lines are laid out.
+  const lines = output.split('\n', 4);
+  const long = lines.length > 3;
+  const preview = lines.slice(0, 3).join('\n').slice(0, 600);
+  const more = shell && (target.length > 48 || target.includes('\n') || long);
   const dot = item.state === 'running' ? c.primary : item.state === 'done' ? c.success : c.destructive;
   const outColor = item.state === 'failed' ? c.destructive : c.mutedForeground;
   const outText = (
     <Text selectable style={[MONO, { flex: 1, color: outColor }]} numberOfLines={open ? undefined : 3}>
-      {output}
+      {open ? output : preview}
     </Text>
   );
   return (
@@ -564,7 +563,7 @@ function ToolStep({ item, ...join }: { item: Of<'tool'> } & Join) {
                 <IoLabel>OUT</IoLabel>
                 <View style={{ flex: 1 }}>
                   {outText}
-                  {output.split('\n').length > 3 && (
+                  {long && (
                     // The fold fades out at its foot (tap shows all).
                     <LinearGradient
                       pointerEvents="none"
@@ -823,11 +822,6 @@ function Pill({ children, tone = 'muted' }: { children: ReactNode; tone?: 'muted
       </View>
     </View>
   );
-}
-
-function controlText(c: CommandDto): string {
-  const what = c.commandType === 'interrupt' ? 'You interrupted Claude' : 'You ended the session';
-  return `${what} · ${commandError(c) ?? STATUS_LABEL[c.status]}`;
 }
 
 /** The wavy hairline of a day separator (the web's .wavy-rule). */
@@ -1198,17 +1192,40 @@ const arrive = (index: number) =>
     .delay(Math.min(index, 8) * STAGGER)
     .withInitialValues({ opacity: 0, transform: [{ translateY: -12 }] });
 
+/**
+ * Whether two plain values (rows built from API data: objects, arrays, strings, numbers) hold the
+ * same thing. Every refresh rebuilds the rows; this lets a row that didn't change skip its render.
+ */
+function same(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (typeof a !== 'object' || typeof b !== 'object' || a === null || b === null) return false;
+  if (Array.isArray(a) !== Array.isArray(b)) return false;
+  const ka = Object.keys(a);
+  const kb = Object.keys(b);
+  if (ka.length !== kb.length) return false;
+  for (const k of ka) {
+    if (!same((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k])) return false;
+  }
+  return true;
+}
+
 /** One row of the list; a row that arrived after the first render rises into place. */
-const ListRow = memo(function ListRow({ row, fresh }: { row: Row; fresh: number | undefined }) {
-  return (
-    <Animated.View
-      entering={fresh === undefined ? undefined : arrive(fresh)}
-      style={{ paddingHorizontal: PAD, paddingBottom: row.type === 'item' && isQueued(row.item) ? 12 : GAP }}
-    >
-      <RowContent row={row} />
-    </Animated.View>
-  );
-});
+const ListRow = memo(
+  function ListRow({ row, fresh }: { row: Row; fresh: number | undefined }) {
+    return (
+      <Animated.View
+        entering={fresh === undefined ? undefined : arrive(fresh)}
+        style={{
+          paddingHorizontal: PAD,
+          paddingBottom: row.type === 'item' && isQueued(row.item) ? 12 : GAP,
+        }}
+      >
+        <RowContent row={row} />
+      </Animated.View>
+    );
+  },
+  (a, b) => a.fresh === b.fresh && same(a.row, b.row),
+);
 
 const rowKey = (row: Row) => row.key;
 const NEAR_BOTTOM = 80;
@@ -1303,7 +1320,8 @@ export function ChatMessages({
         maintainVisibleContentPosition={{ minIndexForVisible: 0, autoscrollToTopThreshold: NEAR_BOTTOM }}
         initialNumToRender={14}
         maxToRenderPerBatch={10}
-        windowSize={11}
+        // Rows are heavy (Markdown, code): keep fewer screens mounted around what is visible.
+        windowSize={7}
         onScroll={onScroll}
         scrollEventThrottle={32}
         keyboardShouldPersistTaps="handled"

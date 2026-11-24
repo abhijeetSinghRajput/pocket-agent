@@ -1,12 +1,12 @@
 import { formatDate, timeAgo } from '@pocket-agent/core';
 import { type DeviceDto } from '@pocket-agent/protocol';
-import { Laptop, Monitor, Plus, Server } from 'lucide-react-native';
+import { Monitor, Plus } from 'lucide-react-native';
 import { useState } from 'react';
 import { View } from 'react-native';
 import Animated from 'react-native-reanimated';
 import { AddDeviceSheet } from '@/features/devices/add-device-sheet';
 import { AwayMode } from '@/features/devices/away-mode';
-import { DeviceStatusBadge } from '@/features/devices/device-status';
+import { DeviceStatusBadge, PLATFORM } from '@/features/devices/device-status';
 import { apiRequest } from '@/lib/api';
 import { useDevices } from '@/lib/data';
 import { enter, exit, layout } from '@/lib/motion';
@@ -15,12 +15,6 @@ import { Button, Card, Divider, IconTile, Press, T, buzz } from '@/ui/core';
 import { EmptyState, Notice, Skeleton } from '@/ui/feedback';
 import { Screen } from '@/ui/screen';
 import { Sheet } from '@/ui/sheet';
-
-const PLATFORM = {
-  windows: { icon: Monitor, label: 'Windows' },
-  macos: { icon: Laptop, label: 'macOS' },
-  linux: { icon: Server, label: 'Linux' },
-} as const;
 
 function DeviceRow({
   device,

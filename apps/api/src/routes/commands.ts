@@ -1,14 +1,17 @@
 import {
+  attachmentLimit,
+  CONFIGURE_AGENT_VERSION,
+  ConfigureSessionRequest,
+  isWithinFolder,
+  RESUME_ANY_FOLDER_AGENT_VERSION,
+  RESUME_FILES_AGENT_VERSION,
+  RESUME_MIN_AGENT_VERSION,
+  ResumeSessionRequest,
   SendInstructionRequest,
   SessionCapabilities,
   SessionControlRequest,
   StartSessionRequest,
-  ResumeSessionRequest,
-  isWithinFolder,
-  attachmentLimit,
-  RESUME_ANY_FOLDER_AGENT_VERSION,
-  RESUME_FILES_AGENT_VERSION,
-  RESUME_MIN_AGENT_VERSION,
+  versionBelow,
   type AttachmentRef,
   type CommandKind,
   type TurnEffort,
@@ -17,33 +20,69 @@ import {
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { markUsed, ownedAttachments } from '../attachments/service.js';
-import { createCommand, toCommandDto, type Services } from '../commands/service.js';
+import { createCommand, toCommandDto, type CreateCommandInput, type Services } from '../commands/service.js';
 import { requireTrustedOrigin, requireUser } from '../auth/session.js';
 import { limit } from '../context.js';
 
 const IdParam = z.object({ id: z.uuid() });
-
-/** `a < b` for plain x.y.z versions (anything unparsable counts as older). */
-export function versionBelow(a: string, b: string): boolean {
-  const parse = (v: string) =>
-    v
-      .split('-')[0]!
-      .split('.')
-      .map((n) => Number.parseInt(n, 10));
-  const x = parse(a);
-  const y = parse(b);
-  for (let i = 0; i < 3; i++) {
-    const p = x[i] ?? 0;
-    const q = y[i] ?? 0;
-    if (Number.isNaN(p)) return true;
-    if (p !== q) return p < q;
-  }
-  return false;
-}
+const Projects = z.array(z.object({ path: z.string() }));
 
 function bad(reply: FastifyReply, error: string, message: string, code = 409) {
   return reply.code(code).send({ error, message });
 }
+
+/** Parses the body with `schema`, or answers 400 with what is wrong (then returns null). */
+function parseBody<S extends z.ZodType>(
+  req: FastifyRequest,
+  reply: FastifyReply,
+  schema: S,
+): z.infer<S> | null {
+  const body = schema.safeParse(req.body);
+  if (body.success) return body.data;
+  bad(reply, 'invalid_request', body.error.issues[0]?.message ?? 'Invalid request', 400);
+  return null;
+}
+
+/** Whether `path` is inside one of the folders the PC allows (its project list). */
+function allowedFolder(projects: unknown, path: string): boolean {
+  const list = Projects.safeParse(projects);
+  return list.success && list.data.some((x) => isWithinFolder(path, x.path));
+}
+
+/** Answers "update Pocket Agent on the PC" when the PC is older than `version` (then returns true). */
+function outdated(reply: FastifyReply, agentVersion: string, version: string, what: string, code = 400) {
+  if (!versionBelow(agentVersion, version)) return false;
+  bad(
+    reply,
+    'agent_outdated',
+    `${what} needs Pocket Agent ${version} or newer on the PC. Run \`pocket-agent update\` there.`,
+    code,
+  );
+  return true;
+}
+
+/** Only what was chosen: an unset model, mode or effort leaves the session's own. */
+function turnChoices(b: {
+  model?: string | undefined;
+  permissionMode?: TurnMode | undefined;
+  effort?: TurnEffort | undefined;
+}) {
+  return {
+    ...(b.model ? { model: b.model } : {}),
+    ...(b.permissionMode ? { permissionMode: b.permissionMode } : {}),
+    ...(b.effort ? { effort: b.effort } : {}),
+  };
+}
+
+/** What a command to a running session may carry (each route's schema allows a part of it). */
+type SessionCommandBody = {
+  idempotencyKey: string;
+  text?: string | undefined;
+  model?: string | undefined;
+  permissionMode?: TurnMode | undefined;
+  effort?: TurnEffort | undefined;
+  attachmentIds?: string[] | undefined;
+};
 
 /** Remote control of sessions. Every check here is repeated on the PC, which has the final say. */
 export async function commandRoutes(app: FastifyInstance, ctx: Services): Promise<void> {
@@ -63,26 +102,78 @@ export async function commandRoutes(app: FastifyInstance, ctx: Services): Promis
     return s;
   }
 
-  /** The model must be one this PC reported; the PC checks again. */
-  function knownModel(device: { models: unknown }, model: string | undefined): boolean {
-    if (!model) return true;
+  /** The model must be one this PC reported; the PC checks again. Answers 400 when it isn't. */
+  function unknownModel(
+    reply: FastifyReply,
+    device: { models: unknown },
+    model: string | undefined,
+  ): boolean {
+    if (!model) return false;
     const list = z.array(z.object({ id: z.string() })).safeParse(device.models);
-    return list.success && list.data.some((m) => m.id === model);
-  }
-  const unknownModel = (reply: FastifyReply) =>
+    if (list.success && list.data.some((m) => m.id === model)) return false;
     bad(reply, 'model_not_available', 'That model is not available on this PC.', 400);
+    return true;
+  }
 
+  /**
+   * Files sent with a message: the user's own, fully uploaded, as many as the PC takes. With
+   * `needs`, only from that PC agent version (files with the message that starts a session).
+   * Answers the error and returns null when they can't be sent.
+   */
+  async function sentFiles(
+    req: FastifyRequest,
+    reply: FastifyReply,
+    agentVersion: string,
+    ids: string[] | undefined,
+    needs?: { version: string; what: string },
+  ): Promise<AttachmentRef[] | undefined | null> {
+    if (!ids?.length) return undefined;
+    if (needs && outdated(reply, agentVersion, needs.version, needs.what)) return null;
+    const max = attachmentLimit(agentVersion);
+    if (ids.length > max) {
+      bad(
+        reply,
+        'too_many_files',
+        `Pocket Agent on this PC takes at most ${max} files per message. Update it on the PC: \`pocket-agent update\``,
+        400,
+      );
+      return null;
+    }
+    const attachments = await ownedAttachments(ctx, req.user!.id, ids);
+    if (!attachments) {
+      bad(reply, 'attachment_not_found', 'An attached file is missing. Attach it again.', 400);
+      return null;
+    }
+    return attachments;
+  }
+
+  /** Creates the command (idempotent per key): 201, or 200 for a retry of one already made. */
+  async function issue(
+    req: FastifyRequest,
+    reply: FastifyReply,
+    input: Omit<CreateCommandInput, 'userId' | 'ip'>,
+  ) {
+    const { command, created } = await createCommand(ctx, { ...input, userId: req.user!.id, ip: req.ip });
+    // Sent with a message: kept (not swept as an upload nobody sent).
+    if (input.attachments?.length)
+      await markUsed(
+        ctx,
+        input.attachments.map((a) => a.id),
+      );
+    return reply.code(created ? 201 : 200).send({ command: toCommandDto(command) });
+  }
+
+  /** A command to a running session: what it can take was reported by its PC. */
   async function sessionCommand(
     req: FastifyRequest,
     reply: FastifyReply,
-    kind: CommandKind,
-    text?: string,
-    model?: string,
-    attachmentIds?: string[],
-    turn: { permissionMode?: TurnMode; effort?: TurnEffort } = {},
+    kind: Exclude<CommandKind, 'session.start'>,
+    schema: z.ZodType<SessionCommandBody>,
   ) {
     const s = await ownedSession(req, reply);
     if (!s) return;
+    const body = parseBody(req, reply, schema);
+    if (!body) return;
     if (s.endedAt) return bad(reply, 'session_ended', 'This session has ended.');
     if (s.device.revokedAt) return bad(reply, 'device_revoked', 'This device was revoked.');
     const caps = SessionCapabilities.safeParse(s.capabilities);
@@ -105,65 +196,45 @@ export async function commandRoutes(app: FastifyInstance, ctx: Services): Promis
           : 'This session cannot be stopped remotely.',
       );
     }
-    if (!knownModel(s.device, model)) return unknownModel(reply);
-    // Only the user's own, fully uploaded files that still exist.
-    let attachments: AttachmentRef[] | undefined;
-    if (attachmentIds?.length) {
-      const max = attachmentLimit(s.device.agentVersion);
-      if (attachmentIds.length > max)
+    if (kind === 'session.configure') {
+      // A session started in the editor keeps the editor's settings; a mode or model chosen here
+      // still goes with the next message sent from here.
+      if (s.mode !== 'managed')
         return bad(
           reply,
-          'too_many_files',
-          `Pocket Agent on this PC takes at most ${max} files per message. Update it on the PC: \`pocket-agent update\``,
-          400,
+          'not_supported',
+          'This session runs in your editor with its own settings. Your choice applies to the next message you send from here.',
         );
-      attachments = await ownedAttachments(ctx, req.user!.id, attachmentIds);
-      if (!attachments)
-        return bad(reply, 'attachment_not_found', 'An attached file is missing. Attach it again.', 400);
+      if (outdated(reply, s.device.agentVersion, CONFIGURE_AGENT_VERSION, 'Switching mode mid-task', 409))
+        return;
     }
-    const key = (kind === 'instruction' ? SendInstructionRequest : SessionControlRequest).safeParse(req.body);
-    if (!key.success)
-      return bad(reply, 'invalid_request', key.error.issues[0]?.message ?? 'Invalid request', 400);
-    const { command, created } = await createCommand(ctx, {
-      userId: req.user!.id,
+    if (unknownModel(reply, s.device, body.model)) return;
+    const attachments = await sentFiles(req, reply, s.device.agentVersion, body.attachmentIds);
+    if (attachments === null) return;
+    return issue(req, reply, {
       deviceId: s.deviceId,
       session: { id: s.id, externalSessionId: s.externalSessionId },
       kind,
-      idempotencyKey: key.data.idempotencyKey,
-      ...(text !== undefined ? { text } : {}),
-      ...(model !== undefined ? { model } : {}),
-      ...(turn.permissionMode ? { permissionMode: turn.permissionMode } : {}),
-      ...(turn.effort ? { effort: turn.effort } : {}),
+      idempotencyKey: body.idempotencyKey,
+      ...(body.text !== undefined ? { text: body.text } : {}),
+      ...turnChoices(body),
       ...(attachments ? { attachments } : {}),
-      ip: req.ip,
     });
-    if (attachments)
-      await markUsed(
-        ctx,
-        attachments.map((a) => a.id),
-      );
-    return reply.code(created ? 201 : 200).send({ command: toCommandDto(command) });
   }
 
-  app.post('/sessions/:id/instructions', opts, async (req, reply) => {
-    const body = SendInstructionRequest.safeParse(req.body);
-    if (!body.success)
-      return bad(reply, 'invalid_request', body.error.issues[0]?.message ?? 'Invalid request', 400);
-    return sessionCommand(
-      req,
-      reply,
-      'instruction',
-      body.data.text,
-      body.data.model,
-      body.data.attachmentIds,
-      {
-        ...(body.data.permissionMode ? { permissionMode: body.data.permissionMode } : {}),
-        ...(body.data.effort ? { effort: body.data.effort } : {}),
-      },
-    );
-  });
-  app.post('/sessions/:id/interrupt', opts, (req, reply) => sessionCommand(req, reply, 'interrupt'));
-  app.post('/sessions/:id/stop', opts, (req, reply) => sessionCommand(req, reply, 'session.stop'));
+  app.post('/sessions/:id/instructions', opts, (req, reply) =>
+    sessionCommand(req, reply, 'instruction', SendInstructionRequest),
+  );
+  app.post('/sessions/:id/interrupt', opts, (req, reply) =>
+    sessionCommand(req, reply, 'interrupt', SessionControlRequest),
+  );
+  app.post('/sessions/:id/stop', opts, (req, reply) =>
+    sessionCommand(req, reply, 'session.stop', SessionControlRequest),
+  );
+  /** A new mode or model for a running session, applied at once (mid-turn too). */
+  app.post('/sessions/:id/configure', opts, (req, reply) =>
+    sessionCommand(req, reply, 'session.configure', ConfigureSessionRequest),
+  );
 
   app.post('/devices/:id/sessions', opts, async (req, reply) => {
     const p = IdParam.safeParse(req.params);
@@ -171,11 +242,9 @@ export async function commandRoutes(app: FastifyInstance, ctx: Services): Promis
     const device = await ctx.prisma.device.findFirst({ where: { id: p.data.id, userId: req.user!.id } });
     if (!device) return reply.code(404).send({ error: 'not_found' });
     if (device.revokedAt) return bad(reply, 'device_revoked', 'This device was revoked.');
-    const body = StartSessionRequest.safeParse(req.body);
-    if (!body.success)
-      return bad(reply, 'invalid_request', body.error.issues[0]?.message ?? 'Invalid request', 400);
-    const projects = z.array(z.object({ path: z.string() })).safeParse(device.projects);
-    if (!projects.success || !projects.data.some((x) => isWithinFolder(body.data.projectPath, x.path))) {
+    const body = parseBody(req, reply, StartSessionRequest);
+    if (!body) return;
+    if (!allowedFolder(device.projects, body.projectPath)) {
       return bad(
         reply,
         'project_not_allowed',
@@ -183,21 +252,22 @@ export async function commandRoutes(app: FastifyInstance, ctx: Services): Promis
         400,
       );
     }
-    if (!knownModel(device, body.data.model)) return unknownModel(reply);
-    const { command, created } = await createCommand(ctx, {
-      userId: req.user!.id,
+    if (unknownModel(reply, device, body.model)) return;
+    const attachments = await sentFiles(req, reply, device.agentVersion, body.attachmentIds, {
+      version: RESUME_FILES_AGENT_VERSION,
+      what: 'Sending files when starting a chat',
+    });
+    if (attachments === null) return;
+    return issue(req, reply, {
       deviceId: device.id,
       session: null,
       kind: 'session.start',
-      idempotencyKey: body.data.idempotencyKey,
-      text: body.data.text,
-      projectPath: body.data.projectPath,
-      ...(body.data.model ? { model: body.data.model } : {}),
-      ...(body.data.permissionMode ? { permissionMode: body.data.permissionMode } : {}),
-      ...(body.data.effort ? { effort: body.data.effort } : {}),
-      ip: req.ip,
+      idempotencyKey: body.idempotencyKey,
+      text: body.text,
+      projectPath: body.projectPath,
+      ...turnChoices(body),
+      ...(attachments ? { attachments } : {}),
     });
-    return reply.code(created ? 201 : 200).send({ command: toCommandDto(command) });
   });
 
   /**
@@ -207,25 +277,19 @@ export async function commandRoutes(app: FastifyInstance, ctx: Services): Promis
   app.post('/sessions/:id/resume', opts, async (req, reply) => {
     const s = await ownedSession(req, reply);
     if (!s) return;
-    const body = ResumeSessionRequest.safeParse(req.body);
-    if (!body.success)
-      return bad(reply, 'invalid_request', body.error.issues[0]?.message ?? 'Invalid request', 400);
+    const body = parseBody(req, reply, ResumeSessionRequest);
+    if (!body) return;
     if (!s.endedAt) return bad(reply, 'session_running', 'This session is still running. Send it a message.');
     if (s.device.revokedAt) return bad(reply, 'device_revoked', 'This device was revoked.');
     if (s.provider !== 'claude-code')
       return bad(reply, 'not_supported', 'Only Claude Code sessions can be continued.');
-    if (versionBelow(s.device.agentVersion, RESUME_MIN_AGENT_VERSION)) {
-      return bad(
-        reply,
-        'agent_outdated',
-        `Continuing a session needs Pocket Agent ${RESUME_MIN_AGENT_VERSION} or newer on the PC. Run \`pocket-agent update\` there.`,
-      );
-    }
+    if (outdated(reply, s.device.agentVersion, RESUME_MIN_AGENT_VERSION, 'Continuing a session', 409)) return;
     // From 0.1.5 the PC continues the session in the folder its conversation ran in, whatever the
     // project list says (that list is for starting new chats). Older agents still require it.
-    const projects = z.array(z.object({ path: z.string() })).safeParse(s.device.projects);
-    const listed = projects.success && projects.data.some((x) => isWithinFolder(s.projectPath, x.path));
-    if (versionBelow(s.device.agentVersion, RESUME_ANY_FOLDER_AGENT_VERSION) && !listed) {
+    if (
+      versionBelow(s.device.agentVersion, RESUME_ANY_FOLDER_AGENT_VERSION) &&
+      !allowedFolder(s.device.projects, s.projectPath)
+    ) {
       return bad(
         reply,
         'project_not_allowed',
@@ -233,46 +297,23 @@ export async function commandRoutes(app: FastifyInstance, ctx: Services): Promis
         400,
       );
     }
-    if (!knownModel(s.device, body.data.model)) return unknownModel(reply);
-    // Files sent with the message that continues it (the user's own, fully uploaded).
-    let attachments: AttachmentRef[] | undefined;
-    const ids = body.data.attachmentIds;
-    if (ids?.length) {
-      if (versionBelow(s.device.agentVersion, RESUME_FILES_AGENT_VERSION))
-        return bad(
-          reply,
-          'agent_outdated',
-          `Sending files when continuing a session needs Pocket Agent ${RESUME_FILES_AGENT_VERSION} or newer on the PC. Run \`pocket-agent update\` there.`,
-          400,
-        );
-      const max = attachmentLimit(s.device.agentVersion);
-      if (ids.length > max)
-        return bad(reply, 'too_many_files', `Pocket Agent on this PC takes at most ${max} files per message.`, 400);
-      attachments = await ownedAttachments(ctx, req.user!.id, ids);
-      if (!attachments)
-        return bad(reply, 'attachment_not_found', 'An attached file is missing. Attach it again.', 400);
-    }
-    const { command, created } = await createCommand(ctx, {
-      userId: req.user!.id,
+    if (unknownModel(reply, s.device, body.model)) return;
+    const attachments = await sentFiles(req, reply, s.device.agentVersion, body.attachmentIds, {
+      version: RESUME_FILES_AGENT_VERSION,
+      what: 'Sending files when continuing a session',
+    });
+    if (attachments === null) return;
+    return issue(req, reply, {
       deviceId: s.deviceId,
       session: { id: s.id, externalSessionId: s.externalSessionId },
       kind: 'session.start',
       resume: true,
-      idempotencyKey: body.data.idempotencyKey,
-      text: body.data.text,
+      idempotencyKey: body.idempotencyKey,
+      text: body.text,
       projectPath: s.projectPath,
-      ...(body.data.model ? { model: body.data.model } : {}),
-      ...(body.data.permissionMode ? { permissionMode: body.data.permissionMode } : {}),
-      ...(body.data.effort ? { effort: body.data.effort } : {}),
+      ...turnChoices(body),
       ...(attachments ? { attachments } : {}),
-      ip: req.ip,
     });
-    if (attachments)
-      await markUsed(
-        ctx,
-        attachments.map((a) => a.id),
-      );
-    return reply.code(created ? 201 : 200).send({ command: toCommandDto(command) });
   });
 
   app.get('/sessions/:id/commands', { preHandler: user }, async (req, reply) => {

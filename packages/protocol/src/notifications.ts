@@ -132,3 +132,9 @@ export function isQuietTime(q: QuietHours | null, at: Date): boolean {
   }
   return q.start < q.end ? hhmm >= q.start && hhmm < q.end : hhmm >= q.start || hhmm < q.end;
 }
+
+/**
+ * The Android app's Allow / Deny button set for a permission request's push: the server names it
+ * in the push (`categoryId`), the app registers it under this name.
+ */
+export const PUSH_PERMISSION_CATEGORY = 'permission';

@@ -319,7 +319,10 @@ async function connectThisPc(codeArg: string | undefined, opts: ConnectOptions):
   const firstSetup = !existsSync(path.join(ctx.home, 'policy.json'));
   if (!policy.observedInstructions && (ask_ || firstSetup)) {
     const on = ask_
-      ? await confirm('Send messages from your phone to chats you start on this PC (VS Code, terminal)?', true)
+      ? await confirm(
+          'Send messages from your phone to chats you start on this PC (VS Code, terminal)?',
+          true,
+        )
       : true;
     // Idle chats run the message at once instead of waiting for your next turn on the PC.
     if (on) Object.assign(policy, { observedInstructions: true, wakeIdle: true });

@@ -8,11 +8,12 @@ import {
   SessionResponse,
   WorkerListResponse,
   type AgentEventDto,
+  type BackendToWeb,
 } from '@pocket-agent/protocol';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 import { apiRequest } from '@/lib/api';
-import { useLiveRefresh } from '@/lib/live';
+import { useLiveRefresh, useLiveState } from '@/lib/live';
 import { usePoll } from '@/lib/query';
 
 /**
@@ -34,6 +35,15 @@ export function useDevices() {
   return poll;
 }
 
+/**
+ * What changes a chat's row or header: its status, the PC's, and session-level events (started,
+ * updated task, ended). A plain tool step or output doesn't, so streaming doesn't refetch lists.
+ */
+const sessionChange = (e: BackendToWeb) =>
+  e.eventType === 'agent.status.changed' ||
+  e.eventType === 'device.status.changed' ||
+  (e.eventType === 'agent.event.created' && e.payload.eventType.startsWith('agent.session.'));
+
 /** Chats: the active ones, or all of them. */
 export function useSessions(scope: 'active' | 'all') {
   const fetcher = useCallback(
@@ -42,7 +52,8 @@ export function useSessions(scope: 'active' | 'all') {
     [scope],
   );
   const poll = usePoll(['sessions', scope], fetcher, 30_000);
-  useLiveRefresh(() => void poll.refresh());
+  // The list's times only show minutes: a refresh every few seconds while Claude works is plenty.
+  useLiveRefresh(() => void poll.refresh(), sessionChange, 3000);
   return poll;
 }
 
@@ -56,7 +67,7 @@ export function useSession(id: string) {
   const poll = usePoll(['session', id], fetcher, 30_000);
   useLiveRefresh(
     () => void poll.refresh(),
-    (e) => e.sessionId === id || e.eventType === 'device.status.changed',
+    (e) => (e.sessionId === id || e.eventType === 'device.status.changed') && sessionChange(e),
   );
   return poll;
 }
@@ -139,10 +150,15 @@ export function useEventFeed(path: string) {
     try {
       const page = await apiRequest(`${path}?limit=${PAGE}`, EventPage);
       setEvents((prev) => {
-        const fresh = new Map(page.events.map((e) => [e.id, e]));
+        // Events never change once stored: keep the ones already here, so an unchanged head page
+        // leaves the conversation as it is (nothing is rebuilt or redrawn).
+        const known = new Map(prev.map((e) => [e.id, e]));
+        const head = page.events.map((e) => known.get(e.id) ?? e);
+        const fresh = new Set(head.map((e) => e.id));
         const older = prev.filter((e) => !fresh.has(e.id));
         // Without older pages loaded, the head page is the whole list.
-        return loadedOlder.current ? [...page.events, ...older] : page.events;
+        const next = loadedOlder.current ? [...head, ...older] : head;
+        return next.length === prev.length && next.every((e, i) => e === prev[i]) ? prev : next;
       });
       if (!loadedOlder.current) setCursor(page.nextCursor);
       setStatus('ready');
@@ -180,12 +196,15 @@ export function useEventFeed(path: string) {
 
   useEffect(() => {
     const first = setTimeout(() => void refreshHead(), 0);
-    const poll = setInterval(() => AppState.currentState === 'active' && void refreshHead(), 30_000);
-    return () => {
-      clearTimeout(first);
-      clearInterval(poll);
-    };
+    return () => clearTimeout(first);
   }, [refreshHead]);
+  // While live updates are connected they say when to refresh; otherwise poll.
+  const live = useLiveState() === 'live';
+  useEffect(() => {
+    if (live) return;
+    const poll = setInterval(() => AppState.currentState === 'active' && void refreshHead(), 30_000);
+    return () => clearInterval(poll);
+  }, [live, refreshHead]);
 
   // The oldest event loaded so far: anything older isn't on screen yet.
   const oldestAt = events.length ? events[events.length - 1]!.createdAt : null;
@@ -204,6 +223,7 @@ export function useWorkers() {
     (e) =>
       e.eventType === 'agent.event.created' &&
       /^agent\.(tool\.|worker\.|session\.ended|output)/.test(e.payload.eventType),
+    3000,
   );
   return poll;
 }

@@ -110,7 +110,14 @@ export function commandFrame(c: Command, externalSessionId: string | null) {
             ...(p.resume ? { resume: true } : {}),
             ...(p.attachments?.length ? { attachments: p.attachments } : {}),
           }
-        : { ...base, commandType: c.commandType as 'interrupt' | 'session.stop' };
+        : c.commandType === 'session.configure'
+          ? {
+              ...base,
+              commandType: 'session.configure' as const,
+              ...(p.permissionMode ? { permissionMode: p.permissionMode } : {}),
+              ...(p.model ? { model: p.model } : {}),
+            }
+          : { ...base, commandType: c.commandType as 'interrupt' | 'session.stop' };
   return BackendToAgent.parse(
     createEvent('command.execute', payload, {
       deviceId: c.deviceId,

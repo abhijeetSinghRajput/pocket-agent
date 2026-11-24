@@ -236,6 +236,47 @@ describe('attachments', () => {
     agent.ws.close();
   });
 
+  it('travels with the first message of a new chat (PC agents from 0.1.6)', async () => {
+    const a = await user();
+    const b = await user();
+    const d = await pairDevice(t, a.cookie);
+    const agent = await connectAgent(t, d);
+    const WS = String.raw`C:\work\app`;
+    await t.ctx.prisma.device.update({
+      where: { id: d.deviceId },
+      data: { agentVersion: '0.1.5', projects: [{ name: 'app', path: WS }] },
+    });
+    const mine = await upload(a.cookie);
+    const theirs = await upload(b.cookie);
+    const start = (attachmentIds: string[]) =>
+      post(t, `/devices/${d.deviceId}/sessions`, a.cookie, {
+        projectPath: WS,
+        text: 'Make the page look like this picture',
+        attachmentIds,
+        idempotencyKey: randomUUID(),
+      });
+
+    // An older PC agent can't take them: said plainly, nothing is sent.
+    expect((await start([mine.signed.attachment.id])).json().error).toBe('agent_outdated');
+    await t.ctx.prisma.device.update({ where: { id: d.deviceId }, data: { agentVersion: '0.1.7' } });
+    expect((await start([theirs.signed.attachment.id])).json().error).toBe('attachment_not_found');
+
+    const res = await start([mine.signed.attachment.id]);
+    expect(res.statusCode).toBe(201);
+    expect(CommandResponse.parse(res.json()).command.attachments).toMatchObject([
+      { id: mine.signed.attachment.id, name: 'shot.png' },
+    ]);
+    const frame = await agent.next((m) => m['eventType'] === 'command.execute');
+    expect(frame['payload']).toMatchObject({
+      commandType: 'session.start',
+      attachments: [{ id: mine.signed.attachment.id, name: 'shot.png' }],
+    });
+    // Sent: kept past the sweep of files nobody sent.
+    const row = await t.ctx.prisma.attachment.findUniqueOrThrow({ where: { id: mine.signed.attachment.id } });
+    expect(row.usedAt).not.toBeNull();
+    agent.ws.close();
+  });
+
   it('removes files from storage after 30 days; the preview stays, opening says why it can’t', async () => {
     const a = await user();
     const { signed, publicId } = await upload(a.cookie);

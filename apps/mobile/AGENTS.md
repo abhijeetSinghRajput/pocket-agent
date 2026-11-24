@@ -48,6 +48,7 @@ The native app (Android, iOS) of Pocket Agent. It is a port of the web app (`app
 same screens, the same behaviour and the same words, drawn with native components.
 
 ## Project
+
 - Its own **npm** project (not in the repo's pnpm workspace). Expo SDK 58, React Native 0.88
   (new architecture), Reanimated 4, gesture-handler 3, expo-router 58, React Compiler on.
 - Two shared packages are bundled from source (see `metro.config.js`, `tsconfig.json`):
@@ -58,6 +59,7 @@ same screens, the same behaviour and the same words, drawn with native component
   primitives in `src/ui`, data/theme/motion in `src/lib`.
 
 ## Data
+
 - `apiRequest` (`@/lib/api`) is the only way to call the API (bearer session, validated responses).
 - Use the hooks in `@/lib/data` (`useDevices`, `useSessions`, `useSession`, `useCommands`,
   `useApprovals`, `useNotifications`, `useEventFeed`, `markRead`) and keep their query keys: screens
@@ -65,6 +67,7 @@ same screens, the same behaviour and the same words, drawn with native component
   `useLiveEvents` (`@/lib/live`). The signed-in user: `useUser()`, `useAuth()` (`@/lib/auth`).
 
 ## Look
+
 - Colours only from `useTheme().c` (light and dark follow the phone); `radius`, `fonts`, `alpha()`
   from `@/lib/theme`. No hard-coded colours except white on a coloured fill. No Tailwind.
 - All text through `<T variant tone>` (Geist). Icons: `lucide-react-native`.
@@ -76,6 +79,7 @@ same screens, the same behaviour and the same words, drawn with native component
 - Tab screens use `<Screen>` (it pads for the tab bar, which floats over the content).
 
 ## Motion (this matters: the app should feel smooth and alive, never jumpy)
+
 - Presets in `@/lib/motion`. A group arriving: `entering={enter.rise(i)}` in reading order (the
   index staggers it). One thing appearing: `enter.fade`; a small thing settling in: `enter.pop`;
   leaving: `exit.fade`; neighbours making room when a list changes: `layout={layout}`.
@@ -91,6 +95,7 @@ same screens, the same behaviour and the same words, drawn with native component
 - History that is simply there does not animate; only what arrives or changes does.
 
 ## Rules
+
 - Keyboard: `react-native-keyboard-controller`. Safe areas: `useSafeAreaInsets`.
 - Lists that can be long: `FlashList` (`@shopify/flash-list` v2) or `FlatList`, with pull to refresh.
 - Accessibility roles and labels on controls; `testID` matching the web app's `data-testid`.

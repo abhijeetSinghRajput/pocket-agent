@@ -1,3 +1,4 @@
+import { androidPresentation } from '../src/notifications/push.js';
 import { describe, expect, it } from 'vitest';
 import { yesNoActions } from '../src/notifications/triggers.js';
 
@@ -35,5 +36,39 @@ describe('buttons on a notification: yes/no only', () => {
     const two = { question: 'A?', options: [{ label: 'Yes' }, { label: 'No' }] };
     expect(yesNoActions(question([two, { ...two, question: 'B?' }])).actions).toBeUndefined();
     expect(yesNoActions(question('not json')).actions).toBeUndefined();
+  });
+});
+
+describe('Android push presentation', () => {
+  const base = {
+    title: 'Permission needed · Bash',
+    body: 'deploy on PC. Tap to review.',
+    link: '/approvals',
+    tag: 't',
+  };
+
+  it('a permission request gets the Allow / Deny button set and the urgent channel', () => {
+    const actions = yesNoActions({ id: 'a1', toolName: 'Bash', requestPayload: {} }).actions!;
+    expect(androidPresentation({ ...base, priority: 'critical', actions })).toEqual({
+      message: base.body,
+      channelId: 'approvals',
+      categoryId: 'permission',
+      approvalId: 'a1',
+    });
+  });
+
+  it('anything else is plain text on the default channel', () => {
+    expect(androidPresentation({ ...base, priority: 'normal' })).toEqual({
+      message: base.body,
+      channelId: 'default',
+    });
+    // A yes/no question carries answers: no Allow / Deny set (tapping opens the app).
+    const question = [
+      { id: 'answer-0', title: 'Yes', approvalId: 'q', decision: 'allow' as const, answers: { q: 'Yes' } },
+      { id: 'answer-1', title: 'No', approvalId: 'q', decision: 'allow' as const, answers: { q: 'No' } },
+    ];
+    expect(androidPresentation({ ...base, priority: 'critical', actions: question })).not.toHaveProperty(
+      'categoryId',
+    );
   });
 });

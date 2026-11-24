@@ -271,6 +271,16 @@ describe('reading sessions and activity', () => {
     expect(o.recent[0]!.session?.deviceName).toBe('Test PC');
     s.agent.ws.close();
   });
+
+  it('answers bad query parameters with 400, not 500', async () => {
+    const s = await setup();
+    for (const url of ['/sessions?scope=bogus', '/approvals?status=bogus', '/activity?limit=abc']) {
+      const r = await get(url, s.cookie);
+      expect(r.statusCode, url).toBe(400);
+      expect(r.json(), url).toMatchObject({ error: 'invalid_request' });
+    }
+    s.agent.ws.close();
+  });
 });
 
 describe('retention', () => {

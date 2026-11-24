@@ -34,6 +34,13 @@ const config: ExpoConfig = {
       foregroundImage: './assets/images/adaptive-foreground.png',
     },
     softwareKeyboardLayoutMode: 'resize',
+    // Added by libraries but never used: no microphone, no drawing over other apps, no writing to
+    // shared storage (photos are picked with the system picker).
+    blockedPermissions: [
+      'android.permission.RECORD_AUDIO',
+      'android.permission.SYSTEM_ALERT_WINDOW',
+      'android.permission.WRITE_EXTERNAL_STORAGE',
+    ],
   },
   plugins: [
     'expo-router',
@@ -69,6 +76,8 @@ const config: ExpoConfig = {
       {
         photosPermission: 'Pocket Agent sends the photos you pick to Claude on your PC.',
         cameraPermission: 'Pocket Agent sends the photos you take to Claude on your PC.',
+        // Photos only: never video, so no microphone.
+        microphonePermission: false,
       },
     ],
     // The home-screen widget (Android): Claude usage of your PC.

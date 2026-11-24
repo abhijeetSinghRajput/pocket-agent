@@ -1,4 +1,4 @@
-import type { NotificationPriority } from '@pocket-agent/protocol';
+import { PUSH_PERMISSION_CATEGORY, type NotificationPriority } from '@pocket-agent/protocol';
 import { GoogleAuth } from 'google-auth-library';
 import { readFileSync } from 'node:fs';
 
@@ -26,6 +26,23 @@ export interface PushAction {
 }
 
 export type PushResult = 'ok' | 'invalid_token' | 'error';
+
+/**
+ * How the Android app shows a push (the fields its notification library reads): the text, the
+ * channel (a permission request must get through) and, for Allow / Deny, the button set.
+ */
+export function androidPresentation(m: PushMessage): Record<string, string> {
+  const yesNo =
+    m.actions?.length === 2 &&
+    m.actions[0]!.id === 'allow' &&
+    m.actions[1]!.id === 'deny' &&
+    !m.actions[0]!.answers;
+  return {
+    message: m.body,
+    channelId: m.priority === 'critical' ? 'approvals' : 'default',
+    ...(yesNo ? { categoryId: PUSH_PERMISSION_CATEGORY, approvalId: m.actions![0]!.approvalId } : {}),
+  };
+}
 
 /** Sends one push to one registration: a browser, or (platform `android`) the Android app. */
 export interface PushSender {
@@ -82,18 +99,14 @@ export function createFcmSender(
       const message =
         platform === 'android'
           ? {
-              // The Android app: the system shows it while the app is closed or in the
-              // background; in the foreground the app decides (a toast, or nothing).
+              // The Android app draws it itself (data only, delivered at once with high priority,
+              // even while the app is closed), so a permission request gets Allow / Deny buttons
+              // that answer it without opening the app. In the foreground the app decides.
               token,
-              notification: { title: m.title, body: m.body },
-              data,
+              data: { ...data, ...androidPresentation(m) },
               android: {
                 priority: urgent ? 'HIGH' : 'NORMAL',
                 ttl: m.priority === 'critical' ? '300s' : '3600s',
-                notification: {
-                  channel_id: m.priority === 'critical' ? 'approvals' : 'default',
-                  tag: m.tag,
-                },
               },
             }
           : {

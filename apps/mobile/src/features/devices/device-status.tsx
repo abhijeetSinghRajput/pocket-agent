@@ -1,8 +1,16 @@
 import type { DeviceStatus } from '@pocket-agent/protocol';
+import { Laptop, Monitor, Server } from 'lucide-react-native';
 import { View } from 'react-native';
 import { alpha, radius, useTheme } from '@/lib/theme';
 import { Dot, toneColor, type Tone } from '@/ui/core';
 import { Roll } from '@/ui/feedback';
+
+/** Each PC platform's icon and name. */
+export const PLATFORM = {
+  windows: { icon: Monitor, label: 'Windows' },
+  macos: { icon: Laptop, label: 'macOS' },
+  linux: { icon: Server, label: 'Linux' },
+} as const;
 
 const TONE: Record<DeviceStatus, Tone> = { Online: 'success', Offline: 'muted', Revoked: 'danger' };
 

@@ -33,12 +33,16 @@ test.describe('mobile navigation', () => {
   test('page content is not hidden behind the bottom nav', async ({ page }) => {
     await page.goto('/profile');
     await expect(page.getByTestId('api-status')).toBeVisible(); // the page loaded
-    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-    const navTop = await page.getByTestId('bottom-nav').evaluate((n) => n.getBoundingClientRect().top);
-    const lastBottom = await page
-      .getByRole('button', { name: 'Sign out' })
-      .evaluate((n) => n.getBoundingClientRect().bottom);
-    expect(lastBottom).toBeLessThanOrEqual(navTop);
+    // Cards below keep loading after the first one: scroll to the very end until it stops growing.
+    const gap = async () => {
+      await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+      const navTop = await page.getByTestId('bottom-nav').evaluate((n) => n.getBoundingClientRect().top);
+      const lastBottom = await page
+        .getByRole('button', { name: 'Sign out' })
+        .evaluate((n) => n.getBoundingClientRect().bottom);
+      return navTop - lastBottom;
+    };
+    await expect.poll(gap).toBeGreaterThanOrEqual(0);
   });
 });
 

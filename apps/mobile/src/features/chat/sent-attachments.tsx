@@ -1,9 +1,11 @@
 import {
   AttachmentLinkResponse,
   fileExtension,
+  isPdf,
   isPreviewable,
   type AttachmentRef,
 } from '@pocket-agent/protocol';
+import { fileSize } from '@pocket-agent/core';
 import { Image } from 'expo-image';
 import * as WebBrowser from 'expo-web-browser';
 import { FileText, ImageOff, X } from 'lucide-react-native';
@@ -27,23 +29,31 @@ import { fonts, radius, useTheme } from '@/lib/theme';
 import { Press, T, tap } from '@/ui/core';
 
 /** The same words as the web app's lib/attachments. */
-export const isPdf = (a: { mime: string }) => a.mime === 'application/pdf';
-
-export function fileSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
-  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-}
-
 /** The small preview the server keeps (also after the file itself was removed). Needs the session. */
 export const thumbUrl = (id: string) => `${API_URL}/attachments/${id}/thumb`;
 const thumbSource = (id: string) => ({ uri: thumbUrl(id), headers: authHeaders() });
 
-/** A short-lived link to the original file; throws with the reason if it can't be opened any more. */
-export async function attachmentLink(id: string): Promise<string> {
-  const { url } = await apiRequest(`/attachments/${id}/link`, AttachmentLinkResponse);
+/** Links the server signed, by file: each is valid for 5 minutes; reused for 4. */
+const links = new Map<string, { url: Promise<string>; until: number }>();
+const LINK_REUSE_MS = 4 * 60_000;
+
+/**
+ * A short-lived link to the original file; throws with the reason if it can't be opened any more.
+ * Scrolling a photo out of view and back reuses the link instead of asking for a new one.
+ */
+export function attachmentLink(id: string): Promise<string> {
+  const now = Date.now();
+  const known = links.get(id);
+  if (known && known.until > now) return known.url;
+  const url = apiRequest(`/attachments/${id}/link`, AttachmentLinkResponse).then((r) => r.url);
+  links.set(id, { url, until: now + LINK_REUSE_MS });
+  url.catch(() => links.delete(id));
+  if (links.size > 200) links.delete(links.keys().next().value!);
   return url;
 }
+
+/** The original, cached on the phone by file (each signed link is a different address). */
+const originalSource = (id: string, uri: string) => ({ uri, cacheKey: `attachment-${id}` });
 
 /** Opens the original file in the system browser (PDF viewer, download…). */
 export async function openAttachment(id: string): Promise<void> {
@@ -183,7 +193,7 @@ function SentFile({ file, single, fg }: { file: AttachmentRef; single: boolean; 
           </View>
         ) : (
           <Image
-            source={sharp ? { uri: sharp } : thumbSource(file.id)}
+            source={sharp ? originalSource(file.id, sharp) : thumbSource(file.id)}
             placeholder={sharp ? thumbSource(file.id) : undefined}
             placeholderContentFit="cover"
             recyclingKey={file.id}
@@ -366,7 +376,7 @@ function ImageViewer({ file, open, onClose }: { file: AttachmentRef; open: boole
   if (!mounted) return null;
   const top = insets.top + 56;
   const bottom = insets.bottom + 16;
-  const source = full ? { uri: full } : thumbSource(file.id);
+  const source = full ? originalSource(file.id, full) : thumbSource(file.id);
   return (
     <Modal
       transparent

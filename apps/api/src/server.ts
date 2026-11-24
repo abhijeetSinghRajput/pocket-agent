@@ -4,6 +4,9 @@ import { EnvError, loadEnv } from './env.js';
 import { createPrisma, createRedis } from './infra.js';
 import { createFcmSender } from './notifications/push.js';
 
+/** Hard limit on a graceful shutdown. */
+const SHUTDOWN_DEADLINE_MS = 10_000;
+
 const { version } = createRequire(import.meta.url)('../package.json') as { version: string };
 
 async function main(): Promise<void> {
@@ -45,9 +48,17 @@ async function main(): Promise<void> {
   if (!env.FCM_SERVICE_ACCOUNT_FILE)
     app.log.info('web push not configured (FCM_SERVICE_ACCOUNT_FILE unset); notifications are in-app only');
 
+  let stopping = false;
   const shutdown = async (signal: string) => {
+    if (stopping) return;
+    stopping = true;
     app.log.info({ signal }, 'shutting down');
-    await app.close();
+    // Never hang: if closing stalls, exit anyway.
+    setTimeout(() => {
+      app.log.error('shutdown timed out');
+      process.exit(1);
+    }, SHUTDOWN_DEADLINE_MS).unref();
+    await app.close().catch((err: unknown) => app.log.error({ err }, 'close failed'));
     await Promise.allSettled([prisma.$disconnect(), redis.quit()]);
     process.exit(0);
   };

@@ -18,9 +18,7 @@ type Folder = { name: string; path: string };
 /** A folder being browsed, on one PC. */
 type Place = Folder & { deviceId: string };
 type Listing =
-  | { status: 'loading' }
-  | { status: 'error'; error: string }
-  | { status: 'ready'; data: FolderListResponse };
+  { status: 'loading' } | { status: 'error'; error: string } | { status: 'ready'; data: FolderListResponse };
 
 const usableDevices = (all: DeviceDto[] | null) =>
   (all ?? []).filter((d) => d.status === 'Online' && d.projects.length > 0);
@@ -95,6 +93,12 @@ export function NewChatSheet({ open, onClose }: { open: boolean; onClose: () => 
     <Sheet
       open={open}
       onClose={onClose}
+      // Back goes up one folder, like a file browser; at the top it closes.
+      onBack={() => {
+        if (!here) return false;
+        setTrail((t) => t.slice(0, -1));
+        return true;
+      }}
       title={here ? undefined : 'New chat'}
       description={here ? undefined : 'Pick a folder on your PC. Claude Code starts there.'}
     >
@@ -220,14 +224,24 @@ export function NewChatSheet({ open, onClose }: { open: boolean; onClose: () => 
 }
 
 /** One folder, like a file browser's row: tap to open it. */
-function FolderRow({ folder, index, onPress }: { folder: Folder; index: number; onPress: () => void }) {
+export function FolderRow({
+  folder,
+  index,
+  onPress,
+  hint = 'Shows the folders inside it',
+}: {
+  folder: Folder;
+  index: number;
+  onPress: () => void;
+  hint?: string;
+}) {
   const { c } = useTheme();
   return (
     <Animated.View entering={enter.rise(Math.min(index, 10))}>
       <Press
         accessibilityRole="button"
         accessibilityLabel={`Open ${folder.name}`}
-        accessibilityHint="Shows the folders inside it"
+        accessibilityHint={hint}
         onPress={onPress}
         scale={0.985}
         testID="folder-row"

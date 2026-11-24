@@ -1,6 +1,6 @@
 import { createEvent, NotificationPage, NotificationSettingsDto } from '@pocket-agent/protocol';
 import { randomUUID } from 'node:crypto';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { notify } from '../src/notifications/service.js';
 import { notifyOfflineDevices } from '../src/notifications/triggers.js';
 import {
@@ -144,7 +144,12 @@ describe('notifications', () => {
     expect(perm).toHaveLength(1);
     expect(perm[0]!.title).toBe('Claude is asking you · checkout');
     expect(perm[0]!.body).toBe('Answer it on Test PC.');
+    expect(perm[0]!.readAt).toBeNull();
     expect(await t.ctx.prisma.approval.count({ where: { deviceId: d.deviceId } })).toBe(0);
+
+    // Answered on the PC: Claude works again, and the notification is no longer unread.
+    await agent.send(status(ext, 'Running'));
+    await waitFor(async () => (await list(u.cookie)).unread === 0);
     agent.ws.close();
   });
 
@@ -177,6 +182,8 @@ describe('notifications', () => {
   it('task_completed only for managed sessions or a PC in Away mode', async () => {
     const u = await user();
     const d = await pairDevice(t, u.cookie);
+    // New PCs start in Away mode; this test starts at the desk.
+    await t.ctx.prisma.device.update({ where: { id: d.deviceId }, data: { awayMode: false } });
     const agent = await connectAgent(t, d);
     const turn = async (ext: string) => {
       await agent.send(status(ext, 'Running'));
@@ -318,7 +325,14 @@ describe('notifications', () => {
 
     await setHeartbeat(5 * 60_000);
     await notifyOfflineDevices(ctx);
-    await notifyOfflineDevices(ctx);
+    // Already notified for this episode: skipped without trying to insert again.
+    const create = vi.spyOn(t.ctx.prisma.notification, 'create');
+    try {
+      expect(await notifyOfflineDevices(ctx)).toBe(0);
+      expect(create.mock.calls.filter(([a]) => a.data.userId === u.user.id)).toHaveLength(0);
+    } finally {
+      create.mockRestore();
+    }
     expect(await offline()).toBe(1);
 
     await setHeartbeat(4 * 60_000); // a new episode

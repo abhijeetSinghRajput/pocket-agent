@@ -7,7 +7,7 @@ import { ScrollView, Text, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 import { Markdown } from '@/features/chat/markdown';
 import { duration } from '@/features/sessions/badges';
-import { useSubagent } from '@/lib/data';
+import { useSubagent, useWorkers } from '@/lib/data';
 import { enter } from '@/lib/motion';
 import { fonts, radius, useTheme } from '@/lib/theme';
 import { Button, Dot, Press, T } from '@/ui/core';
@@ -118,6 +118,10 @@ export function AgentDetailScreen({ sessionId, toolUseId }: { sessionId: string;
   const router = useRouter();
   const { c } = useTheme();
   const { state, refresh, refreshing } = useSubagent(sessionId, toolUseId);
+  // Its summary comes with the agent map (already loaded, also while the PC is offline).
+  const summary = useWorkers().state.data?.find(
+    (w) => w.sessionId === sessionId && w.id === toolUseId,
+  )?.summary;
   const openAgent = useOpenAgent(sessionId);
   const data = state.data;
   const items = useMemo(() => (data ? buildChat(data.events, []) : []), [data]);
@@ -168,6 +172,17 @@ export function AgentDetailScreen({ sessionId, toolUseId }: { sessionId: string;
                 In the background
               </T>
             )}
+          </Animated.View>
+        )}
+
+        {/* How it ended, in Claude Code's words: the line the agent map cuts short, in full. */}
+        {summary && (
+          <Animated.View entering={enter.rise(1)}>
+            <Section title="SUMMARY">
+              <T variant="small" selectable testID="agent-summary" style={{ lineHeight: 21 }}>
+                {summary}
+              </T>
+            </Section>
           </Animated.View>
         )}
 

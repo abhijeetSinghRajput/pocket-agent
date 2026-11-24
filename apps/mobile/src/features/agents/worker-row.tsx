@@ -48,6 +48,7 @@ export function WorkerBadge({ status }: { status: WorkerStatus }) {
 function AgentRow({
   title,
   meta,
+  time,
   summary,
   status,
   accessibilityLabel,
@@ -55,6 +56,8 @@ function AgentRow({
 }: {
   title: string;
   meta: string;
+  /** How long it has run, or when it ended: beside its status. */
+  time: string | null;
   summary?: string | null;
   status: WorkerStatus;
   accessibilityLabel: string;
@@ -96,8 +99,19 @@ function AgentRow({
             {summary}
           </T>
         ) : null}
-        <View style={{ flexDirection: 'row', marginTop: 4 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 }}>
           <WorkerBadge status={status} />
+          {time && (
+            <T
+              variant="caption"
+              style={{
+                fontVariant: ['tabular-nums'],
+                color: status === 'running' ? toneColor(c, 'success') : c.mutedForeground,
+              }}
+            >
+              {time}
+            </T>
+          )}
         </View>
       </View>
       <ChevronRight
@@ -116,17 +130,14 @@ const when = (status: WorkerStatus, startedAt: string, endedAt: string | null) =
 /** A background worker of a chat (sub-agent or workflow), as the agent map lists it. */
 export function WorkerRow({ w, onPress }: { w: WorkerDto; onPress: () => void }) {
   const kind = w.kind === 'workflow' ? 'Workflow' : 'Sub-agent';
-  const meta = [
-    w.label && w.label !== w.title ? w.label : kind,
-    w.background ? 'background' : null,
-    when(w.status, w.startedAt, w.finishedAt),
-  ]
+  const meta = [w.label && w.label !== w.title ? w.label : kind, w.background ? 'background' : null]
     .filter(Boolean)
     .join(' · ');
   return (
     <AgentRow
       title={w.title}
       meta={meta}
+      time={when(w.status, w.startedAt, w.finishedAt)}
       summary={w.status === 'running' ? null : w.summary}
       status={w.status}
       accessibilityLabel={`${kind}: ${w.title}, ${STATUS[w.status].label}, in ${w.projectName}. ${w.kind === 'subagent' ? 'Open' : 'Open chat'}`}
@@ -138,17 +149,12 @@ export function WorkerRow({ w, onPress }: { w: WorkerDto; onPress: () => void })
 /** A sub-agent another agent started, as its page lists them. */
 export function SubagentRow({ agent: a, onPress }: { agent: SubagentInfo; onPress: () => void }) {
   const status: WorkerStatus = a.finished ? 'done' : 'running';
-  const meta = [
-    a.type,
-    `${a.toolCalls} tool call${a.toolCalls === 1 ? '' : 's'}`,
-    a.startedAt ? when(status, a.startedAt, a.lastActivityAt) : null,
-  ]
-    .filter(Boolean)
-    .join(' · ');
+  const meta = `${a.type} · ${a.toolCalls} tool call${a.toolCalls === 1 ? '' : 's'}`;
   return (
     <AgentRow
       title={a.description || a.type}
       meta={meta}
+      time={a.startedAt ? when(status, a.startedAt, a.lastActivityAt) : null}
       status={status}
       accessibilityLabel={`${a.type}: ${a.description}, ${STATUS[status].label}. Open`}
       onPress={onPress}

@@ -214,6 +214,14 @@ export const DeviceSettings = defineEvent(
   }),
 );
 /** The PC's answer to `folder.list`: the folders directly inside the one asked about. */
+/**
+ * The PC's answer to `command.withdraw`: whether the message was taken out of its queue before
+ * Claude started on it (it then reports the command Failed with error "withdrawn").
+ */
+export const CommandWithdrawn = defineEvent(
+  'command.withdrawn',
+  z.object({ requestId: z.uuid(), withdrawn: z.boolean() }),
+);
 /** The PC's answer to `agents.read`: the session's sub-agents and the transcript asked for. */
 export const AgentsReadResult = defineEvent(
   'agents.read.result',
@@ -265,6 +273,7 @@ export const AgentToBackend = z.discriminatedUnion('eventType', [
   ApprovalDecisionAck,
   FolderListed,
   AgentsReadResult,
+  CommandWithdrawn,
 ]);
 export type AgentToBackend = z.infer<typeof AgentToBackend>;
 
@@ -371,6 +380,14 @@ export const FolderList = defineEvent(
  * Asks the PC for the sub-agents of the session named in the envelope, and the transcript of the
  * one started by `toolUseId`. Answered with `agents.read.result`; nothing is stored or re-sent.
  */
+/**
+ * Takes a sent message back, if Claude hasn't started on it yet (to edit it in the app).
+ * Answered with `command.withdrawn`.
+ */
+export const CommandWithdraw = defineEvent(
+  'command.withdraw',
+  z.object({ requestId: z.uuid(), commandId: z.string().min(1).max(100) }),
+);
 export const AgentsRead = defineEvent(
   'agents.read',
   z.object({ requestId: z.uuid(), toolUseId: z.string().min(1).max(200) }),
@@ -384,6 +401,7 @@ export const BackendToAgent = z.discriminatedUnion('eventType', [
   ConfigUpdate,
   FolderList,
   AgentsRead,
+  CommandWithdraw,
   Ack,
 ]);
 export type BackendToAgent = z.infer<typeof BackendToAgent>;

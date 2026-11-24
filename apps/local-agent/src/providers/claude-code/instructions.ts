@@ -92,6 +92,21 @@ export class ObservedInstructions {
     this.ack(stop.commandId, 'Completed');
   }
 
+  /**
+   * Takes back a message Claude hasn't started on (to be edited in the app): it leaves the queue
+   * and is reported Failed ("withdrawn"). False when it isn't waiting here.
+   */
+  withdraw(commandId: string): boolean {
+    for (const q of this.queues.values()) {
+      const i = q.findIndex((item) => item.commandId === commandId);
+      if (i < 0) continue;
+      q.splice(i, 1);
+      this.ack(commandId, 'Failed', { error: 'withdrawn' });
+      return true;
+    }
+    return false;
+  }
+
   pending(sessionId: string): number {
     return this.queues.get(sessionId)?.length ?? 0;
   }

@@ -39,6 +39,11 @@ export const CommandDto = z.object({
 export type CommandDto = z.infer<typeof CommandDto>;
 
 export const CommandResponse = z.object({ command: CommandDto });
+
+/** First Local Agent version that can take back a message still waiting in its queue. */
+export const WITHDRAW_AGENT_VERSION = '2.1.0';
+/** The error of a message taken back to be edited: it leaves the chat. */
+export const WITHDRAWN = 'withdrawn';
 export type CommandResponse = z.infer<typeof CommandResponse>;
 
 export const CommandListResponse = z.object({ commands: z.array(CommandDto) });

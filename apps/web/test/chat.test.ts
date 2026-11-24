@@ -489,3 +489,12 @@ describe('turn summary', () => {
     expect(items.filter((i) => i.kind === 'summary')).toHaveLength(1);
   });
 });
+
+describe('a message taken back to be edited', () => {
+  it('leaves the chat', () => {
+    const sent = cmd(1, { text: 'Also run the linter', status: 'Failed', error: 'withdrawn' });
+    const kept = cmd(2, { text: 'Thanks', status: 'Accepted' });
+    const items = buildChat([], [sent, kept]);
+    expect(items.map((i) => (i.kind === 'user' ? i.text : i.kind))).toEqual(['Thanks']);
+  });
+});

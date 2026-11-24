@@ -1,5 +1,5 @@
 import { buildChat, chatMatches, isBusy, pendingQuestion, timeAgo } from '@pocket-agent/core';
-import type { AgentSessionDto } from '@pocket-agent/protocol';
+import { CommandResponse, type AgentSessionDto } from '@pocket-agent/protocol';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import { ArrowLeft, Search } from 'lucide-react-native';
@@ -14,7 +14,7 @@ import { QuestionSheet } from '@/features/approvals/question-sheet';
 import { ChatSearchBar } from '@/features/chat/chat-search';
 import { Composer, EndSessionButton } from '@/features/chat/composer';
 import { useOutbox } from '@/features/chat/outbox';
-import { ChatMessages, RetryContext } from '@/features/chat/messages';
+import { ChatMessages, EditContext, RetryContext } from '@/features/chat/messages';
 import { SessionInfo } from '@/features/chat/session-info';
 import { SessionAvatar } from '@/features/sessions/badges';
 import { markRead, useApprovals, useCommands, useEventFeed, useSession } from '@/lib/data';
@@ -22,7 +22,10 @@ import { chatLink } from '@/lib/links';
 import { foreground, useLiveEvents, useLiveRefresh } from '@/lib/live';
 import { ease, enter } from '@/lib/motion';
 import { alpha, radius, useTheme } from '@/lib/theme';
+import { apiRequest } from '@/lib/api';
+import { getDraft, saveDraft } from '@/lib/drafts';
 import { ConnectionStrip } from '@/ui/connection-strip';
+import { useToast } from '@/ui/toast';
 import { Button, buzz, IconButton, Press, T } from '@/ui/core';
 import { Roll, Skeleton } from '@/ui/feedback';
 
@@ -201,6 +204,7 @@ export function ChatScreen({ id }: { id: string }) {
     (a) => a.sessionId === id && a.toolName !== 'AskUserQuestion',
   );
   const commands = useCommands(id);
+  const toast = useToast();
   const [infoOpen, setInfoOpen] = useState(false);
   // Searching in the chat: what is typed, and which match is shown (null: the newest).
   const [searching, setSearching] = useState(false);
@@ -271,6 +275,45 @@ export function ChatScreen({ id }: { id: string }) {
     items.some((i) => (i.kind === 'assistant' || i.kind === 'tool') && Date.parse(i.at) >= sentAt)
   )
     setSentAt(null);
+
+  /**
+   * Edit a message Claude hasn't started on: it is taken back (it leaves the chat) and its text
+   * goes into the message box, before anything already typed there.
+   */
+  const editWaiting = async (item: {
+    key: string;
+    text: string;
+    command?: { id: string };
+    attachments?: unknown[];
+  }) => {
+    const intoBox = () => {
+      const d = getDraft(id);
+      saveDraft(id, {
+        ...d,
+        text: d.text.trim() ? `${item.text}\n${d.text}` : item.text,
+      });
+    };
+    if (!item.command) {
+      // Never sent: just take it out of the chat.
+      outbox.discard(item.key.replace(/^out-/, ''));
+      intoBox();
+      return;
+    }
+    try {
+      await apiRequest(`/commands/${item.command.id}/withdraw`, CommandResponse, { method: 'POST' });
+      intoBox();
+      buzz(true);
+      void commands.refresh();
+      if (item.attachments?.length)
+        toast({
+          title: 'Attach the files again',
+          body: 'Photos and files sent with it aren’t put back in the box.',
+        });
+    } catch (err) {
+      buzz(false);
+      toast({ title: 'Couldn’t edit it', body: (err as Error).message, tone: 'danger' });
+    }
+  };
 
   // The question being asked is shown below, not also in the conversation.
   const asking = !!question;
@@ -397,33 +440,35 @@ export function ChatScreen({ id }: { id: string }) {
             </View>
           ) : (
             <RetryContext.Provider value={outbox.retry}>
-              <ChatMessages
-                items={shown}
-                search={
-                  searching
-                    ? {
-                        query,
-                        matches: matchSet,
-                        current: shownMatch >= 0 ? matches[shownMatch]! : null,
-                      }
-                    : undefined
-                }
-                typing={typingKind(s) ?? (sending ? 'sending' : null)}
-                bottomInset={dock}
-                jumpKey={jump}
-                header={
-                  feed.hasMore ? (
-                    <Button
-                      label={feed.loadingMore ? 'Loading…' : 'Load older messages'}
-                      variant="outline"
-                      size="sm"
-                      disabled={feed.loadingMore}
-                      onPress={() => void feed.loadMore()}
-                      style={{ alignSelf: 'center', borderRadius: radius.full, marginVertical: 8 }}
-                    />
-                  ) : undefined
-                }
-              />
+              <EditContext.Provider value={editWaiting}>
+                <ChatMessages
+                  items={shown}
+                  search={
+                    searching
+                      ? {
+                          query,
+                          matches: matchSet,
+                          current: shownMatch >= 0 ? matches[shownMatch]! : null,
+                        }
+                      : undefined
+                  }
+                  typing={typingKind(s) ?? (sending ? 'sending' : null)}
+                  bottomInset={dock}
+                  jumpKey={jump}
+                  header={
+                    feed.hasMore ? (
+                      <Button
+                        label={feed.loadingMore ? 'Loading…' : 'Load older messages'}
+                        variant="outline"
+                        size="sm"
+                        disabled={feed.loadingMore}
+                        onPress={() => void feed.loadMore()}
+                        style={{ alignSelf: 'center', borderRadius: radius.full, marginVertical: 8 }}
+                      />
+                    ) : undefined
+                  }
+                />
+              </EditContext.Provider>
             </RetryContext.Provider>
           )}
 

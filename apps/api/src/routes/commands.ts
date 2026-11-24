@@ -20,7 +20,13 @@ import {
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { markUsed, ownedAttachments } from '../attachments/service.js';
-import { createCommand, toCommandDto, type CreateCommandInput, type Services } from '../commands/service.js';
+import {
+  createCommand,
+  toCommandDto,
+  withdrawCommand,
+  type CreateCommandInput,
+  type Services,
+} from '../commands/service.js';
 import { requireTrustedOrigin, requireUser } from '../auth/session.js';
 import { limit } from '../context.js';
 
@@ -221,6 +227,15 @@ export async function commandRoutes(app: FastifyInstance, ctx: Services): Promis
       ...(attachments ? { attachments } : {}),
     });
   }
+
+  /** Takes back a message Claude hasn't started on (to edit it): it leaves the chat. */
+  app.post('/commands/:id/withdraw', opts, async (req, reply) => {
+    const p = IdParam.safeParse(req.params);
+    if (!p.success) return reply.code(404).send({ error: 'not_found' });
+    const r = await withdrawCommand(ctx, req.user!.id, p.data.id);
+    if (!r.ok) return bad(reply, r.error, r.message, r.status);
+    return { command: toCommandDto(r.command) };
+  });
 
   app.post('/sessions/:id/instructions', opts, (req, reply) =>
     sessionCommand(req, reply, 'instruction', SendInstructionRequest),

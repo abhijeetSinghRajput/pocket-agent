@@ -73,6 +73,11 @@ export function useOutbox(on: {
     [post],
   );
 
+  /** Drops a message that could not be sent (it is being edited instead). */
+  const discard = useCallback((key: string) => {
+    setOutgoing((list) => list.filter((x) => !(x.key === key && x.state === 'failed')));
+  }, []);
+
   /**
    * The messages still on their way, as chat items. `known` is the commands the chat lists: a
    * message they include has arrived and is drawn from them instead.
@@ -91,5 +96,5 @@ export function useOutbox(on: {
       }));
   };
 
-  return { outgoing, send, retry, items };
+  return { outgoing, send, retry, discard, items };
 }

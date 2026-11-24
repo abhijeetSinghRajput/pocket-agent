@@ -26,6 +26,7 @@ import {
   Copy as CopyIcon,
   Laptop,
   MessageCircleQuestion,
+  Pencil,
   ShieldAlert,
   Smartphone,
   TextSelect,
@@ -125,17 +126,20 @@ function BubbleMenu({
   text,
   onClose,
   onSelect,
+  onEdit,
 }: {
   anchor: Anchor | null;
   text: string;
   onClose: () => void;
   onSelect: () => void;
+  /** Only for a message still waiting for Claude (or not sent): edit it in the message box. */
+  onEdit?: () => void;
 }) {
   const { c, dark } = useTheme();
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   if (!anchor) return null;
-  const menuHeight = MENU_HEIGHT * 2;
+  const menuHeight = MENU_HEIGHT * (onEdit ? 3 : 2);
   // Above the press when there is room; a tall message that fills the screen gets it on top of
   // its upper part instead, so the menu is always in view.
   const above = anchor.y - menuHeight - 8 > insets.top + 8;
@@ -182,6 +186,31 @@ function BubbleMenu({
           overflow: 'hidden',
         }}
       >
+        {onEdit && (
+          <>
+            <Press
+              accessibilityRole="menuitem"
+              testID="edit-message"
+              onPress={() => {
+                onClose();
+                onEdit();
+              }}
+              scale={1}
+              haptic={false}
+              style={{
+                height: MENU_HEIGHT,
+                paddingHorizontal: 16,
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 12,
+              }}
+            >
+              <Pencil size={18} color={c.foreground} strokeWidth={2} />
+              <T variant="bodyMedium">Edit</T>
+            </Press>
+            <Divider />
+          </>
+        )}
         <Press
           accessibilityRole="menuitem"
           testID="copy-message"
@@ -231,6 +260,12 @@ function BubbleMenu({
  */
 export const RetryContext = createContext<(key: string) => void>(() => undefined);
 
+/**
+ * Edits a message Claude hasn't started on: it is taken back and its text goes into the message
+ * box. Given by the chat around the list (none: no Edit).
+ */
+export const EditContext = createContext<((item: Extract<ChatItem, { kind: 'user' }>) => void) | null>(null);
+
 function UserMessage({ item }: { item: Of<'user'> }) {
   const { c } = useTheme();
   const mark = useMark();
@@ -245,6 +280,9 @@ function UserMessage({ item }: { item: Of<'user'> }) {
   };
   const cmd = item.command;
   const retry = useContext(RetryContext);
+  const editMessage = useContext(EditContext);
+  // Waiting for Claude (or not sent at all): it can still be edited. On its way: not yet.
+  const editable = !!editMessage && isQueued(item) && (!!cmd || item.local === 'failed');
   // Not confirmed yet: a clock, like a message still on its way; not sent: a red mark.
   const tick = cmd
     ? TICK[cmd.status]
@@ -342,6 +380,7 @@ function UserMessage({ item }: { item: Of<'user'> }) {
         text={item.text}
         onClose={() => setMenu(null)}
         onSelect={() => setSelecting(true)}
+        {...(editable ? { onEdit: () => editMessage(item) } : {})}
       />
       <SelectTextSheet text={item.text} open={selecting} onClose={() => setSelecting(false)} />
       {err && (

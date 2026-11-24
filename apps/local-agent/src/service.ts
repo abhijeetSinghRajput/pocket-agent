@@ -176,6 +176,15 @@ export class AgentService {
           this.link.send(createEvent('folder.listed', { requestId, ...r })),
         );
       }
+      if (msg.eventType === 'command.withdraw') {
+        // Take a waiting message back (to edit it in the app), wherever it waits.
+        const { requestId, commandId } = msg.payload;
+        const withdrawn =
+          this.managed.withdraw(commandId) ||
+          this.observed.withdraw(commandId) ||
+          this.wake.withdraw(commandId);
+        this.link.send(createEvent('command.withdrawn', { requestId, withdrawn }));
+      }
       if (msg.eventType === 'agents.read') {
         // A session's sub-agents and one's transcript, for the app's agent map. Read from disk on
         // each ask, never stored.

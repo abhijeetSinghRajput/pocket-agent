@@ -98,6 +98,21 @@ export class IdleWake {
     );
   }
 
+  /**
+   * Takes back a message Claude hasn't started on (to be edited in the app): it leaves the queue
+   * and is reported Failed ("withdrawn"). False when it isn't waiting here.
+   */
+  withdraw(commandId: string): boolean {
+    for (const r of this.running.values()) {
+      const i = r.queue.findIndex((item) => item.commandId === commandId);
+      if (i < 0) continue;
+      r.queue.splice(i, 1);
+      this.ack(commandId, 'Failed', { error: 'withdrawn' });
+      return true;
+    }
+    return false;
+  }
+
   /** Stops the turn running for this session now, and drops what was queued behind it. */
   interrupt(sessionId: string): boolean {
     const r = this.running.get(sessionId);

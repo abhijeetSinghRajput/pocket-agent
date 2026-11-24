@@ -1,7 +1,7 @@
 import type { AgentEventDto, CommandDto } from '@pocket-agent/protocol';
 import { isControl } from './commands.js';
 import { spanText } from './format.js';
-import { AttachmentRefs, type AttachmentRef } from '@pocket-agent/protocol';
+import { AttachmentRefs, WITHDRAWN, type AttachmentRef } from '@pocket-agent/protocol';
 
 type P = Record<string, unknown>;
 const str = (v: unknown) => (typeof v === 'string' ? v : '');
@@ -360,6 +360,8 @@ export function buildChat(events: AgentEventDto[], commands: CommandDto[] = []):
   const claimed = new Set<object>();
   const extra: ChatItem[] = [];
   for (const c of [...commands].sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt))) {
+    // Taken back to be edited: it is in the message box again, not in the chat.
+    if (c.status === 'Failed' && c.error === WITHDRAWN) continue;
     if (isControl(c)) {
       extra.push({ kind: 'control', key: `cmd-${c.id}`, at: c.createdAt, command: c });
       continue;

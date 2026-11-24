@@ -349,6 +349,21 @@ export class ManagedSessions {
     await Promise.all(this.ids().map((id) => this.stop(id)));
   }
 
+  /**
+   * Takes back a message Claude hasn't started on (to be edited in the app): it leaves the queue
+   * and is reported Failed ("withdrawn"). False when it isn't waiting here.
+   */
+  withdraw(commandId: string): boolean {
+    for (const m of this.sessions.values()) {
+      const i = m.inbox.findIndex((item) => item.commandId === commandId);
+      if (i < 0) continue;
+      m.inbox.splice(i, 1);
+      this.ack(commandId, 'Failed', { error: 'withdrawn' });
+      return true;
+    }
+    return false;
+  }
+
   private enqueue(id: string, m: Managed, item: Instruction, ackAccepted: boolean): void {
     m.inbox.push(item);
     if (ackAccepted && item.commandId) this.ack(item.commandId, 'Accepted');

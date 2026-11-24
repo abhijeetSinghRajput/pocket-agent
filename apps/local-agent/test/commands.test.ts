@@ -415,3 +415,26 @@ describe('findConversation', async () => {
     expect(await findConversation(id, config)).toBeNull();
   });
 });
+
+describe('taking a waiting message back (edit it in the app)', () => {
+  it('a message still waiting leaves the queue and is reported withdrawn; others are untouched', () => {
+    const acks: Array<{ id: string; status: string; extra?: Record<string, unknown> }> = [];
+    const ack = (id: string, status: string, extra?: Record<string, unknown>) =>
+      acks.push({ id, status, ...(extra ? { extra } : {}) });
+    const registry = new SessionRegistry(() => undefined);
+    const observed = new ObservedInstructions(registry, ack as never);
+    const later = Date.now() + 60_000;
+    observed.enqueue('s1', { commandId: 'c1', text: 'first', expiresAt: later });
+    observed.enqueue('s1', { commandId: 'c2', text: 'second', expiresAt: later });
+
+    expect(observed.withdraw('c2')).toBe(true);
+    expect(acks.at(-1)).toEqual({ id: 'c2', status: 'Failed', extra: { error: 'withdrawn' } });
+    expect(observed.pending('s1')).toBe(1);
+    // Already gone, or never here: nothing to take back.
+    expect(observed.withdraw('c2')).toBe(false);
+    expect(observed.withdraw('nope')).toBe(false);
+    // Handed to Claude: too late.
+    observed.onToolDone('s1');
+    expect(observed.withdraw('c1')).toBe(false);
+  });
+});

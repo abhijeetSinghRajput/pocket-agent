@@ -10,9 +10,13 @@ import {
   type TurnMode,
   type CommandKind,
   type CommandStatus,
+  versionBelow,
+  WITHDRAW_AGENT_VERSION,
+  WITHDRAWN,
 } from '@pocket-agent/protocol';
 import { redisKey, type AppContext } from '../context.js';
 import { Prisma, type Command } from '../generated/prisma/client.js';
+import { askPc, pcOnline } from '../devices/ask-pc.js';
 import { audit } from '../lib/audit.js';
 import { CHANNELS, notifyUser, type Bus } from '../realtime/bus.js';
 
@@ -303,4 +307,86 @@ export async function resendPending(ctx: Services, deviceId: string): Promise<vo
     orderBy: { createdAt: 'asc' },
   });
   for (const c of pending) await dispatch(ctx, c, c.session?.externalSessionId ?? null);
+}
+
+export type WithdrawResult =
+  { ok: true; command: Command } | { ok: false; status: number; error: string; message: string };
+
+/**
+ * Takes back a message Claude hasn't started on, so it can be edited in the app. Wherever it
+ * waits: on the server (never reached the PC) or in the PC's queue (the PC is asked; it alone
+ * knows whether Claude has picked it up). A taken-back message ends Failed with error "withdrawn",
+ * and leaves the chat.
+ */
+export async function withdrawCommand(ctx: Services, userId: string, id: string): Promise<WithdrawResult> {
+  const c = await ctx.prisma.command.findFirst({ where: { id, userId }, include: { device: true } });
+  if (!c) return { ok: false, status: 404, error: 'not_found', message: 'Not found.' };
+  const started = {
+    ok: false as const,
+    status: 409,
+    error: 'already_started',
+    message: 'Claude already started on it, so it can’t be edited.',
+  };
+  if (c.commandType !== 'instruction' || !['Pending', 'Delivered', 'Accepted'].includes(c.status))
+    return started;
+
+  const fail = async (from: CommandStatus) => {
+    const r = await ctx.prisma.command.updateMany({
+      where: { id: c.id, status: from },
+      data: { status: 'Failed', error: WITHDRAWN, completedAt: ctx.now() },
+    });
+    if (!r.count) return null;
+    const done = await ctx.prisma.command.findUniqueOrThrow({ where: { id: c.id } });
+    await notifyCommand(ctx, done);
+    return done;
+  };
+
+  const online = await pcOnline(ctx, c.device);
+  if (!online) {
+    // Still on the server: it never reached the PC, and won't now.
+    if (c.status === 'Pending') {
+      const done = await fail('Pending');
+      if (done) return { ok: true, command: done };
+    }
+    return {
+      ok: false,
+      status: 409,
+      error: 'device_offline',
+      message: 'Your PC is offline, so this message can’t be taken back right now.',
+    };
+  }
+  if (versionBelow(c.device.agentVersion, WITHDRAW_AGENT_VERSION)) {
+    return {
+      ok: false,
+      status: 409,
+      error: 'agent_outdated',
+      message: `Editing a sent message needs Pocket Agent ${WITHDRAW_AGENT_VERSION} or newer on the PC.`,
+    };
+  }
+  // The PC has every command sent before this question (one ordered connection): ask it.
+  const requestId = crypto.randomUUID();
+  const frame = BackendToAgent.parse(
+    createEvent('command.withdraw', { requestId, commandId: c.id }, { deviceId: c.deviceId }),
+  );
+  const answer = await askPc<{ withdrawn: boolean }>(ctx, c.deviceId, requestId, frame);
+  if (!answer)
+    return {
+      ok: false,
+      status: 504,
+      error: 'pc_no_answer',
+      message: 'Your PC did not answer. Check that Pocket Agent is running on it.',
+    };
+  const now = await ctx.prisma.command.findUniqueOrThrow({ where: { id: c.id } });
+  if (answer.withdrawn) {
+    // The PC reports it too (in order, through its outbox); this makes the answer final now.
+    if (now.status === 'Failed') return { ok: true, command: now };
+    const done = await fail(now.status);
+    return done ? { ok: true, command: done } : started;
+  }
+  // Not on the PC: it never got there, so it can still be stopped here.
+  if (now.status === 'Pending') {
+    const done = await fail('Pending');
+    if (done) return { ok: true, command: done };
+  }
+  return started;
 }

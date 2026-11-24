@@ -444,3 +444,53 @@ describe('switching mode or model mid-task', () => {
     s.agent.ws.close();
   });
 });
+
+describe('taking a waiting message back (edit)', () => {
+  const withdraw = (s: { cookie: string }, id: string) => post(`/commands/${id}/withdraw`, s.cookie, {});
+  async function queued(agentVersion = '2.1.0') {
+    const s = await setup();
+    await t.ctx.prisma.device.update({ where: { id: s.deviceId }, data: { agentVersion } });
+    const res = await instruct(s, 'Also run the linter');
+    const id = CommandResponse.parse(res.json()).command.id;
+    await s.agent.next((m) => m['eventType'] === 'command.execute');
+    await s.agent.send(ackCmd(id, 'Accepted'));
+    return { s, id };
+  }
+  const answer = async (s: Awaited<ReturnType<typeof setup>>, withdrawn: boolean) => {
+    const ask = (await s.agent.next((m) => m['eventType'] === 'command.withdraw')) as {
+      payload: { requestId: string; commandId: string };
+    };
+    s.agent.sendRaw(createEvent('command.withdrawn', { requestId: ask.payload.requestId, withdrawn }));
+    return ask.payload.commandId;
+  };
+
+  it('the PC takes it out of its queue: it ends withdrawn', async () => {
+    const { s, id } = await queued();
+    const pending = withdraw(s, id);
+    expect(await answer(s, true)).toBe(id);
+    const res = await pending;
+    expect(res.statusCode).toBe(200);
+    expect(CommandResponse.parse(res.json()).command).toMatchObject({ status: 'Failed', error: 'withdrawn' });
+    expect(await dbCommand(id)).toMatchObject({ status: 'Failed', error: 'withdrawn' });
+  });
+
+  it('Claude already started on it: nothing changes', async () => {
+    const { s, id } = await queued();
+    const pending = withdraw(s, id);
+    await answer(s, false);
+    const res = await pending;
+    expect(res.statusCode).toBe(409);
+    expect(res.json().error).toBe('already_started');
+    expect((await dbCommand(id)).status).toBe('Accepted');
+  });
+
+  it('an older PC cannot take it back; someone else cannot either', async () => {
+    const { s, id } = await queued('2.0.0');
+    const res = await withdraw(s, id);
+    expect(res.statusCode).toBe(409);
+    expect(res.json().error).toBe('agent_outdated');
+    const other = await createUserWithSession(t.ctx);
+    users.push(other.user.id);
+    expect((await withdraw(other, id)).statusCode).toBe(404);
+  });
+});

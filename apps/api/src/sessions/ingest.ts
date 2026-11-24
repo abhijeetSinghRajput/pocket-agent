@@ -22,7 +22,8 @@ type SessionEvent = Exclude<
       | 'command.ack'
       | 'approval.decision.ack'
       | 'folder.listed'
-      | 'agents.read.result';
+      | 'agents.read.result'
+      | 'command.withdrawn';
   }
 >;
 

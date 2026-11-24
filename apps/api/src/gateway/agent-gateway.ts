@@ -260,7 +260,11 @@ export async function agentGateway(app: FastifyInstance, ctx: GatewayServices): 
           return ack(msg.eventId);
         }
 
-        if (msg.eventType === 'folder.listed' || msg.eventType === 'agents.read.result') {
+        if (
+          msg.eventType === 'folder.listed' ||
+          msg.eventType === 'agents.read.result' ||
+          msg.eventType === 'command.withdrawn'
+        ) {
           // An answer to something the app asked; the request may be waiting on another instance.
           const { requestId, ...answer } = msg.payload;
           await pcAnswered(ctx, requestId, answer);

@@ -123,6 +123,31 @@ describe('notifications', () => {
     tab.ws.close();
   });
 
+  it('a request asked only on the PC still notifies the phone, saying to answer it there', async () => {
+    const u = await user();
+    const d = await pairDevice(t, u.cookie);
+    const agent = await connectAgent(t, d);
+    const ext = `sess-${randomUUID()}`;
+    await agent.send(sessionStarted(ext, { projectName: 'checkout', status: 'Running' }));
+    const requestId = `toolu_${randomUUID()}`;
+    await agent.send(
+      createEvent(
+        'agent.permission.requested',
+        { toolUseId: requestId, toolName: 'AskUserQuestion', input: '{}', requestId },
+        { sessionId: ext },
+      ),
+    );
+    await waitFor(async () =>
+      (await list(u.cookie)).notifications.some((n) => n.category === 'permission_required'),
+    );
+    const perm = (await list(u.cookie)).notifications.filter((n) => n.category === 'permission_required');
+    expect(perm).toHaveLength(1);
+    expect(perm[0]!.title).toBe('Claude is asking you · checkout');
+    expect(perm[0]!.body).toBe('Answer it on Test PC.');
+    expect(await t.ctx.prisma.approval.count({ where: { deviceId: d.deviceId } })).toBe(0);
+    agent.ws.close();
+  });
+
   it('respects category preferences, and agent_started is off by default', async () => {
     const u = await user();
     const s = NotificationSettingsDto.parse((await settings(u.cookie)).json());

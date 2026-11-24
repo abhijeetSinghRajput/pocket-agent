@@ -796,7 +796,7 @@ function PermissionRow({ item, ...join }: { item: Of<'permission'> } & Join) {
           </Text>
         )}
         <T variant="caption" tone="muted" style={{ marginTop: 6 }}>
-          {item.outcome ?? 'Waiting for a decision…'}
+          {item.outcome ?? (item.onPc ? 'Waiting for your answer on the PC' : 'Waiting for a decision…')}
         </T>
       </View>
     </Step>

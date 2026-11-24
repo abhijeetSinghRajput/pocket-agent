@@ -13,6 +13,9 @@ import {
   SessionMode,
 } from './enums.js';
 
+/** At most this many folders are listed when browsing a folder on the PC. */
+export const FOLDER_LIST_MAX = 500;
+
 /** Long tool inputs/outputs are truncated on the PC before they are sent (see architecture §7). */
 export const MAX_TEXT_FIELD = 8 * 1024;
 const text = z.string().max(MAX_TEXT_FIELD);
@@ -197,6 +200,21 @@ export const DeviceSettings = defineEvent(
     usage: ClaudeUsage.nullable().optional(),
   }),
 );
+/** The PC's answer to `folder.list`: the folders directly inside the one asked about. */
+export const FolderListed = defineEvent(
+  'folder.listed',
+  z.object({
+    requestId: z.uuid(),
+    folders: z
+      .array(z.object({ name: z.string().max(260), path: z.string().max(1024) }))
+      .max(FOLDER_LIST_MAX)
+      .default([]),
+    /** More folders were there than were sent. */
+    truncated: z.boolean().default(false),
+    /** Why it could not be listed (e.g. project_not_allowed, folder_not_found). */
+    error: z.string().max(100).optional(),
+  }),
+);
 export const ApprovalDecisionAck = defineEvent(
   'approval.decision.ack',
   z.object({ approvalId: z.uuid(), result: z.enum(['applied', 'stale']) }),
@@ -220,6 +238,7 @@ export const AgentToBackend = z.discriminatedUnion('eventType', [
   CommandAck,
   DeviceSettings,
   ApprovalDecisionAck,
+  FolderListed,
 ]);
 export type AgentToBackend = z.infer<typeof AgentToBackend>;
 
@@ -305,6 +324,14 @@ export const ConfigUpdate = defineEvent(
    */
   z.object({ awayMode: z.boolean() }),
 );
+/**
+ * Asks the PC which folders are directly inside `path` (one of its allowed projects, or a folder
+ * inside one). Answered with `folder.listed`; nothing is stored, so it is never re-sent.
+ */
+export const FolderList = defineEvent(
+  'folder.list',
+  z.object({ requestId: z.uuid(), path: z.string().min(1).max(1024) }),
+);
 export const Ack = defineEvent('ack', z.object({ ackEventId: z.uuid() }));
 
 export const BackendToAgent = z.discriminatedUnion('eventType', [
@@ -312,6 +339,7 @@ export const BackendToAgent = z.discriminatedUnion('eventType', [
   ApprovalDecision,
   DeviceRevoke,
   ConfigUpdate,
+  FolderList,
   Ack,
 ]);
 export type BackendToAgent = z.infer<typeof BackendToAgent>;

@@ -128,6 +128,8 @@ export type ChatItem =
       toolName: string;
       target: string;
       outcome: string | null;
+      /** Asked on the PC only (not held for Pocket Agent): it is answered there. */
+      onPc?: boolean;
     }
   | { kind: 'control'; key: string; at: string; command: CommandDto }
   /** "Thought for 2s": how long Claude thought before its next step (never the thinking itself). */
@@ -263,6 +265,7 @@ export function buildChat(events: AgentEventDto[], commands: CommandDto[] = []):
           toolName: str(p['toolName']) || 'a tool',
           target: toolTarget(p['input']),
           outcome: null as string | null,
+          onPc: p['awaitingRemote'] !== true,
         };
         permissions.set(str(p['requestId']) || e.id, item);
         // Claude's question is shown as the question itself (and answered there), not as a permission.

@@ -97,6 +97,17 @@ export const DeviceDto = z.object({
 });
 export type DeviceDto = z.infer<typeof DeviceDto>;
 
+/** `GET /devices/:id/folders?path=`: the folders directly inside `path` on that PC. */
+export const FolderListResponse = z.object({
+  path: z.string(),
+  folders: z.array(z.object({ name: z.string(), path: z.string() })),
+  truncated: z.boolean(),
+});
+export type FolderListResponse = z.infer<typeof FolderListResponse>;
+
+/** First Local Agent version that can list the folders inside a project (browsing from the app). */
+export const FOLDERS_MIN_AGENT_VERSION = '0.1.7';
+
 export const SetAwayModeRequest = z.object({ awayMode: z.boolean() });
 export type SetAwayModeRequest = z.infer<typeof SetAwayModeRequest>;
 

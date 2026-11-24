@@ -16,7 +16,12 @@ type SessionEvent = Exclude<
   AgentToBackend,
   {
     eventType:
-      'device.connected' | 'device.heartbeat' | 'device.settings' | 'command.ack' | 'approval.decision.ack';
+      | 'device.connected'
+      | 'device.heartbeat'
+      | 'device.settings'
+      | 'command.ack'
+      | 'approval.decision.ack'
+      | 'folder.listed';
   }
 >;
 

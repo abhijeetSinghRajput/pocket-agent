@@ -6,6 +6,7 @@ import { View } from 'react-native';
 import Animated from 'react-native-reanimated';
 import { ApiStatus } from '@/features/profile/api-status';
 import { ClaudeUsageCard } from '@/features/profile/claude-usage';
+import { AwayModeCard } from '@/features/profile/away-mode-card';
 import { NotificationSettings } from '@/features/profile/notification-settings';
 import { setThemePreference, useThemePreference, type ThemePreference } from '@/lib/appearance';
 import { useAuth, useUser } from '@/lib/auth';
@@ -163,6 +164,9 @@ export function ProfileScreen() {
       </Animated.View>
       <Animated.View entering={enter.rise(2)}>
         <AppearanceCard />
+      </Animated.View>
+      <Animated.View entering={enter.rise(3)}>
+        <AwayModeCard />
       </Animated.View>
       <Animated.View entering={enter.rise(3)}>
         <Card style={{ padding: 16 }}>

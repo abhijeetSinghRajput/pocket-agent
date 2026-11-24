@@ -73,7 +73,28 @@ export async function notifyFromEvents(ctx: NotifyServices, events: BackendToWeb
       if (!s) continue;
       const base = { userId: s.device.userId, link: `/agents/${s.id}` };
       const { status, previous } = e.payload;
-      if (status === 'Failed') {
+      if (status === 'WaitingForPermission' && previous !== 'WaitingForPermission') {
+        // Held for Pocket Agent: approval.created already notifies (with Allow / Deny).
+        const held = await ctx.prisma.approval.count({ where: { sessionId: s.id, status: 'Pending' } });
+        if (held) continue;
+        // Asked on the PC only: the phone hears about it too, and is told where to answer.
+        const asked = await ctx.prisma.agentEvent.findFirst({
+          where: { sessionId: s.id, eventType: 'agent.permission.requested' },
+          orderBy: { createdAt: 'desc' },
+          select: { payload: true },
+        });
+        const tool = (asked?.payload as { toolName?: unknown } | undefined)?.toolName;
+        await notify(ctx, {
+          ...base,
+          category: 'permission_required',
+          title:
+            tool === 'AskUserQuestion'
+              ? `Claude is asking you · ${s.projectName}`
+              : `Permission needed · ${typeof tool === 'string' ? tool : s.projectName}`,
+          body: `Answer it on ${s.device.name}.`,
+          dedupeKey: `on-pc:${s.id}:${e.eventId}`,
+        });
+      } else if (status === 'Failed') {
         await notify(ctx, {
           ...base,
           category: 'agent_failed',

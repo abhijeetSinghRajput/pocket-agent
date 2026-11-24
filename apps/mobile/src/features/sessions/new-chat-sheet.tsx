@@ -1,443 +1,260 @@
-import { commandError } from '@pocket-agent/core';
-import {
-  CommandResponse,
-  type CommandDto,
-  type DeviceDto,
-  type TurnEffort,
-  type TurnMode,
-} from '@pocket-agent/protocol';
-import { uuid } from 'expo-modules-core';
+import { FolderListResponse, type DeviceDto } from '@pocket-agent/protocol';
 import { useRouter } from 'expo-router';
-import { Check } from 'lucide-react-native';
-import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
-import { ScrollView, TextInput, useWindowDimensions, View } from 'react-native';
-import Animated, {
-  interpolateColor,
-  useAnimatedStyle,
-  useSharedValue,
-  withTiming,
-} from 'react-native-reanimated';
-import { EFFORT_STEPS } from '@/features/chat/pickers';
+import { ArrowLeft, FolderOpen } from 'lucide-react-native';
+import { useEffect, useRef, useState } from 'react';
+import { ScrollView, useWindowDimensions, View } from 'react-native';
+import Animated from 'react-native-reanimated';
+import { AgentLogo, AGENT_LOGOS } from '@/features/sessions/badges';
 import { apiRequest } from '@/lib/api';
 import { useDevices } from '@/lib/data';
-import { dur, ease } from '@/lib/motion';
-import { fonts, radius, useTheme } from '@/lib/theme';
-import { Button, buzz, Card, Divider, Fade, Press, T, tap, thud } from '@/ui/core';
-import { Notice, Skeleton } from '@/ui/feedback';
-import { Segmented } from '@/ui/form';
+import { enter } from '@/lib/motion';
+import { alpha, fonts, radius, useTheme } from '@/lib/theme';
+import { Button, IconButton, T } from '@/ui/core';
+import { EmptyState, Notice, Skeleton } from '@/ui/feedback';
 import { Sheet } from '@/ui/sheet';
 import { TerminalGuide } from '@/ui/terminal-guide';
 
-/** How Claude Code asks before acting. "Bypass permissions" is never offered here. */
-const MODES: { id: TurnMode; name: string; description: string }[] = [
-  { id: 'default', name: 'Manual', description: 'Asks before each edit' },
-  { id: 'acceptEdits', name: 'Edit automatically', description: 'Edits files without asking' },
-  { id: 'plan', name: 'Plan', description: 'Explores and plans, changes nothing' },
-  { id: 'auto', name: 'Auto', description: 'Safe actions run, risky ones ask' },
-];
+type Folder = { name: string; path: string };
+/** A folder being browsed, on one PC. */
+type Place = Folder & { deviceId: string };
+type Listing = { status: 'loading' } | { status: 'error'; error: string } | { status: 'ready'; data: FolderListResponse };
 
 const usableDevices = (all: DeviceDto[] | null) =>
   (all ?? []).filter((d) => d.status === 'Online' && d.projects.length > 0);
 
-/** Waits (up to a minute) for the PC to start Claude and report the new session. */
-async function waitForSession(command: CommandDto, alive: RefObject<boolean>): Promise<CommandDto> {
-  const deadline = Date.now() + 60_000;
-  while (
-    alive.current &&
-    !command.sessionId &&
-    !['Failed', 'Expired'].includes(command.status) &&
-    Date.now() < deadline
-  ) {
-    await new Promise((r) => setTimeout(r, 1000));
-    command = (await apiRequest(`/commands/${command.id}`, CommandResponse)).command;
-  }
-  return command;
-}
-
-/** Starts a managed session in a folder the PC owner allow-listed, then opens it. */
+/**
+ * New chat: the PCs and the folders their owner allowed. Each folder can be browsed (the folders
+ * inside it, asked of the PC live) or opened in a chat, where the first message starts Claude Code.
+ */
 export function NewChatSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
   const router = useRouter();
-  const { c } = useTheme();
   const { height } = useWindowDimensions();
   const { state, refresh } = useDevices();
-  const [deviceId, setDeviceId] = useState('');
-  const [projectPath, setProjectPath] = useState('');
-  const [model, setModel] = useState('');
-  const [mode, setMode] = useState<TurnMode | ''>('');
-  const [effort, setEffort] = useState<TurnEffort | ''>('');
-  const [text, setText] = useState('');
-  const [phase, setPhase] = useState<'form' | 'starting'>('form');
-  const [error, setError] = useState<string | null>(null);
-  const key = useRef(uuid.v4());
-  const alive = useRef(true);
-  useEffect(() => {
-    alive.current = true;
-    return () => {
-      alive.current = false;
-    };
-  }, []);
+  // Folders browsed into, deepest last. Empty: the PCs and their projects.
+  const [trail, setTrail] = useState<Place[]>([]);
+  const [listing, setListing] = useState<Listing>({ status: 'loading' });
+  // What each folder held when it was last listed: going back shows it at once.
+  const seen = useRef(new Map<string, FolderListResponse>());
+  const here = trail.at(-1);
 
-  // Opening: a clean form, a fresh idempotency key, the PCs as they are now.
+  // Opening: the PCs as they are now, from the top.
   useEffect(() => {
     if (!open) return;
     const t = setTimeout(() => {
-      setPhase('form');
-      setError(null);
-      key.current = uuid.v4();
+      setTrail([]);
+      seen.current.clear();
       void refresh();
     }, 0);
     return () => clearTimeout(t);
   }, [open, refresh]);
 
+  // Browsing into a folder: ask the PC what is inside it.
+  useEffect(() => {
+    if (!here) return;
+    const key = `${here.deviceId}|${here.path}`;
+    let live = true;
+    const t = setTimeout(() => {
+      const known = seen.current.get(key);
+      setListing(known ? { status: 'ready', data: known } : { status: 'loading' });
+      apiRequest(
+        `/devices/${here.deviceId}/folders?path=${encodeURIComponent(here.path)}`,
+        FolderListResponse,
+      )
+        .then((data) => {
+          seen.current.set(key, data);
+          if (live) setListing({ status: 'ready', data });
+        })
+        .catch((err: Error) => {
+          if (live && !known) setListing({ status: 'error', error: err.message });
+        });
+    }, 0);
+    return () => {
+      live = false;
+      clearTimeout(t);
+    };
+  }, [here]);
+
   const devices = state.data;
   const usable = usableDevices(devices);
-  // The first usable PC and its first folder are chosen for you (as on the web); a choice that is
-  // no longer usable (the PC went offline, the folder was removed) falls back the same way.
-  const device = usable.find((d) => d.id === deviceId) ?? usable[0];
-  const project = device?.projects.find((p) => p.path === projectPath) ?? device?.projects[0];
-  const chosenPath = project?.path ?? '';
 
-  const models = device?.models ?? [];
-  // A model the PC no longer offers is never sent.
-  const chosenModel = models.some((m) => m.id === model) ? model : '';
-
-  async function start() {
-    if (!device || !chosenPath || !text.trim() || phase === 'starting') return;
-    setPhase('starting');
-    setError(null);
-    thud();
-    try {
-      let { command } = await apiRequest(`/devices/${device.id}/sessions`, CommandResponse, {
-        method: 'POST',
-        body: {
-          projectPath: chosenPath,
-          text: text.trim(),
-          idempotencyKey: key.current,
-          ...(chosenModel ? { model: chosenModel } : {}),
-          ...(mode ? { permissionMode: mode } : {}),
-          ...(effort ? { effort } : {}),
-        },
-      });
-      command = await waitForSession(command, alive);
-      if (!alive.current) return;
-      if (command.sessionId) {
-        buzz(true);
-        onClose();
-        setText('');
-        setPhase('form');
-        router.push({ pathname: '/chat/[id]', params: { id: command.sessionId } });
-        return;
-      }
-      buzz(false);
-      setError(commandError(command) ?? 'Your PC did not start the session in time.');
-      setPhase('form');
-      key.current = uuid.v4();
-    } catch (err) {
-      if (!alive.current) return;
-      buzz(false);
-      setError((err as Error).message);
-      setPhase('form');
-    }
+  function openInChat(deviceId: string, folder: Folder) {
+    onClose();
+    router.push({ pathname: '/new-chat', params: { deviceId, path: folder.path, name: folder.name } });
   }
+
+  const card = (deviceId: string, f: Folder, i: number) => (
+    <FolderCard
+      key={f.path}
+      folder={f}
+      index={i}
+      onBrowse={() => setTrail((t) => [...t, { ...f, deviceId }])}
+      onOpen={() => openInChat(deviceId, f)}
+    />
+  );
 
   return (
     <Sheet
       open={open}
       onClose={onClose}
-      title="New chat"
-      description="Claude Code starts on your PC, in the project you pick."
-      dismissable={phase !== 'starting'}
+      title={here ? undefined : 'New chat'}
+      description={here ? undefined : 'Pick a folder on your PC. Claude Code starts there.'}
     >
-      <ScrollView
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-        // Edge to edge, so the chip rows can scroll under the sheet's sides instead of being cut.
-        style={{ maxHeight: Math.max(240, height * 0.62), marginHorizontal: -20 }}
-        contentContainerStyle={{ paddingBottom: 8, gap: 16, paddingHorizontal: 20 }}
-      >
-        {devices === null && !state.error && <Skeleton height={160} round={radius.lg} />}
-
-        {devices !== null && usable.length === 0 && (
-          <View testID="no-projects" style={{ gap: 10 }}>
-            <T variant="smallMedium">
-              {devices.some((d) => d.status === 'Online')
-                ? 'Allow a project folder on your PC first:'
-                : 'Your PC is offline. Start Pocket Agent on it, then allow a project folder:'}
+      {here && (
+        <Animated.View
+          key={`head-${here.path}`}
+          entering={enter.fade}
+          style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12, marginLeft: -6 }}
+        >
+          <IconButton
+            icon={ArrowLeft}
+            label="Back"
+            tone="default"
+            onPress={() => setTrail((t) => t.slice(0, -1))}
+            testID="folder-back"
+          />
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <T variant="heading" numberOfLines={1} accessibilityRole="header">
+              {here.name}
             </T>
-            <TerminalGuide
-              steps={[
-                {
-                  command: String.raw`pocket-agent projects add C:\work\my-app`,
-                  output: String.raw`Allowed: C:\work\my-app`,
-                },
-              ]}
-            />
-            <T variant="caption" tone="muted">
-              Use your own folder. Only allowed folders can be opened.
+            <T variant="caption" tone="muted" numberOfLines={1} style={{ fontFamily: fonts.mono }}>
+              {here.path}
             </T>
           </View>
-        )}
-
-        {usable.length > 0 && (
-          <>
-            <Group label="PC">
-              <ChipRow
-                options={usable.map((d) => ({ id: d.id, name: d.name }))}
-                value={device?.id ?? ''}
-                onChange={(id) => {
-                  setDeviceId(id);
-                  setProjectPath(usable.find((d) => d.id === id)?.projects[0]?.path ?? '');
-                }}
-              />
-            </Group>
-            <Group label="Project">
-              <Card>
-                {device?.projects.map((p, i) => {
-                  const selected = p.path === chosenPath;
-                  return (
-                    <View key={p.path}>
-                      {i > 0 && <Divider inset={16} />}
-                      <Press
-                        accessibilityRole="radio"
-                        accessibilityState={{ selected }}
-                        accessibilityLabel={`${p.name} — ${p.path}`}
-                        onPress={() => setProjectPath(p.path)}
-                        scale={0.99}
-                        style={{
-                          flexDirection: 'row',
-                          alignItems: 'center',
-                          gap: 12,
-                          paddingHorizontal: 16,
-                          paddingVertical: 12,
-                        }}
-                      >
-                        <View style={{ flex: 1, minWidth: 0 }}>
-                          <T variant="bodyMedium" numberOfLines={1}>
-                            {p.name}
-                          </T>
-                          <T
-                            variant="caption"
-                            tone="muted"
-                            numberOfLines={1}
-                            style={{ fontFamily: fonts.mono }}
-                          >
-                            {p.path}
-                          </T>
-                        </View>
-                        <Fade visible={selected}>
-                          <Check size={18} color={c.primary} strokeWidth={2.4} />
-                        </Fade>
-                      </Press>
-                    </View>
-                  );
-                })}
-              </Card>
-            </Group>
-            {models.length > 0 && (
-              <>
-                <Group label="Model">
-                  <ChipRow
-                    options={[
-                      { id: '', name: 'Default' },
-                      ...models.map((m) => ({ id: m.id, name: m.name })),
-                    ]}
-                    value={chosenModel}
-                    onChange={setModel}
-                  />
-                  {models.find((m) => m.id === chosenModel)?.description ? (
-                    <T variant="caption" tone="muted">
-                      {models.find((m) => m.id === chosenModel)!.description}
-                    </T>
-                  ) : null}
-                </Group>
-                <Group label="Mode">
-                  <ChipRow
-                    options={[{ id: '', name: 'Default' }, ...MODES]}
-                    value={mode}
-                    onChange={(v) => setMode(v as TurnMode | '')}
-                  />
-                  {MODES.find((m) => m.id === mode) && (
-                    <T variant="caption" tone="muted">
-                      {MODES.find((m) => m.id === mode)!.description}
-                    </T>
-                  )}
-                </Group>
-                <Group label="Effort">
-                  <Segmented
-                    options={EFFORT_STEPS}
-                    value={effort}
-                    onChange={(v) => setEffort(v as TurnEffort | '')}
-                    compact
-                    strong
-                    label="Effort"
-                  />
-                </Group>
-              </>
-            )}
-            <Group label="First instruction">
-              <InstructionBox
-                value={text}
-                onChangeText={setText}
-                placeholder="e.g. Run the test suite and summarise failures"
-                editable={phase !== 'starting'}
-              />
-              <T variant="caption" tone="muted">
-                Anything that needs permission asks you here.
-              </T>
-            </Group>
-            {error && <Notice>{error}</Notice>}
-            <Button
-              label={phase === 'starting' ? 'Starting on your PC…' : 'Start session'}
-              onPress={() => void start()}
-              loading={phase === 'starting'}
-              disabled={!text.trim()}
-              style={{ alignSelf: 'flex-end' }}
-              testID="start-session"
+        </Animated.View>
+      )}
+      <ScrollView
+        key={here?.path ?? 'top'}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+        style={{ maxHeight: Math.max(260, height * 0.66) }}
+        contentContainerStyle={{ paddingBottom: 8, gap: 10 }}
+      >
+        {here ? (
+          listing.status === 'loading' ? (
+            <>
+              <Skeleton height={112} round={radius.xl} />
+              <Skeleton height={112} round={radius.xl} />
+            </>
+          ) : listing.status === 'error' ? (
+            <Notice>{listing.error}</Notice>
+          ) : listing.data.folders.length === 0 ? (
+            <EmptyState
+              icon={FolderOpen}
+              title="No folders inside"
+              body="Open this folder in a chat, or go back."
             />
+          ) : (
+            <>
+              {listing.data.folders.map((f, i) => card(here.deviceId, f, i))}
+              {listing.data.truncated && (
+                <T variant="caption" tone="muted" center>
+                  Only the first {listing.data.folders.length} folders are shown.
+                </T>
+              )}
+            </>
+          )
+        ) : (
+          <>
+            {devices === null && !state.error && <Skeleton height={112} round={radius.xl} />}
+            {devices === null && state.error && <Notice>{state.error}</Notice>}
+
+            {devices !== null && usable.length === 0 && (
+              <View testID="no-projects" style={{ gap: 10 }}>
+                <T variant="smallMedium">
+                  {devices.some((d) => d.status === 'Online')
+                    ? 'Allow a project folder on your PC first:'
+                    : 'Your PC is offline. Start Pocket Agent on it, then allow a project folder:'}
+                </T>
+                <TerminalGuide
+                  steps={[
+                    {
+                      command: String.raw`pocket-agent projects add C:\work\my-app`,
+                      output: String.raw`Allowed: C:\work\my-app`,
+                    },
+                  ]}
+                />
+                <T variant="caption" tone="muted">
+                  Use your own folder. Only allowed folders can be opened.
+                </T>
+              </View>
+            )}
+
+            {usable.map((d) => (
+              <View key={d.id} style={{ gap: 10 }}>
+                <T variant="smallMedium" tone="muted" style={{ marginTop: 4 }}>
+                  {d.name}
+                </T>
+                {d.projects.map((p, i) => card(d.id, p, i))}
+              </View>
+            ))}
           </>
         )}
-
-        {devices === null && state.error && <Notice>{state.error}</Notice>}
       </ScrollView>
     </Sheet>
   );
 }
 
-function Group({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <View style={{ gap: 8 }}>
-      <T variant="smallMedium">{label}</T>
-      {children}
-    </View>
-  );
-}
-
-/** One row of choices to pick one from; the chosen one warms to the accent. */
-function ChipRow({
-  options,
-  value,
-  onChange,
+/** One folder: who works in it, where it is, and the two ways in. */
+function FolderCard({
+  folder,
+  index,
+  onBrowse,
+  onOpen,
 }: {
-  options: { id: string; name: string }[];
-  value: string;
-  onChange: (id: string) => void;
-}) {
-  return (
-    <ScrollView
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      keyboardShouldPersistTaps="handled"
-      accessibilityRole="radiogroup"
-      // Runs to the sheet's edges: padding on the content, not the view (that would clip it).
-      contentContainerStyle={{ gap: 8, paddingHorizontal: 20 }}
-      style={{ marginHorizontal: -20 }}
-    >
-      {options.map((o) => (
-        <Chip
-          key={o.id || 'default'}
-          label={o.name}
-          selected={o.id === value}
-          onPress={() => onChange(o.id)}
-        />
-      ))}
-    </ScrollView>
-  );
-}
-
-function Chip({ label, selected, onPress }: { label: string; selected: boolean; onPress: () => void }) {
-  const { c } = useTheme();
-  const on = useSharedValue(selected ? 1 : 0);
-  useEffect(() => {
-    on.set(withTiming(selected ? 1 : 0, { duration: dur.quick, easing: ease.out }));
-  }, [selected, on]);
-  const fill = useAnimatedStyle(() => ({
-    backgroundColor: interpolateColor(on.value, [0, 1], [c.muted, c.primary]),
-  }));
-  return (
-    <Press
-      accessibilityRole="radio"
-      accessibilityState={{ checked: selected }}
-      accessibilityLabel={label}
-      haptic={false}
-      onPress={() => {
-        if (!selected) tap();
-        onPress();
-      }}
-      scale={0.95}
-      dim={false}
-    >
-      <Animated.View
-        style={[
-          { height: 34, paddingHorizontal: 14, borderRadius: radius.full, justifyContent: 'center' },
-          fill,
-        ]}
-      >
-        <T
-          variant="smallMedium"
-          style={{ color: selected ? c.primaryForeground : c.foreground }}
-          numberOfLines={1}
-        >
-          {label}
-        </T>
-      </Animated.View>
-    </Press>
-  );
-}
-
-/** The first message: a few lines tall, grows with what is typed; the border warms while focused. */
-function InstructionBox({
-  value,
-  onChangeText,
-  placeholder,
-  editable,
-}: {
-  value: string;
-  onChangeText: (next: string) => void;
-  placeholder: string;
-  editable: boolean;
+  folder: Folder;
+  index: number;
+  onBrowse: () => void;
+  onOpen: () => void;
 }) {
   const { c } = useTheme();
-  const focus = useSharedValue(0);
-  const border = useAnimatedStyle(() => ({
-    borderColor: interpolateColor(focus.value, [0, 1], [c.input, c.primary]),
-  }));
+  const logo = AGENT_LOGOS['claude-code'];
   return (
     <Animated.View
-      style={[
-        {
-          borderRadius: radius.lg,
-          borderWidth: 1.5,
-          backgroundColor: c.card,
-          paddingHorizontal: 14,
-          paddingVertical: 10,
-        },
-        border,
-      ]}
+      entering={enter.rise(index)}
+      testID="folder-card"
+      style={{ backgroundColor: c.muted, borderRadius: radius.xl, padding: 14, gap: 12 }}
     >
-      <TextInput
-        value={value}
-        onChangeText={onChangeText}
-        placeholder={placeholder}
-        placeholderTextColor={c.mutedForeground}
-        selectionColor={c.primary}
-        multiline
-        maxLength={20_000}
-        editable={editable}
-        accessibilityLabel="First instruction"
-        testID="ns-text"
-        onFocus={() => focus.set(withTiming(1, { duration: dur.quick, easing: ease.out }))}
-        onBlur={() => focus.set(withTiming(0, { duration: dur.quick, easing: ease.out }))}
-        style={{
-          minHeight: 72,
-          maxHeight: 180,
-          fontFamily: fonts.regular,
-          fontSize: 16,
-          lineHeight: 22,
-          color: c.foreground,
-          paddingVertical: 0,
-          textAlignVertical: 'top',
-        }}
-      />
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+        <View
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
+          style={{
+            width: 44,
+            height: 44,
+            borderRadius: 22,
+            backgroundColor: alpha(logo.hex, 0.14),
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <AgentLogo provider="claude-code" size={24} />
+        </View>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <T variant="bodyMedium" numberOfLines={1}>
+            {folder.name}
+          </T>
+          <T variant="caption" tone="muted" numberOfLines={1} style={{ fontFamily: fonts.mono }}>
+            {folder.path}
+          </T>
+        </View>
+      </View>
+      <View style={{ flexDirection: 'row', gap: 8 }}>
+        <Button
+          label="Browse folder"
+          variant="outline"
+          size="sm"
+          onPress={onBrowse}
+          style={{ flex: 1, borderRadius: radius.full, backgroundColor: c.card }}
+          testID="browse-folder"
+        />
+        <Button
+          label="Open in chat"
+          size="sm"
+          onPress={onOpen}
+          style={{ flex: 1, borderRadius: radius.full }}
+          testID="open-in-chat"
+        />
+      </View>
     </Animated.View>
   );
 }

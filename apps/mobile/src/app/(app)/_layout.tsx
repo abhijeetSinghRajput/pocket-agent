@@ -18,6 +18,7 @@ export default function AppLayout() {
         <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: c.background } }}>
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="chat/[id]" options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="new-chat" options={{ animation: 'slide_from_right' }} />
         </Stack>
         <InAppToasts />
         <ApprovalPrompt />

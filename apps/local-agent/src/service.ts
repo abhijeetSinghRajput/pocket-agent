@@ -3,6 +3,7 @@ import path from 'node:path';
 import { ApprovalBroker } from './approvals.js';
 import { CommandRouter, type FullAck } from './command-router.js';
 import { isHelperSession } from './providers/claude-code/helper-sessions.js';
+import { listFolders } from './folders.js';
 import { IngestServer } from './ingest-server.js';
 import { AgentLink, type LinkEvents } from './link.js';
 import { Outbox } from './outbox.js';
@@ -167,6 +168,13 @@ export class AgentService {
     this.link.on('message', (msg) => {
       if (msg.eventType === 'ack') this.outbox.ack(msg.payload.ackEventId);
       if (msg.eventType === 'command.execute') void this.router.handle(msg);
+      if (msg.eventType === 'folder.list') {
+        // Answered straight away and never stored: a lost answer is just asked again.
+        const { requestId, path: folder } = msg.payload;
+        void listFolders(this.policy, folder).then((r) =>
+          this.link.send(createEvent('folder.listed', { requestId, ...r })),
+        );
+      }
       if (msg.eventType === 'config.update' && msg.payload.awayMode !== this.awayMode) {
         this.awayMode = msg.payload.awayMode;
         opts.log(

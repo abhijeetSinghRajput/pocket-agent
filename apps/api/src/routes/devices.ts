@@ -1,5 +1,8 @@
 import {
+  BackendToAgent,
   createEvent,
+  FOLDERS_MIN_AGENT_VERSION,
+  isWithinFolder,
   PAIRING_CODE_TTL_MS,
   ClaudeUsage,
   ModelOption,
@@ -11,8 +14,10 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { authenticateDevice } from '../auth/device-auth.js';
 import { requireTrustedOrigin, requireUser } from '../auth/session.js';
-import { limit, type AppContext } from '../context.js';
-import { notifyUser, type Bus } from '../realtime/bus.js';
+import { limit, redisKey, type AppContext } from '../context.js';
+import { CHANNELS, notifyUser, type Bus } from '../realtime/bus.js';
+import { versionBelow } from './commands.js';
+import { FOLDER_LIST_WAIT_MS, folderReplyKey } from '../devices/folders.js';
 import { publishRevocation } from '../gateway/agent-gateway.js';
 import type { Device } from '../generated/prisma/client.js';
 import { audit } from '../lib/audit.js';
@@ -20,6 +25,14 @@ import { generatePairingCode, normalizePairingCode, randomToken, sha256 } from '
 
 const MAX_ACTIVE_PAIRING_CODES = 5;
 const DeviceIdParam = z.object({ id: z.uuid() });
+const FolderQuery = z.object({ path: z.string().trim().min(1).max(1024) });
+const FOLDER_POLL_MS = 120;
+
+const FOLDER_ERRORS: Record<string, string> = {
+  project_not_allowed: 'That folder is not on this PC’s project list.',
+  folder_not_found: 'That folder is no longer on your PC.',
+  folder_unreadable: 'Your PC could not open that folder.',
+};
 
 export function toDeviceDto(d: Device): DeviceDto {
   return {
@@ -131,6 +144,65 @@ export async function deviceRoutes(app: FastifyInstance, ctx: AppContext & { bus
       ),
     );
     return { device: toDeviceDto(revoked) };
+  });
+
+  /**
+   * The folders directly inside `path` (an allowed project, or a folder inside one) on this PC,
+   * asked of the PC live. Only folder names travel; the PC checks the path against its own list.
+   */
+  app.get('/devices/:id/folders', { preHandler: user, config: limit(ctx, 60) }, async (req, reply) => {
+    const params = DeviceIdParam.safeParse(req.params);
+    if (!params.success) return reply.code(404).send({ error: 'not_found' });
+    const query = FolderQuery.safeParse(req.query);
+    if (!query.success) return reply.code(400).send({ error: 'invalid_request', message: 'Which folder?' });
+    const device = await ctx.prisma.device.findFirst({
+      where: { id: params.data.id, userId: req.user!.id },
+    });
+    if (!device) return reply.code(404).send({ error: 'not_found' });
+    const fail = (code: number, error: string, message: string) =>
+      reply.code(code).send({ error, message });
+    if (device.revokedAt) return fail(409, 'device_revoked', 'This device was revoked.');
+    const dto = toDeviceDto(device);
+    if (!dto.projects.some((p) => isWithinFolder(query.data.path, p.path)))
+      return fail(400, 'project_not_allowed', FOLDER_ERRORS.project_not_allowed!);
+    if (versionBelow(device.agentVersion, FOLDERS_MIN_AGENT_VERSION))
+      return fail(
+        409,
+        'agent_outdated',
+        `Browsing folders needs Pocket Agent ${FOLDERS_MIN_AGENT_VERSION} or newer on the PC. Run \`pocket-agent update\` there.`,
+      );
+    const online =
+      device.status === 'Online' &&
+      (await ctx.redis.exists(redisKey(ctx, 'presence', device.id)).catch(() => 0)) === 1;
+    if (!online) return fail(409, 'device_offline', 'Your PC is offline. Start Pocket Agent on it.');
+
+    const requestId = crypto.randomUUID();
+    const frame = BackendToAgent.parse(
+      createEvent('folder.list', { requestId, path: query.data.path }, { deviceId: device.id }),
+    );
+    await ctx.bus.publish(CHANNELS.agentCommands, JSON.stringify({ deviceId: device.id, frame }));
+
+    const key = folderReplyKey(ctx, requestId);
+    const deadline = Date.now() + FOLDER_LIST_WAIT_MS;
+    while (Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, FOLDER_POLL_MS));
+      const raw = await ctx.redis.get(key);
+      if (!raw) continue;
+      await ctx.redis.del(key).catch(() => undefined);
+      const answer = JSON.parse(raw) as {
+        folders: Array<{ name: string; path: string }>;
+        truncated: boolean;
+        error?: string;
+      };
+      if (answer.error)
+        return fail(
+          answer.error === 'project_not_allowed' ? 400 : 404,
+          answer.error,
+          FOLDER_ERRORS[answer.error] ?? 'Your PC could not list that folder.',
+        );
+      return { path: query.data.path, folders: answer.folders, truncated: answer.truncated };
+    }
+    return fail(504, 'pc_no_answer', 'Your PC did not answer. Check that Pocket Agent is running on it.');
   });
 }
 

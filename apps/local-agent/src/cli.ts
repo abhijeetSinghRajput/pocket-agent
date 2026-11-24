@@ -313,6 +313,22 @@ async function connectThisPc(codeArg: string | undefined, opts: ConnectOptions):
     'Phone approvals',
     policy.remoteApproval ? 'on' : 'off (turn on later: pocket-agent approvals enable)',
   );
+
+  // Messages from the phone to chats started on this PC (VS Code, terminal). On unless declined:
+  // asked on every setup while off; `--yes` on a first setup turns it on.
+  const firstSetup = !existsSync(path.join(ctx.home, 'policy.json'));
+  if (!policy.observedInstructions && (ask_ || firstSetup)) {
+    const on = ask_
+      ? await confirm('Send messages from your phone to chats you start on this PC (VS Code, terminal)?', true)
+      : true;
+    // Idle chats run the message at once instead of waiting for your next turn on the PC.
+    if (on) Object.assign(policy, { observedInstructions: true, wakeIdle: true });
+  }
+  line(
+    policy.observedInstructions ? 'ok' : 'info',
+    'Phone messages',
+    policy.observedInstructions ? 'on' : 'off (turn on later: pocket-agent instructions wake enable)',
+  );
   const policyChanged = JSON.stringify(policy) !== policyBefore;
   if (policyChanged) await savePolicy(ctx.home, policy);
 

@@ -117,10 +117,10 @@ export const END_TEXT = (s: AgentSessionDto) =>
  * the spot and one turns into the other; it breathes while a request is in flight.
  */
 /** Send and attach share one size and shape. */
-const SEND_SIZE = 36;
-const SEND_RADIUS = radius.lg - 2;
+export const SEND_SIZE = 36;
+export const SEND_RADIUS = radius.lg - 2;
 
-function SendButton({
+export function SendButton({
   stopMode,
   disabled,
   busy,

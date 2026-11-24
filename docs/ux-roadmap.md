@@ -26,7 +26,8 @@ changes), then waits for the owner's go-ahead before the next.
   "Commit this", "Explain what you changed"): one tap sends it.
 - **Voice input**: dictate a message (a mic beside Send, in chats and New chat). It uses the
   phone's own speech service, the one the keyboard's mic uses; the microphone permission is asked
-  the first time and is used only while the mic is on.
+  the first time and is used only while the mic is on. It keeps listening through short pauses and
+  stops after 3 seconds of silence (owner, 2026-11-25).
 
 ## M4 — Clearer feedback
 - **Turn summary card** when Claude finishes: files changed, commands run, duration (built in

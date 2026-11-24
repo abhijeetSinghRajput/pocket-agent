@@ -14,9 +14,13 @@ export function canDictate(): boolean {
   }
 }
 
+/** How long you can be quiet before dictation stops (a breath between sentences doesn't). */
+export const DICTATION_SILENCE_MS = 3000;
+
 /**
  * Dictating into a message box: the words appear as they are heard, after whatever was already
- * typed. Listening ends on its own after a pause, or with a second tap.
+ * typed. It keeps listening through short pauses and stops after 3 seconds of silence, or with a
+ * second tap.
  */
 export function useDictation(text: string, setText: (next: string) => void) {
   const [listening, setListening] = useState(false);
@@ -50,13 +54,17 @@ export function useDictation(text: string, setText: (next: string) => void) {
       );
       return;
     }
-    // Dictated words go after what is already in the box.
-    const before = text.trimEnd();
-    const join = (heard: string) => (before && heard ? `${before} ${heard}` : before || heard);
+    // Dictated words go after what is already in the box; each finished phrase is kept, and the
+    // phrase being spoken shows after them.
+    const join = (a: string, b: string) => (a && b ? `${a} ${b}` : a || b);
+    let said = text.trimEnd();
     unsubscribe();
     subs.current = [
-      native.addListener('onPartial', (e) => setText(join(e.text))),
-      native.addListener('onResult', (e) => setText(join(e.text))),
+      native.addListener('onPartial', (e) => setText(join(said, e.text))),
+      native.addListener('onResult', (e) => {
+        said = join(said, e.text);
+        setText(said);
+      }),
       native.addListener('onError', (e) => setError(e.message)),
       native.addListener('onLevel', (e) => level.set(withTiming(e.level, { duration: 90 }))),
       native.addListener('onEnd', () => {
@@ -68,7 +76,7 @@ export function useDictation(text: string, setText: (next: string) => void) {
     thud();
     setListening(true);
     try {
-      await native.start('');
+      await native.start('', DICTATION_SILENCE_MS);
     } catch (err) {
       unsubscribe();
       setListening(false);

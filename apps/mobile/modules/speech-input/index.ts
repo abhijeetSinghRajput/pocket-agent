@@ -11,7 +11,8 @@ type Events = {
 declare class SpeechInputNative extends NativeModule<Events> {
   isAvailable(): boolean;
   requestPermission(): Promise<{ granted: boolean; canAskAgain: boolean }>;
-  start(language: string): Promise<void>;
+  /** Keeps listening through pauses; ends after `silenceMs` without a word (or `stop`). */
+  start(language: string, silenceMs: number): Promise<void>;
   stop(): Promise<void>;
   cancel(): Promise<void>;
 }

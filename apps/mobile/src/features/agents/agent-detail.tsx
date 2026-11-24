@@ -262,7 +262,7 @@ export function AgentDetailScreen({ sessionId, toolUseId }: { sessionId: string;
           <Animated.View entering={enter.rise(4)}>
             <Section title="RESULT">
               <View style={{ borderRadius: radius.lg, backgroundColor: c.card, padding: 12 }}>
-                <Markdown text={answer.text} />
+                <Markdown text={answer.text} contained />
               </View>
             </Section>
           </Animated.View>

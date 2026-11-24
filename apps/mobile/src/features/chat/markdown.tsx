@@ -1,14 +1,21 @@
 import * as Linking from 'expo-linking';
 import { Check } from 'lucide-react-native';
 import { lexer, type Token, type Tokens } from 'marked';
-import { LinearGradient } from 'expo-linear-gradient';
-import { createContext, Fragment, memo, useContext, useMemo, useRef, useState, type ReactNode } from 'react';
-import { StyleSheet, Text, View, type TextStyle } from 'react-native';
+import {
+  createContext,
+  Fragment,
+  memo,
+  useContext,
+  useMemo,
+  useRef,
+  useState,
+  type ComponentRef,
+  type ReactNode,
+} from 'react';
+import { StyleSheet, Text, useWindowDimensions, View, type TextStyle } from 'react-native';
 import { ScrollView as GHScrollView } from 'react-native-gesture-handler';
-import Animated, { useAnimatedStyle, withTiming } from 'react-native-reanimated';
 import { CodeBlock } from '@/features/chat/code-block';
-import { dur, ease } from '@/lib/motion';
-import { alpha, fonts, radius, useTheme, type Colors } from '@/lib/theme';
+import { alpha, fonts, useTheme, type Colors } from '@/lib/theme';
 import { tap } from '@/ui/core';
 
 /**
@@ -207,13 +214,17 @@ function List({ list, depth }: { list: Tokens.List; depth: number }) {
 }
 
 /** A cell never grows past this; longer text wraps inside it. */
-const CELL_MAX = 240;
-const CELL_MIN = 44;
-const CELL_PAD_X = 12;
-const CELL_TEXT: TextStyle = { fontFamily: fonts.regular, fontSize: 14, lineHeight: 20 };
+const CELL_MAX = 280;
+const CELL_MIN = 48;
+const CELL_PAD_X = 14;
+const CELL_PAD_Y = 12;
+const CELL_TEXT: TextStyle = { fontFamily: fonts.regular, fontSize: 15, lineHeight: 22 };
 
 /** Measured column widths by table source, so a table scrolled back into view lays out at once. */
 const widthCache = new Map<string, number[]>();
+
+/** Whether tables may run to the screen's edges (the chat), or stay inside their box (a card). */
+const BleedContext = createContext(true);
 
 function cellStyle(header: boolean, align: Tokens.TableCell['align'], color: string): TextStyle {
   return {
@@ -225,34 +236,19 @@ function cellStyle(header: boolean, align: Tokens.TableCell['align'], color: str
   };
 }
 
-/** The faded edge on the side of a table that has more to scroll to. */
-function Edge({ side, visible, color }: { side: 'left' | 'right'; visible: boolean; color: string }) {
-  const style = useAnimatedStyle(() => ({
-    opacity: withTiming(visible ? 1 : 0, { duration: dur.quick, easing: ease.out }),
-  }));
-  return (
-    <Animated.View
-      pointerEvents="none"
-      style={[{ position: 'absolute', top: 0, bottom: 0, width: 28, [side]: 0 }, style]}
-    >
-      <LinearGradient
-        colors={side === 'right' ? [alpha(color, 0), color] : [color, alpha(color, 0)]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 0 }}
-        style={{ flex: 1 }}
-      />
-    </Animated.View>
-  );
-}
-
 /**
- * A GFM table. Every cell of a column is as wide as the column's widest cell (measured once,
- * off screen, up to CELL_MAX, past which text wraps), cells follow the column's `:--`/`:-:`/`--:`
- * alignment, and a table wider than the message scrolls sideways inside its frame (a gesture
- * handler scroll view, so a sideways drag goes to the table and an upward one to the chat).
+ * A GFM table, drawn like a document's: no box, a bold header, a hairline between rows. Every cell
+ * of a column is as wide as the column's widest cell (measured once, off screen, up to CELL_MAX,
+ * past which text wraps), and cells follow the column's `:--`/`:-:`/`--:` alignment.
+ *
+ * In the chat it uses the whole screen width: it starts in line with the message's text and
+ * scrolls sideways out to both screen edges (a gesture-handler scroll view, so a sideways drag
+ * goes to the table and an upward one to the chat).
  */
 function Table({ table }: { table: Tokens.Table }) {
   const { c } = useTheme();
+  const bleed = useContext(BleedContext);
+  const { width: screen } = useWindowDimensions();
   const cols = table.header.length;
   const rows = [table.header, ...table.rows];
   // The column widths and the source they were measured for. While a reply streams in, the table
@@ -264,10 +260,9 @@ function Table({ table }: { table: Tokens.Table }) {
   const widths = sized && sized.widths.length === cols ? sized.widths : null;
   const fresh = sized?.raw === table.raw;
   const measured = useRef<{ raw: string; cells: number[][] }>({ raw: '', cells: [] });
-  const [frame, setFrame] = useState(0);
-  // Which ends have more to scroll to (kept as two flags: a scroll only re-renders when one flips).
-  const [atStart, setAtStart] = useState(true);
-  const [atEnd, setAtEnd] = useState(false);
+  // Where the message's text column sits on screen: the table reaches past it to both edges.
+  const box = useRef<ComponentRef<typeof View>>(null);
+  const [gutter, setGutter] = useState<{ left: number; right: number } | null>(null);
 
   const onCell = (r: number, i: number, w: number) => {
     if (measured.current.raw !== table.raw) measured.current = { raw: table.raw, cells: [] };
@@ -284,11 +279,21 @@ function Table({ table }: { table: Tokens.Table }) {
     setSized({ raw: table.raw, widths: next });
   };
 
+  const onBox = () => {
+    if (!bleed) return;
+    box.current?.measureInWindow((x, _y, w) => {
+      const left = Math.max(0, Math.round(x));
+      const right = Math.max(0, Math.round(screen - x - w));
+      setGutter((g) => (g && g.left === left && g.right === right ? g : { left, right }));
+    });
+  };
+
   const total = widths ? widths.reduce((a, b) => a + b, 0) : 0;
-  const scrolls = widths !== null && frame > 0 && total + 1 > frame;
+  // Cells line up with the text; their padding sits outside it, like a document's table.
+  const inset = { left: (gutter?.left ?? 0) - CELL_PAD_X, right: (gutter?.right ?? 0) - CELL_PAD_X };
 
   return (
-    <View>
+    <View ref={box} onLayout={onBox}>
       {/* Off-screen: every cell at its natural width (wrapping past the cap), to size the columns. */}
       {!fresh && (
         <View
@@ -315,64 +320,47 @@ function Table({ table }: { table: Tokens.Table }) {
         </View>
       )}
       {widths && (
-        <View
-          onLayout={(e) => setFrame(e.nativeEvent.layout.width)}
-          style={{
-            width: total + 2,
-            maxWidth: '100%',
-            borderRadius: radius.md,
-            borderWidth: StyleSheet.hairlineWidth,
-            borderColor: c.border,
-            backgroundColor: c.card,
-            overflow: 'hidden',
-          }}
+        <GHScrollView
+          horizontal
+          nestedScrollEnabled
+          directionalLockEnabled
+          bounces={false}
+          overScrollMode="never"
+          showsHorizontalScrollIndicator={false}
+          style={bleed && gutter ? { marginLeft: -gutter.left, marginRight: -gutter.right } : undefined}
+          contentContainerStyle={
+            bleed && gutter
+              ? { paddingLeft: Math.max(0, inset.left), paddingRight: Math.max(0, inset.right) }
+              : undefined
+          }
         >
-          <GHScrollView
-            horizontal
-            nestedScrollEnabled
-            directionalLockEnabled
-            bounces={false}
-            overScrollMode="never"
-            scrollEnabled={scrolls}
-            showsHorizontalScrollIndicator={false}
-            scrollEventThrottle={32}
-            onScroll={(e) => {
-              const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
-              setAtStart(contentOffset.x <= 2);
-              setAtEnd(contentOffset.x + layoutMeasurement.width >= contentSize.width - 2);
-            }}
-          >
-            <View accessibilityRole="grid" style={{ width: total }}>
-              {rows.map((cells, r) => (
-                <View
-                  key={r}
-                  accessibilityRole={r === 0 ? 'header' : undefined}
-                  style={{
-                    flexDirection: 'row',
-                    backgroundColor:
-                      r === 0 ? alpha(c.muted, 0.7) : r % 2 === 0 ? alpha(c.foreground, 0.025) : undefined,
-                    borderBottomWidth: r === rows.length - 1 ? 0 : StyleSheet.hairlineWidth,
-                    borderBottomColor: r === 0 ? c.border : alpha(c.border, 0.7),
-                  }}
-                >
-                  {widths.map((w, i) => (
-                    <Text
-                      key={i}
-                      style={[
-                        cellStyle(r === 0, table.align[i] ?? null, c.foreground),
-                        { width: w, paddingHorizontal: CELL_PAD_X, paddingVertical: 8 },
-                      ]}
-                    >
-                      {cells[i] ? inline(cells[i].tokens, c, `t${r}.${i}.`) : ''}
-                    </Text>
-                  ))}
-                </View>
-              ))}
-            </View>
-          </GHScrollView>
-          <Edge side="left" visible={scrolls && !atStart} color={c.card} />
-          <Edge side="right" visible={scrolls && !atEnd} color={c.card} />
-        </View>
+          <View accessibilityRole="grid" style={{ width: total }}>
+            {rows.map((cells, r) => (
+              <View
+                key={r}
+                accessibilityRole={r === 0 ? 'header' : undefined}
+                style={{
+                  flexDirection: 'row',
+                  borderBottomWidth: r === rows.length - 1 ? 0 : StyleSheet.hairlineWidth,
+                  borderBottomColor: r === 0 ? alpha(c.foreground, 0.28) : c.border,
+                }}
+              >
+                {widths.map((w, i) => (
+                  <Text
+                    key={i}
+                    selectable
+                    style={[
+                      cellStyle(r === 0, table.align[i] ?? null, c.foreground),
+                      { width: w, paddingHorizontal: CELL_PAD_X, paddingVertical: CELL_PAD_Y },
+                    ]}
+                  >
+                    {cells[i] ? inline(cells[i].tokens, c, `t${r}.${i}.`) : ''}
+                  </Text>
+                ))}
+              </View>
+            ))}
+          </View>
+        </GHScrollView>
       )}
     </View>
   );
@@ -446,7 +434,11 @@ function Blocks({ tokens, depth = 0 }: { tokens: Token[]; depth?: number }) {
   return <>{out}</>;
 }
 
-export const Markdown = memo(function Markdown({ text }: { text: string }) {
+/**
+ * Markdown as the chat draws it. `contained` keeps wide content (tables) inside its box, for
+ * Markdown shown in a card; in the chat a table uses the whole screen width.
+ */
+export const Markdown = memo(function Markdown({ text, contained }: { text: string; contained?: boolean }) {
   const tokens = useMemo((): Token[] => {
     try {
       return lexer(text, { gfm: true, breaks: false });
@@ -455,8 +447,10 @@ export const Markdown = memo(function Markdown({ text }: { text: string }) {
     }
   }, [text]);
   return (
-    <View style={{ gap: GAP }}>
-      <Blocks tokens={tokens} />
-    </View>
+    <BleedContext.Provider value={!contained}>
+      <View style={{ gap: GAP }}>
+        <Blocks tokens={tokens} />
+      </View>
+    </BleedContext.Provider>
   );
 });

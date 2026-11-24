@@ -218,7 +218,8 @@ const CELL_MAX = 280;
 const CELL_MIN = 48;
 const CELL_PAD_X = 14;
 const CELL_PAD_Y = 12;
-const CELL_TEXT: TextStyle = { fontFamily: fonts.regular, fontSize: 15, lineHeight: 22 };
+/** Cells read like the message around them (same size and leading). */
+const CELL_TEXT = BODY;
 
 /** Measured column widths by table source, so a table scrolled back into view lays out at once. */
 const widthCache = new Map<string, number[]>();

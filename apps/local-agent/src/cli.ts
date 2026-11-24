@@ -137,7 +137,7 @@ async function pairWithQr(apiUrl: string, name: string): Promise<void> {
     const r = await createPairingRequest(apiUrl, ask);
     const qr = await QRCode.toString(r.link, { type: 'terminal', small: true, errorCorrectionLevel: 'L' });
     console.log(`
-Scan this with the Pocket Agent app (Devices → Scan QR code):
+Scan this with the Pocket Agent app (Devices → Add device → Scan the PC’s QR code):
 
 ${qr}`);
     console.log(`  Check code: ${bold(r.check)}  ${dim('(the app shows the same code)')}`);

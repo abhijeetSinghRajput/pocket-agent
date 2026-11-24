@@ -15,6 +15,10 @@ export interface PushMessage {
   notificationId?: string;
   /** Notifications with the same tag replace each other on the device. */
   tag: string;
+  /** Shown small in the header, beside the app's name (the chat's or the PC's name). */
+  subtitle?: string;
+  /** Notifications of one group stack together (one group per chat). */
+  group?: string;
   priority: NotificationPriority;
   /** Two buttons on the notification, for a yes/no request only (Allow/Deny, or a two-option question). */
   actions?: PushAction[];
@@ -48,6 +52,8 @@ export function androidPresentation(m: PushMessage): Record<string, string> {
   return {
     message: m.body,
     channelId: m.priority === 'critical' ? 'approvals' : 'default',
+    ...(m.subtitle ? { subtitle: m.subtitle } : {}),
+    ...(m.group ? { threadIdentifier: m.group } : {}),
     ...(category ? { categoryId: category, approvalId: m.actions![0]!.approvalId } : {}),
   };
 }
@@ -99,6 +105,7 @@ export function createFcmSender(
         title: m.title,
         body: m.body,
         link: m.link,
+        ...(m.subtitle ? { subtitle: m.subtitle } : {}),
         ...(m.notificationId ? { notificationId: m.notificationId } : {}),
         tag: m.tag,
         priority: m.priority,

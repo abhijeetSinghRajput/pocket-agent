@@ -25,16 +25,23 @@ export interface NotifyInput {
   dedupeKey: string;
   /** Buttons for a yes/no request (see `yesNoActions`). */
   actions?: PushAction[];
+  /** What it is about, shown small in the notification's header (the chat's or the PC's name). */
+  subtitle?: string;
+  /** Notifications of one group stack together on the phone (one group per chat). */
+  group?: string;
+  /** A newer notification with the same key replaces the older one on the phone (default: dedupeKey). */
+  replaces?: string;
 }
 
 export function toNotificationDto(n: Notification): NotificationDto {
-  const data = (n.data ?? {}) as { link?: unknown };
+  const data = (n.data ?? {}) as { link?: unknown; subtitle?: unknown };
   return {
     id: n.id,
     category: n.type,
     priority: n.priority as NotificationPriority,
     title: n.title,
     body: n.body,
+    subtitle: typeof data.subtitle === 'string' ? data.subtitle : null,
     link: typeof data.link === 'string' ? data.link : null,
     readAt: n.readAt?.toISOString() ?? null,
     createdAt: n.createdAt.toISOString(),
@@ -79,7 +86,7 @@ export async function notify(ctx: NotifyServices, input: NotifyInput): Promise<N
         priority,
         title: input.title.slice(0, 200),
         body: input.body.slice(0, 500),
-        data: { link: input.link },
+        data: { link: input.link, ...(input.subtitle ? { subtitle: input.subtitle.slice(0, 100) } : {}) },
         dedupeKey: input.dedupeKey,
       },
     });
@@ -106,8 +113,10 @@ export async function notify(ctx: NotifyServices, input: NotifyInput): Promise<N
             body: n.body,
             link: input.link,
             notificationId: n.id,
-            tag: input.dedupeKey.slice(0, 100),
+            tag: (input.replaces ?? input.dedupeKey).slice(0, 100),
             priority,
+            ...(input.subtitle ? { subtitle: input.subtitle.slice(0, 100) } : {}),
+            ...(input.group ? { group: input.group.slice(0, 100) } : {}),
             ...(input.actions?.length ? { actions: input.actions } : {}),
           },
           sub.platform,

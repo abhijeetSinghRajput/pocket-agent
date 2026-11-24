@@ -109,13 +109,20 @@ function Row({
       <IconTile icon={look.icon} size={40} tone={look.tone} />
       <View style={{ flex: 1, minWidth: 0 }}>
         <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 8 }}>
-          <T
-            variant="smallMedium"
-            numberOfLines={1}
-            style={{ flex: 1, fontFamily: unread ? fonts.semibold : fonts.medium }}
-          >
-            {n.title}
-          </T>
+          {n.subtitle ? (
+            // What it is about (the chat), small, with the time: the title reads on its own below.
+            <T variant="caption" tone="muted" numberOfLines={1} style={{ flex: 1 }}>
+              {n.subtitle}
+            </T>
+          ) : (
+            <T
+              variant="smallMedium"
+              numberOfLines={1}
+              style={{ flex: 1, fontFamily: unread ? fonts.semibold : fonts.medium }}
+            >
+              {n.title}
+            </T>
+          )}
           <T
             variant="caption"
             accessibilityLabel={timeAgo(n.createdAt)}
@@ -124,6 +131,15 @@ function Row({
             {shortAgo(n.createdAt)}
           </T>
         </View>
+        {n.subtitle ? (
+          <T
+            variant="smallMedium"
+            numberOfLines={1}
+            style={{ marginTop: 1, fontFamily: unread ? fonts.semibold : fonts.medium }}
+          >
+            {n.title}
+          </T>
+        ) : null}
         <T
           variant="small"
           numberOfLines={2}
@@ -160,7 +176,7 @@ function Row({
       {n.link ? (
         <Press
           accessibilityRole="button"
-          accessibilityLabel={`${unread ? 'Unread. ' : ''}${n.title}. ${n.body}. ${timeAgo(n.createdAt)}`}
+          accessibilityLabel={`${unread ? 'Unread. ' : ''}${n.subtitle ? `${n.subtitle}: ` : ''}${n.title}. ${n.body}. ${timeAgo(n.createdAt)}`}
           accessibilityState={{ selected: unread }}
           testID="notification"
           onPress={() => onOpen(n)}

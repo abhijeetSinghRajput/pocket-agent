@@ -45,6 +45,8 @@ export interface ForegroundPush {
   notificationId: string | null;
   title: string;
   body: string;
+  /** What it is about (the chat's or the PC's name). */
+  subtitle: string | null;
   link: string | null;
   /** A permission request or question (the app already shows those in its own sheet). */
   decision: boolean;
@@ -72,6 +74,7 @@ export function installForegroundHandler(): void {
         notificationId: str(data['notificationId']) || null,
         title: n.request.content.title ?? str(data['title']),
         body: n.request.content.body ?? (str(data['message']) || str(data['body'])),
+        subtitle: str(data['subtitle']) || null,
         link: str(data['link']) || null,
         decision: data['channelId'] === 'approvals',
       };

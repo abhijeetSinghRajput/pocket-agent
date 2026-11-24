@@ -55,6 +55,31 @@ export function yesNoActions(a: { id: string; toolName: string; requestPayload: 
   }
 }
 
+/**
+ * What Claude wants to do, in plain words, for a permission notification. Never the command or
+ * the file itself: a push passes through Google's servers.
+ */
+export function wantsTo(toolName: string, deviceName: string): string {
+  const on = `on ${deviceName}`;
+  switch (toolName) {
+    case 'Bash':
+    case 'PowerShell':
+      return `Wants to run a command ${on}`;
+    case 'Edit':
+    case 'MultiEdit':
+    case 'Write':
+    case 'NotebookEdit':
+      return `Wants to change a file ${on}`;
+    case 'Read':
+      return `Wants to read a file ${on}`;
+    case 'WebFetch':
+    case 'WebSearch':
+      return `Wants to look something up on the web`;
+    default:
+      return `Wants to use ${toolName} ${on}`;
+  }
+}
+
 /** Turns what just happened (browser events from ingest) into notifications. Best effort. */
 export async function notifyFromEvents(ctx: NotifyServices, events: BackendToWeb[]): Promise<void> {
   for (const e of events) {
@@ -64,14 +89,17 @@ export async function notifyFromEvents(ctx: NotifyServices, events: BackendToWeb
         include: { session: true, device: true },
       });
       if (!a) continue;
+      const asking = a.toolName === 'AskUserQuestion';
       await notify(ctx, {
         userId: a.userId,
         category: 'permission_required',
-        // No command text in the push itself (it passes through Google/Apple); the app shows it.
-        title:
-          a.toolName === 'AskUserQuestion' ? 'Claude is asking you' : `Permission needed · ${a.toolName}`,
-        body: `${a.session.projectName} on ${a.device.name}. Tap to review.`,
-        link: a.toolName === 'AskUserQuestion' ? `/agents/${a.sessionId}` : '/approvals',
+        // Plain words, the chat's name in the header; no command text in the push itself (it
+        // passes through Google/Apple), the app shows it.
+        title: asking ? 'Claude has a question' : 'Claude needs your OK',
+        body: asking ? 'Tap to answer.' : wantsTo(a.toolName, a.device.name),
+        subtitle: a.session.projectName,
+        group: a.sessionId,
+        link: asking ? `/agents/${a.sessionId}` : '/approvals',
         dedupeKey: `approval:${a.id}`,
         ...yesNoActions(a),
       });
@@ -84,7 +112,13 @@ export async function notifyFromEvents(ctx: NotifyServices, events: BackendToWeb
         include: { device: true },
       });
       if (!s) continue;
-      const base = { userId: s.device.userId, link: `/agents/${s.id}` };
+      // Each chat's notifications stack together, under its name.
+      const base = {
+        userId: s.device.userId,
+        link: `/agents/${s.id}`,
+        subtitle: s.projectName,
+        group: s.id,
+      };
       const { status, previous } = e.payload;
       // Answered on the PC: its "Answer it on the PC" notification is done with.
       if (previous === 'WaitingForPermission' && status !== 'WaitingForPermission') {
@@ -107,10 +141,7 @@ export async function notifyFromEvents(ctx: NotifyServices, events: BackendToWeb
         await notify(ctx, {
           ...base,
           category: 'permission_required',
-          title:
-            tool === 'AskUserQuestion'
-              ? `Claude is asking you · ${s.projectName}`
-              : `Permission needed · ${typeof tool === 'string' ? tool : s.projectName}`,
+          title: tool === 'AskUserQuestion' ? 'Claude has a question' : 'Claude needs your OK',
           body: `Answer it on ${s.device.name}.`,
           dedupeKey: `on-pc:${s.id}:${e.eventId}`,
         });
@@ -118,9 +149,11 @@ export async function notifyFromEvents(ctx: NotifyServices, events: BackendToWeb
         await notify(ctx, {
           ...base,
           category: 'agent_failed',
-          title: `Agent failed · ${s.projectName}`,
-          body: `A turn ended with an error on ${s.device.name}.`,
+          title: 'Something went wrong',
+          body: `Claude stopped with an error on ${s.device.name}.`,
           dedupeKey: `failed:${s.id}:${e.eventId}`,
+          // Only the latest one per chat stays on the phone.
+          replaces: `failed:${s.id}`,
         });
       } else if (
         status === 'WaitingForInput' &&
@@ -131,15 +164,17 @@ export async function notifyFromEvents(ctx: NotifyServices, events: BackendToWeb
         await notify(ctx, {
           ...base,
           category: 'task_completed',
-          title: `Claude finished · ${s.projectName}`,
-          body: `Waiting for your next instruction on ${s.device.name}.`,
+          title: 'Claude is done',
+          body: 'Waiting for your next message.',
           dedupeKey: `done:${s.id}:${e.eventId}`,
+          // Only the latest one per chat stays on the phone.
+          replaces: `done:${s.id}`,
         });
       } else if (previous === null && status !== 'Stopped') {
         await notify(ctx, {
           ...base,
           category: 'agent_started',
-          title: `Session started · ${s.projectName}`,
+          title: 'New chat started',
           body: `On ${s.device.name}.`,
           dedupeKey: `started:${s.id}`,
         });
@@ -179,8 +214,10 @@ export async function notifyOfflineDevices(ctx: NotifyServices): Promise<number>
     const r = await notify(ctx, {
       userId: d.userId,
       category: 'device_disconnected',
-      title: `PC offline · ${d.name}`,
-      body: 'Pocket Agent lost contact with this PC. Its sessions can’t be reached until it’s back.',
+      title: 'Your PC went offline',
+      body: 'Its chats can’t be reached until it’s back.',
+      subtitle: d.name,
+      group: `device:${d.id}`,
       link: '/devices',
       dedupeKey: keyOf(d),
     });

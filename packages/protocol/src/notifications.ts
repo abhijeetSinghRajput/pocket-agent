@@ -51,6 +51,8 @@ export const NotificationDto = z.object({
   priority: NotificationPriority,
   title: z.string(),
   body: z.string(),
+  /** What it is about, shown small beside it (the chat's or the PC's name). */
+  subtitle: z.string().nullable().default(null),
   /** In-app path to open, e.g. /approvals or /agents/<id>. */
   link: z.string().nullable(),
   readAt: iso.nullable(),

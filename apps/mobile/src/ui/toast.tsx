@@ -20,6 +20,8 @@ import { IconButton, T, tap, toneColor, type Tone } from '@/ui/core';
 export interface ToastInput {
   title: string;
   body?: string;
+  /** What it is about, small above the title (a chat's name). */
+  subtitle?: string | null;
   tone?: Tone;
   /** Runs when the toast is tapped (it also closes). */
   onPress?: () => void;
@@ -173,6 +175,11 @@ function ToastCard({ toast: t, onDismiss }: { toast: ToastItem; onDismiss: () =>
             <Icon size={17} color={color} strokeWidth={2.2} />
           </View>
           <View style={{ flex: 1 }}>
+            {t.subtitle ? (
+              <T variant="caption" tone="muted" numberOfLines={1}>
+                {t.subtitle}
+              </T>
+            ) : null}
             <T variant="smallMedium" numberOfLines={1}>
               {t.title}
             </T>

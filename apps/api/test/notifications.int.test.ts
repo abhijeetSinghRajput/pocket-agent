@@ -105,7 +105,11 @@ describe('notifications', () => {
     expect(page.unread).toBeGreaterThanOrEqual(1);
 
     const msg = sentTo(token)[0]!.message;
-    expect(msg.title).toContain('Bash');
+    // Plain words: what Claude wants, the chat's name in the header, grouped under the chat.
+    expect(msg).toMatchObject({ title: 'Claude needs your OK' });
+    expect(msg.body).toMatch(/^Wants to run a command on /);
+    expect(msg.subtitle).toBeTruthy();
+    expect(msg.group).toBeTruthy();
     expect(JSON.stringify(msg)).not.toContain('npm publish');
     expect(JSON.stringify(msg)).not.toContain('SECRET');
     expect(sentTo(token)).toHaveLength(1);
@@ -142,7 +146,7 @@ describe('notifications', () => {
     );
     const perm = (await list(u.cookie)).notifications.filter((n) => n.category === 'permission_required');
     expect(perm).toHaveLength(1);
-    expect(perm[0]!.title).toBe('Claude is asking you · checkout');
+    expect(perm[0]).toMatchObject({ title: 'Claude has a question', subtitle: 'checkout' });
     expect(perm[0]!.body).toBe('Answer it on Test PC.');
     expect(perm[0]!.readAt).toBeNull();
     expect(await t.ctx.prisma.approval.count({ where: { deviceId: d.deviceId } })).toBe(0);
@@ -199,7 +203,7 @@ describe('notifications', () => {
     await waitFor(async () => (await list(u.cookie)).notifications.length > 0);
     await new Promise((r) => setTimeout(r, 300));
     let done = (await list(u.cookie)).notifications.filter((n) => n.category === 'task_completed');
-    expect(done.map((n) => n.title)).toEqual(['Claude finished · managed-proj']);
+    expect(done.map((n) => [n.title, n.subtitle])).toEqual([['Claude is done', 'managed-proj']]);
 
     await t.ctx.prisma.device.update({ where: { id: d.deviceId }, data: { awayMode: true } });
     await turn(observed);

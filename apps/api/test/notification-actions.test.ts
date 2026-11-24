@@ -1,6 +1,6 @@
 import { androidPresentation } from '../src/notifications/push.js';
 import { describe, expect, it } from 'vitest';
-import { yesNoActions } from '../src/notifications/triggers.js';
+import { wantsTo, yesNoActions } from '../src/notifications/triggers.js';
 
 const question = (questions: unknown) => ({
   id: 'a1',
@@ -41,8 +41,8 @@ describe('buttons on a notification: yes/no only', () => {
 
 describe('Android push presentation', () => {
   const base = {
-    title: 'Permission needed · Bash',
-    body: 'deploy on PC. Tap to review.',
+    title: 'Claude needs your OK',
+    body: 'Wants to run a command on PC',
     link: '/approvals',
     tag: 't',
   };
@@ -75,7 +75,7 @@ describe('Android push presentation', () => {
 
 describe('"Allow for session" on the notification', () => {
   const base = {
-    title: 'Permission needed · Bash',
+    title: 'Claude needs your OK',
     body: 'b',
     link: '/approvals',
     tag: 't',
@@ -96,5 +96,27 @@ describe('"Allow for session" on the notification', () => {
       categoryId: 'permission-session',
       approvalId: 'a2',
     });
+  });
+});
+
+describe('clean notifications', () => {
+  it('the chat name goes in the header line and the chat groups its notifications', () => {
+    expect(
+      androidPresentation({
+        title: 'Claude is done',
+        body: 'Waiting for your next message.',
+        link: '/agents/s1',
+        tag: 'done:s1',
+        priority: 'normal',
+        subtitle: 'pocket_agent',
+        group: 's1',
+      }),
+    ).toMatchObject({ subtitle: 'pocket_agent', threadIdentifier: 's1' });
+  });
+
+  it('says what Claude wants in plain words, never the command itself', () => {
+    expect(wantsTo('Bash', 'PC')).toBe('Wants to run a command on PC');
+    expect(wantsTo('Edit', 'PC')).toBe('Wants to change a file on PC');
+    expect(wantsTo('mcp__github__create_issue', 'PC')).toBe('Wants to use mcp__github__create_issue on PC');
   });
 });

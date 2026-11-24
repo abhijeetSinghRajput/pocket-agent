@@ -47,6 +47,7 @@ function Row({ n, onOpen }: { n: NotificationDto; onOpen: (n: NotificationDto) =
         className={cn('mt-1.5 size-2 shrink-0 rounded-full', unread ? 'bg-primary' : 'bg-transparent')}
       />
       <div className="min-w-0 flex-1">
+        {n.subtitle && <p className="truncate text-xs text-muted-foreground">{n.subtitle}</p>}
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
           <p className={cn('text-sm [overflow-wrap:anywhere]', unread ? 'font-semibold' : 'font-medium')}>
             {n.title}

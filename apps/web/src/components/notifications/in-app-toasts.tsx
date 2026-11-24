@@ -70,6 +70,9 @@ export function InAppToasts() {
               <Bell className="size-4" aria-hidden />
             </span>
             <span className="min-w-0 pt-0.5">
+              {n.subtitle && (
+                <span className="block truncate text-xs text-muted-foreground">{n.subtitle}</span>
+              )}
               <span className="block truncate text-sm font-semibold">{n.title}</span>
               <span className="mt-0.5 line-clamp-2 block text-sm text-muted-foreground">{n.body}</span>
             </span>

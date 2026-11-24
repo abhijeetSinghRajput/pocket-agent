@@ -20,6 +20,7 @@ interface Shown {
   id: string;
   title: string;
   body: string;
+  subtitle: string | null;
   link: string | null;
   /** A permission request or question: the app's own sheet already shows it. */
   decision: boolean;
@@ -43,6 +44,7 @@ export function InAppToasts() {
       key: n.id,
       title: n.title,
       body: n.body,
+      subtitle: n.subtitle,
       onPress: () => {
         void markRead({ ids: [n.id] }).catch(() => undefined);
         if (n.link) router.push(routeForLink(n.link));
@@ -53,7 +55,14 @@ export function InAppToasts() {
   // The push, while the app is open (it arrives even when live updates are down).
   const onPush = useEffectEvent((p: ForegroundPush) => {
     if (p.notificationId)
-      show({ id: p.notificationId, title: p.title, body: p.body, link: p.link, decision: p.decision });
+      show({
+        id: p.notificationId,
+        title: p.title,
+        body: p.body,
+        subtitle: p.subtitle,
+        link: p.link,
+        decision: p.decision,
+      });
   });
   useEffect(() => onForegroundPush(onPush), []);
 
@@ -69,6 +78,7 @@ export function InAppToasts() {
           id: n.id,
           title: n.title,
           body: n.body,
+          subtitle: n.subtitle,
           link: n.link ?? null,
           decision: n.category === 'permission_required',
         });

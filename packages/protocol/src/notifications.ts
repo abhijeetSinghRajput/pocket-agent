@@ -138,3 +138,5 @@ export function isQuietTime(q: QuietHours | null, at: Date): boolean {
  * in the push (`categoryId`), the app registers it under this name.
  */
 export const PUSH_PERMISSION_CATEGORY = 'permission';
+/** The same with a third button, "Allow for session", when the request offers it. */
+export const PUSH_PERMISSION_SESSION_CATEGORY = 'permission-session';

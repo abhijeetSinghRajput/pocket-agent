@@ -72,3 +72,29 @@ describe('Android push presentation', () => {
     );
   });
 });
+
+describe('"Allow for session" on the notification', () => {
+  const base = {
+    title: 'Permission needed · Bash',
+    body: 'b',
+    link: '/approvals',
+    tag: 't',
+    priority: 'critical' as const,
+  };
+
+  it('is the third button only when the PC offered it, with its own button set', () => {
+    const plain = yesNoActions({ id: 'a1', toolName: 'Bash', requestPayload: { input: '{}' } }).actions!;
+    expect(plain.map((a) => a.id)).toEqual(['allow', 'deny']);
+    const offered = yesNoActions({
+      id: 'a2',
+      toolName: 'Bash',
+      requestPayload: { input: '{}', remember: 'Bash(npm test:*)' },
+    }).actions!;
+    expect(offered.map((a) => a.id)).toEqual(['allow', 'deny', 'allow-session']);
+    expect(offered[2]).toMatchObject({ decision: 'allow', remember: true });
+    expect(androidPresentation({ ...base, actions: offered })).toMatchObject({
+      categoryId: 'permission-session',
+      approvalId: 'a2',
+    });
+  });
+});

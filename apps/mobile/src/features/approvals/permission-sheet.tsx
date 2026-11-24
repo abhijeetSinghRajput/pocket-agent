@@ -1,23 +1,21 @@
 import { toolTarget } from '@pocket-agent/core';
 import type { ApprovalDto } from '@pocket-agent/protocol';
-import { useState } from 'react';
 import { useWindowDimensions, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { layout } from '@/lib/motion';
 import { useTheme } from '@/lib/theme';
-import { buzz, T } from '@/ui/core';
+import { T } from '@/ui/core';
 import { Notice } from '@/ui/feedback';
 import { CodeBlock } from '@/ui/code-block';
-import { CountdownInline, DecisionButtons, SentNote, SheetFrame } from './parts';
+import { CountdownInline, PermissionDecision, SheetFrame } from './parts';
 import {
   describeRequest,
   readableInput,
-  sendDecision,
-  sentText,
+  requestPurpose,
   timeoutText,
   useCountdown,
-  type Decision,
+  useDecision,
 } from './shared';
 
 /**
@@ -39,27 +37,10 @@ export function PermissionSheet({
   const { height } = useWindowDimensions();
   const left = useCountdown(approval.expiresAt);
   const expired = left <= 0;
-  const [busy, setBusy] = useState<Decision | null>(null);
-  const [sent, setSent] = useState<Decision | null>(approval.decision);
-  const [error, setError] = useState<string | null>(null);
+  const decision = useDecision(approval, onDone);
   const what = describeRequest(approval.toolName);
   const shown = toolTarget(approval.input) || readableInput(approval.input);
-
-  async function decide(decision: Decision) {
-    setBusy(decision);
-    setError(null);
-    try {
-      await sendDecision(approval.id, { decision });
-      buzz(true);
-      setSent(decision);
-      onDone();
-    } catch (err) {
-      buzz(false);
-      setError((err as Error).message);
-    } finally {
-      setBusy(null);
-    }
-  }
+  const purpose = requestPurpose(approval.input);
 
   return (
     <SheetFrame accent={c.warning} testID="permission-sheet">
@@ -83,6 +64,11 @@ export function PermissionSheet({
         <T variant="small" tone="muted">
           {what.label} · {approval.toolName}
         </T>
+        {purpose && (
+          <T variant="small" style={{ marginTop: 8 }}>
+            {purpose}
+          </T>
+        )}
         {/* Exactly what will run: the decision applies to this, unchanged. */}
         <CodeBlock
           text={shown}
@@ -98,12 +84,8 @@ export function PermissionSheet({
         <T variant="caption" tone="muted">
           {timeoutText(approval.sessionMode)}
         </T>
-        {error && <Notice>{error}</Notice>}
-        {sent ? (
-          <SentNote text={sentText(sent, false)} />
-        ) : (
-          <DecisionButtons busy={busy} disabled={expired} onDecide={(d) => void decide(d)} />
-        )}
+        {decision.error && <Notice>{decision.error}</Notice>}
+        <PermissionDecision approval={approval} decision={decision} expired={expired} />
       </Animated.View>
     </SheetFrame>
   );

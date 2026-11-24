@@ -168,6 +168,7 @@ export async function ingestSessionEvent(
         requestId: msg.payload.requestId,
         toolName: msg.payload.toolName,
         inputSummary: msg.payload.input,
+        ...(msg.payload.remember ? { remember: msg.payload.remember } : {}),
         expiresAt: msg.payload.expiresAt
           ? new Date(msg.payload.expiresAt)
           : new Date(now.getTime() + APPROVAL_WAIT_MS.observed),

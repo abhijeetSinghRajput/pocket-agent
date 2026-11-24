@@ -15,7 +15,8 @@ changes), then waits for the owner's go-ahead before the next.
 ## M2 — Faster permission decisions
 - **Allow for this session**: besides Allow / Deny, allow this kind of action for the rest of the
   session (Claude Code's session permission rules), from the app and the notification.
-- **Context**: the full command, or the file and the change, before deciding.
+- **Context**: the full command and what Claude says it is for. Edits show the file path only: the
+  owner decided code stays on the PC (2026-11-24).
 - **Allow all**: several requests waiting → decide them together.
 
 ## M3 — Fewer taps

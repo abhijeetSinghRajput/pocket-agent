@@ -14,6 +14,8 @@ export const ApprovalDto = z.object({
   toolName: z.string(),
   /** Allow-listed summary of the tool input, as sent by the PC (JSON text). */
   input: z.string(),
+  /** What "Allow for this session" would allow (null: not offered for this request). */
+  remember: z.string().nullable().default(null),
   status: ApprovalStatus,
   /** Set as soon as someone decides; status becomes Approved/Denied once the PC applied it. */
   decision: z.enum(['allow', 'deny']).nullable(),
@@ -45,6 +47,8 @@ export const DecideApprovalRequest = z.object({
   message: z.string().trim().max(500).optional(),
   /** Only with `allow` on an AskUserQuestion request: the answers Claude receives. */
   answers: QuestionAnswers.optional(),
+  /** Only with `allow`, when the request offers it: allow this for the rest of the session. */
+  remember: z.boolean().optional(),
 });
 export type DecideApprovalRequest = z.infer<typeof DecideApprovalRequest>;
 

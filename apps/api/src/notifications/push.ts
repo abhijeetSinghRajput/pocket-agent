@@ -1,4 +1,8 @@
-import { PUSH_PERMISSION_CATEGORY, type NotificationPriority } from '@pocket-agent/protocol';
+import {
+  PUSH_PERMISSION_CATEGORY,
+  PUSH_PERMISSION_SESSION_CATEGORY,
+  type NotificationPriority,
+} from '@pocket-agent/protocol';
 import { GoogleAuth } from 'google-auth-library';
 import { readFileSync } from 'node:fs';
 
@@ -23,6 +27,8 @@ export interface PushAction {
   approvalId: string;
   decision: 'allow' | 'deny';
   answers?: Record<string, string>;
+  /** Allow it for the rest of the session ("Allow for session"). */
+  remember?: boolean;
 }
 
 export type PushResult = 'ok' | 'invalid_token' | 'error';
@@ -32,15 +38,17 @@ export type PushResult = 'ok' | 'invalid_token' | 'error';
  * channel (a permission request must get through) and, for Allow / Deny, the button set.
  */
 export function androidPresentation(m: PushMessage): Record<string, string> {
-  const yesNo =
-    m.actions?.length === 2 &&
-    m.actions[0]!.id === 'allow' &&
-    m.actions[1]!.id === 'deny' &&
-    !m.actions[0]!.answers;
+  const ids = (m.actions ?? []).map((a) => a.id).join(',');
+  const category =
+    ids === 'allow,deny'
+      ? PUSH_PERMISSION_CATEGORY
+      : ids === 'allow,deny,allow-session'
+        ? PUSH_PERMISSION_SESSION_CATEGORY
+        : null;
   return {
     message: m.body,
     channelId: m.priority === 'critical' ? 'approvals' : 'default',
-    ...(yesNo ? { categoryId: PUSH_PERMISSION_CATEGORY, approvalId: m.actions![0]!.approvalId } : {}),
+    ...(category ? { categoryId: category, approvalId: m.actions![0]!.approvalId } : {}),
   };
 }
 

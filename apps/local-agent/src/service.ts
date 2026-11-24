@@ -196,7 +196,11 @@ export class AgentService {
         const applied = this.approvals.decide(
           p.requestId,
           p.decision === 'allow'
-            ? { behavior: 'allow', ...(p.answers ? { answers: p.answers } : {}) }
+            ? {
+                behavior: 'allow',
+                ...(p.answers ? { answers: p.answers } : {}),
+                ...(p.remember ? { remember: true } : {}),
+              }
             : { behavior: 'deny', message: p.message ?? 'Denied in Pocket Agent' },
         );
         // "stale": nothing was waiting any more (answered on the PC / timed out) — never applied.

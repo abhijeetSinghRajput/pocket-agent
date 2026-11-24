@@ -16,7 +16,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 're
 import { ClaudeSpinner } from '@/components/agents/claude-spinner';
 import { SentAttachments } from '@/components/agents/attachments';
 import { Markdown } from '@/components/agents/markdown';
-import { isQueued, SHELL_TOOLS, TOOL_STATE, type AskedQuestion, type ChatItem } from '@/lib/chat';
+import { isQueued, readAnswer, SHELL_TOOLS, TOOL_STATE, type AskedQuestion, type ChatItem } from '@/lib/chat';
 import { commandError, controlText, STATUS_LABEL } from '@/lib/commands';
 import { clockTime, dayLabel, daysAgo } from '@/lib/format';
 import { cn } from '@/lib/utils';
@@ -240,8 +240,7 @@ export function AskedQuestions({
     <>
       {questions.map((q, qi) => {
         const answer = answers[q.question];
-        const chosen = new Set(answer ? answer.split(',').map((a) => a.trim()) : []);
-        const other = !!answer && !q.options.some((o) => chosen.has(o.label));
+        const { chosen, own } = readAnswer(q, answer);
         return (
           <div key={qi} className="mt-3">
             {q.header && (
@@ -290,10 +289,10 @@ export function AskedQuestions({
                 );
               })}
             </ul>
-            {other && (
+            {own && (
               <p className="mt-2 text-xs">
                 <span className="text-muted-foreground">Your answer: </span>
-                {answer}
+                {own}
               </p>
             )}
           </div>

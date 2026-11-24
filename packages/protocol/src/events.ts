@@ -77,6 +77,12 @@ export const AgentPermissionRequested = defineEvent(
      * mode for sessions the user started). False/absent: informational only — it is answered on the PC.
      */
     awaitingRemote: z.boolean().optional(),
+    /**
+     * What "Allow for this session" would allow from now on, in Claude Code's words (e.g.
+     * "Bash(npm test:*)", "Edits in this session"). Absent when it can't be offered (PC agents from
+     * 0.1.8; only narrow, session-only rules).
+     */
+    remember: z.string().max(300).optional(),
   }),
 );
 export const AgentPermissionResolved = defineEvent(
@@ -334,6 +340,8 @@ export const ApprovalDecision = defineEvent(
     message: text.optional(),
     /** Answers to Claude's question (AskUserQuestion only; the PC ignores it for any other tool). */
     answers: QuestionAnswers.optional(),
+    /** With `allow`: also allow what the request's `remember` says, for the rest of the session. */
+    remember: z.boolean().optional(),
   }),
 );
 export const DeviceRevoke = defineEvent('device.revoke', z.object({ reason: z.string().max(200) }));

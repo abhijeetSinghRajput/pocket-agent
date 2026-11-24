@@ -1,14 +1,17 @@
 import type { AskedQuestion } from '@pocket-agent/core';
 import type { ApprovalDto } from '@pocket-agent/protocol';
-import { useState, type ReactNode } from 'react';
+import { ChevronLeft, ChevronRight, Send } from 'lucide-react-native';
+import { useEffect, useState, type ReactNode } from 'react';
 import { ScrollView, StyleSheet, TextInput, useWindowDimensions, View } from 'react-native';
-import Animated, { useAnimatedStyle, withTiming } from 'react-native-reanimated';
+import { GestureDetector, usePanGesture } from 'react-native-gesture-handler';
+import Animated, { FadeInLeft, FadeInRight, useAnimatedStyle, withTiming } from 'react-native-reanimated';
+import { scheduleOnRN } from 'react-native-worklets';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { dur, ease, enter, exit, layout } from '@/lib/motion';
 import { alpha, fonts, radius, useTheme } from '@/lib/theme';
 import { buzz, Divider, Press, T } from '@/ui/core';
 import { Notice } from '@/ui/feedback';
-import { AnswerButtons, CountdownInline, OptionMark, SentNote, SheetFrame } from './parts';
+import { AnswerButtons, BigButton, CountdownInline, OptionMark, SentNote, SheetFrame } from './parts';
 import {
   answerText,
   NO_PICK,
@@ -90,12 +93,15 @@ function QuestionBlock({
   onPick,
   disabled,
   timer,
+  onChosen,
 }: {
   q: AskedQuestion;
   pick: Pick;
   onPick: (p: Pick) => void;
   disabled: boolean;
   timer?: ReactNode;
+  /** A single choice was ticked (not "Other", which still needs typing): the pager moves on. */
+  onChosen?: () => void;
 }) {
   const { c, dark } = useTheme();
   const otherOn = pick.labels.includes(OTHER);
@@ -105,6 +111,7 @@ function QuestionBlock({
       onPick({ ...pick, labels: on ? pick.labels.filter((l) => l !== label) : [...pick.labels, label] });
     } else {
       onPick({ labels: [label], other: label === OTHER ? pick.other : '' });
+      if (label !== OTHER) onChosen?.();
     }
   };
   return (
@@ -250,27 +257,129 @@ export function QuestionSheet({
     }
   }
 
+  // Several questions: one per page, Previous / Next (or a swipe), Submit on the last.
+  const last = questions.length - 1;
+  const paged = last > 0;
+  const [page, setPage] = useState(0);
+  const [dir, setDir] = useState<1 | -1>(1);
+  // A tick queues the next page; it turns a beat later, so the tick is seen first.
+  const [queued, setQueued] = useState<number | null>(null);
+  useEffect(() => {
+    if (queued === null) return;
+    const t = setTimeout(() => {
+      setQueued(null);
+      setDir(1);
+      setPage(queued);
+    }, 280);
+    return () => clearTimeout(t);
+  }, [queued]);
+  const go = (to: number) => {
+    setQueued(null);
+    const next = Math.min(last, Math.max(0, to));
+    if (next === page) return;
+    setDir(next > page ? 1 : -1);
+    setPage(next);
+  };
+  const swipe = usePanGesture({
+    enabled: paged,
+    activeOffsetX: [-20, 20],
+    failOffsetY: [-12, 12],
+    onDeactivate: (e) => {
+      'worklet';
+      if (e.translationX < -60 || e.velocityX < -500) scheduleOnRN(go, page + 1);
+      else if (e.translationX > 60 || e.velocityX > 500) scheduleOnRN(go, page - 1);
+    },
+  });
+  // Submit with a question still unanswered: that question is shown rather than refused.
+  const submit = () => {
+    const open = questions.findIndex((q) => !answers[q.question]);
+    if (open >= 0) {
+      buzz(false);
+      go(open);
+      return;
+    }
+    void decide('allow');
+  };
+
   const timer = <CountdownInline left={left} accent="primary" />;
+  const block = (q: AskedQuestion, withTimer: boolean, onChosen?: () => void) => (
+    <QuestionBlock
+      key={q.question}
+      q={q}
+      pick={picks[q.question] ?? NO_PICK}
+      onPick={(p) => setPicks((prev) => ({ ...prev, [q.question]: p }))}
+      disabled={!!busy || !!sent || expired}
+      {...(withTimer ? { timer } : {})}
+      {...(onChosen ? { onChosen } : {})}
+    />
+  );
+  const autoNext = page < last ? () => setQueued(page + 1) : undefined;
 
   return (
     <SheetFrame accent={c.primary} testID="question-sheet">
-      <ScrollView
-        style={{ maxHeight: Math.round(height * 0.5) }}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-        contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 8, gap: 24 }}
-      >
-        {questions.map((q, i) => (
-          <QuestionBlock
-            key={q.question}
-            q={q}
-            pick={picks[q.question] ?? NO_PICK}
-            onPick={(p) => setPicks((prev) => ({ ...prev, [q.question]: p }))}
-            disabled={!!busy || !!sent || expired}
-            {...(i === 0 ? { timer } : {})}
-          />
-        ))}
-      </ScrollView>
+      {paged && (
+        <View
+          accessibilityLabel={`Question ${page + 1} of ${questions.length}`}
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 6,
+            paddingHorizontal: 16,
+            paddingTop: 14,
+          }}
+        >
+          {questions.map((q, i) => (
+            <Press
+              key={q.question}
+              accessibilityRole="button"
+              accessibilityLabel={`Question ${i + 1}`}
+              onPress={() => go(i)}
+              scale={1}
+              style={{ flex: 1, paddingVertical: 8 }}
+            >
+              <View
+                style={{
+                  height: 4,
+                  borderRadius: radius.full,
+                  backgroundColor:
+                    i === page
+                      ? c.primary
+                      : answers[q.question]
+                        ? alpha(c.primary, 0.45)
+                        : alpha(c.mutedForeground, 0.25),
+                }}
+              />
+            </Press>
+          ))}
+          <T variant="captionMedium" tone="muted" style={{ marginLeft: 6 }}>
+            {page + 1} of {questions.length}
+          </T>
+        </View>
+      )}
+      <GestureDetector gesture={swipe}>
+        <ScrollView
+          style={{ maxHeight: Math.round(height * 0.5) }}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={{
+            paddingHorizontal: 16,
+            paddingTop: paged ? 8 : 16,
+            paddingBottom: 8,
+            gap: 24,
+          }}
+        >
+          {paged ? (
+            <Animated.View
+              key={page}
+              entering={(dir > 0 ? FadeInRight : FadeInLeft).duration(dur.enter).easing(ease.out)}
+            >
+              {block(questions[page]!, true, autoNext)}
+            </Animated.View>
+          ) : (
+            questions.map((q, i) => block(q, i === 0))
+          )}
+        </ScrollView>
+      </GestureDetector>
       <Animated.View
         layout={layout}
         style={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 12 + insets.bottom, gap: 12 }}
@@ -281,6 +390,47 @@ export function QuestionSheet({
         {error && <Notice>{error}</Notice>}
         {sent ? (
           <SentNote text={sentText(sent, true)} />
+        ) : paged ? (
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            {page === 0 ? (
+              <BigButton
+                label={busy === 'deny' ? 'Skipping…' : 'Skip'}
+                look="outline"
+                grow={false}
+                loading={busy === 'deny'}
+                disabled={!!busy || expired}
+                onPress={() => void decide('deny')}
+                testID="skip"
+              />
+            ) : (
+              <BigButton
+                label="Previous"
+                icon={ChevronLeft}
+                look="outline"
+                disabled={!!busy}
+                onPress={() => go(page - 1)}
+                testID="question-previous"
+              />
+            )}
+            {page < last ? (
+              <BigButton
+                label="Next"
+                icon={ChevronRight}
+                disabled={!!busy || expired}
+                onPress={() => go(page + 1)}
+                testID="question-next"
+              />
+            ) : (
+              <BigButton
+                label={busy === 'allow' ? 'Sending…' : 'Submit'}
+                icon={Send}
+                loading={busy === 'allow'}
+                disabled={!!busy || expired}
+                onPress={submit}
+                testID="send-answer"
+              />
+            )}
+          </View>
         ) : (
           <AnswerButtons
             busy={busy}

@@ -76,7 +76,7 @@ Agent tray). Otherwise the hook returns immediately with no decision, and the lo
      PC. The PC owner can turn remote approval off (`pocket-agent approvals disable`, kept in the PC's
      policy and enforced there) and Away mode off in the app; for observed sessions both must be on.
    - Pocket Agent never changes allow/deny rules or any other Claude Code permission setting, and never
-     returns `updatedPermissions` or `updatedInput` (one exception below). The hook installer adds only
+     returns `updatedPermissions` or `updatedInput` (two owner-approved exceptions below). The hook installer adds only
      Pocket Agent hook entries.
    - **Amended by the owner (2026-11-21): the mode of a turn Pocket Agent runs may be chosen in the app.**
      Manual (`default`), Edit automatically (`acceptEdits`), Plan (`plan`) or Auto (`auto`), for a managed
@@ -93,6 +93,15 @@ Agent tray). Otherwise the hook returns immediately with no decision, and the lo
      way; "allow" alone runs it with no answers, which is what the first version did). Not answered in time, or
      an answer that doesn't match the questions: nothing is returned and the editor asks as usual. The installer
      gives PreToolUse the same 330 s timeout as PermissionRequest, and a running agent updates older entries.
+   - **Second exception, approved by the owner (2026-11-24): "Allow for this session".** Besides Allow and Deny, a
+     permission request can be allowed for the rest of its session. The PC returns `updatedPermissions` built only
+     from Claude Code's own suggestions for that request (what its "Yes, and don't ask again" would add), filtered
+     in `session-rules.ts`: allow rules for a tool, extra folders, and the `acceptEdits` mode, each forced to the
+     `session` destination. Anything else (another mode such as `bypassPermissions`, deny or remove rules, any
+     settings-file destination) is dropped, so nothing is ever written to settings on disk. The phone shows what
+     it would allow on the button (the request's `remember` text); the API accepts `remember` only with `allow` and
+     only when the PC offered it, and the audit entry records exactly what was allowed (`rememberedForSession`).
+     Code content is still never sent: an edit's request carries its file path, not the change (owner decision).
    - Claude Code's own deny/ask rules are still evaluated after a hook says allow, so local policy always wins.
    - If anything fails, the request falls back to the local prompt (interactive) or a deny (headless).
    - Every request, decision, expiry, cancellation and setting change is written to an append-only audit log.

@@ -16,7 +16,7 @@ export const approvalInclude = {
 } as const;
 
 export function toApprovalDto(a: ApprovalRow): ApprovalDto {
-  const payload = (a.requestPayload ?? {}) as { input?: unknown };
+  const payload = (a.requestPayload ?? {}) as { input?: unknown; remember?: unknown };
   return {
     id: a.id,
     sessionId: a.sessionId,
@@ -27,6 +27,7 @@ export function toApprovalDto(a: ApprovalRow): ApprovalDto {
     requestId: a.requestId,
     toolName: a.toolName,
     input: typeof payload.input === 'string' ? payload.input : '{}',
+    remember: typeof payload.remember === 'string' ? payload.remember : null,
     status: a.status,
     decision: a.decision === 'allow' || a.decision === 'deny' ? a.decision : null,
     decisionMessage: a.decisionMessage,
@@ -76,6 +77,8 @@ export async function openApproval(
     requestId: string;
     toolName: string;
     inputSummary: string;
+    /** What "Allow for this session" would allow, when the PC offers it. */
+    remember?: string;
     expiresAt: Date;
   },
 ): Promise<Approval | null> {
@@ -90,7 +93,7 @@ export async function openApproval(
       sessionId: input.sessionId,
       requestId: input.requestId,
       toolName: input.toolName.slice(0, 200),
-      requestPayload: { input: input.inputSummary },
+      requestPayload: { input: input.inputSummary, ...(input.remember ? { remember: input.remember } : {}) },
       expiresAt: input.expiresAt,
     },
   });
@@ -122,7 +125,8 @@ export class DecisionError extends Error {
       | 'not_pending'
       | 'device_offline'
       | 'answers_not_supported'
-      | 'invalid_answers',
+      | 'invalid_answers'
+      | 'remember_not_offered',
     message: string,
     readonly status = 409,
   ) {
@@ -157,6 +161,8 @@ export async function decideApproval(
     message?: string;
     /** Answers to Claude's question; only accepted for an AskUserQuestion request. */
     answers?: Record<string, string>;
+    /** Allow what the request offered for the rest of the session (only when it offered it). */
+    remember?: boolean;
     ip?: string;
   },
 ): Promise<ApprovalRow> {
@@ -180,6 +186,12 @@ export async function decideApproval(
     if (!asked.length || given.length !== asked.length || !given.every((q) => asked.includes(q)))
       throw new DecisionError('invalid_answers', 'Answer every question Claude asked.', 400);
   }
+
+  // "For this session": only with allow, and only what the PC offered for this very request.
+  const offered = ((a.requestPayload ?? {}) as { remember?: unknown }).remember;
+  const remember = input.decision === 'allow' && input.remember === true;
+  if (remember && typeof offered !== 'string')
+    throw new DecisionError('remember_not_offered', 'This request can only be allowed once.', 400);
 
   const now = ctx.now();
   if (a.expiresAt <= now) {
@@ -221,6 +233,8 @@ export async function decideApproval(
       toolName: a.toolName,
       // That the question was answered here, not what was answered.
       ...(answers ? { answered: Object.keys(answers).length } : {}),
+      // Allowed for the rest of the session: what exactly, always on record.
+      ...(remember ? { rememberedForSession: String(offered) } : {}),
       sessionId: a.sessionId,
       deviceId: a.deviceId,
     },
@@ -236,6 +250,7 @@ export async function decideApproval(
         decision: input.decision,
         ...(message ? { message } : {}),
         ...(answers ? { answers } : {}),
+        ...(remember ? { remember: true } : {}),
       },
       { deviceId: a.deviceId, sessionId: a.session.externalSessionId },
     ),

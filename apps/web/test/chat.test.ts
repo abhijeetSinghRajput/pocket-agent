@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { answerText } from '@/components/approvals/approval-card';
 import { typeOver } from '@/components/agents/chat-messages';
 import { resetLabel } from '@/components/claude-usage';
-import { buildChat, cleanPrompt, isQueued } from '@/lib/chat';
+import { buildChat, cleanPrompt, isQueued, readAnswer } from '@/lib/chat';
 import { chatListTime, dayLabel, daysAgo, recentSections } from '@/lib/format';
 import { openChatId } from '@/lib/nav';
 
@@ -421,5 +421,22 @@ describe('messages sent from the app before the server confirms them', () => {
     expect(
       isQueued({ kind: 'user', key: 'e1', at: '2026-11-24T10:00:00.000Z', text: 'typed on the PC' }),
     ).toBe(false);
+  });
+});
+
+describe('readAnswer', () => {
+  const q = { options: ['Yes', 'No, path only', 'Diff'].map((label) => ({ label, description: '' })) };
+  it('ticks an option whose label has a comma', () => {
+    const r = readAnswer(q, 'No, path only');
+    expect([...r.chosen]).toEqual(['No, path only']);
+    expect(r.own).toBeNull();
+  });
+  it('splits several picks and keeps typed words as your own answer', () => {
+    const r = readAnswer(q, 'Yes, Diff, only for tests');
+    expect([...r.chosen].sort()).toEqual(['Diff', 'Yes']);
+    expect(r.own).toBe('only for tests');
+  });
+  it('nothing chosen without an answer', () => {
+    expect(readAnswer(q, undefined).chosen.size).toBe(0);
   });
 });

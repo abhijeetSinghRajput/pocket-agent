@@ -12,10 +12,23 @@ export function yesNoActions(a: { id: string; toolName: string; requestPayload: 
   actions?: PushAction[];
 } {
   if (a.toolName !== 'AskUserQuestion') {
+    // "Allow for session" only when the PC offered it for this request (phone: a third button).
+    const offered = typeof (a.requestPayload as { remember?: unknown } | null)?.remember === 'string';
     return {
       actions: [
         { id: 'allow', title: 'Allow', approvalId: a.id, decision: 'allow' },
         { id: 'deny', title: 'Deny', approvalId: a.id, decision: 'deny' },
+        ...(offered
+          ? [
+              {
+                id: 'allow-session',
+                title: 'Allow for session',
+                approvalId: a.id,
+                decision: 'allow' as const,
+                remember: true,
+              },
+            ]
+          : []),
       ],
     };
   }

@@ -5,6 +5,7 @@ import {
   dayLabel,
   daysAgo,
   isQueued,
+  readAnswer,
   SHELL_TOOLS,
   TOOL_STATE,
   STATUS_LABEL,
@@ -680,8 +681,7 @@ export function AskedQuestions({
     <>
       {questions.map((q, qi) => {
         const answer = answers[q.question];
-        const chosen = new Set(answer ? answer.split(',').map((a) => a.trim()) : []);
-        const other = !!answer && !q.options.some((o) => chosen.has(o.label));
+        const { chosen, own } = readAnswer(q, answer);
         return (
           <View key={qi} style={{ marginTop: 12 }}>
             {q.header && (
@@ -752,12 +752,12 @@ export function AskedQuestions({
                 );
               })}
             </View>
-            {other && (
+            {own && (
               <T variant="caption" style={{ marginTop: 8 }}>
                 <T variant="caption" tone="muted">
                   Your answer:{' '}
                 </T>
-                {answer}
+                {own}
               </T>
             )}
           </View>

@@ -37,7 +37,13 @@ async function setup() {
 /** The PC holds a permission request for a remote decision. */
 async function request(
   s: Awaited<ReturnType<typeof setup>>,
-  opts: { awaitingRemote?: boolean; expiresIn?: number; toolName?: string; input?: string } = {},
+  opts: {
+    awaitingRemote?: boolean;
+    expiresIn?: number;
+    toolName?: string;
+    input?: string;
+    remember?: string;
+  } = {},
 ) {
   const requestId = `toolu_${randomUUID()}`;
   await s.agent.send(
@@ -50,6 +56,7 @@ async function request(
         requestId,
         awaitingRemote: opts.awaitingRemote ?? true,
         expiresAt: new Date(Date.now() + (opts.expiresIn ?? 60_000)).toISOString(),
+        ...(opts.remember ? { remember: opts.remember } : {}),
       },
       { sessionId: s.ext },
     ),
@@ -291,5 +298,38 @@ describe('away mode', () => {
     });
     expect(audit.metadata).toEqual({ awayMode: true });
     again.ws.close();
+  });
+
+  it('"allow for this session" goes to the PC only when the request offered it, and is on record', async () => {
+    const s = await setup();
+    const remember = (cookie: string, id: string) =>
+      t.app.inject({
+        method: 'POST',
+        url: `/approvals/${id}/decision`,
+        headers: browser(cookie),
+        payload: { decision: 'allow', remember: true },
+      });
+
+    // Not offered (an older PC, or nothing safe to remember): only "allow once".
+    const plain = await request(s);
+    expect(plain.approval!.remember).toBeNull();
+    const refused = await remember(s.cookie, plain.approval!.id);
+    expect(refused.statusCode).toBe(400);
+    expect(refused.json().error).toBe('remember_not_offered');
+
+    const offered = await request(s, { remember: 'Bash(npm test:*)' });
+    expect(offered.approval!.remember).toBe('Bash(npm test:*)');
+    expect((await remember(s.cookie, offered.approval!.id)).statusCode).toBe(200);
+    const frame = await s.agent.next(
+      (m) =>
+        m['eventType'] === 'approval.decision' &&
+        (m['payload'] as { approvalId?: string }).approvalId === offered.approval!.id,
+    );
+    expect(frame['payload']).toMatchObject({ decision: 'allow', remember: true });
+    const log = await t.ctx.prisma.auditLog.findFirstOrThrow({
+      where: { targetId: offered.approval!.id, action: 'approval.decided' },
+    });
+    expect(log.metadata).toMatchObject({ rememberedForSession: 'Bash(npm test:*)' });
+    s.agent.ws.close();
   });
 });

@@ -379,3 +379,26 @@ export const TOOL_STATE: Record<Extract<ChatItem, { kind: 'tool' }>['state'], st
   done: 'finished',
   failed: 'failed',
 };
+
+/**
+ * What an answer to Claude's question picked: the options (an answer joins their labels with
+ * ", ", and a label may itself contain a comma, so whole labels are matched, longest first) and
+ * the user's own words, if any were added.
+ */
+export function readAnswer(
+  q: Pick<AskedQuestion, 'options'>,
+  answer: string | undefined,
+): { chosen: Set<string>; own: string | null } {
+  const chosen = new Set<string>();
+  if (!answer) return { chosen, own: null };
+  let rest = `, ${answer.trim()}, `;
+  for (const o of [...q.options].sort((a, b) => b.label.length - a.label.length)) {
+    const piece = `, ${o.label}, `;
+    if (o.label && rest.includes(piece)) {
+      chosen.add(o.label);
+      rest = rest.replace(piece, ', ');
+    }
+  }
+  const own = rest.replace(/^[,\s]+|[,\s]+$/g, '');
+  return { chosen, own: own || null };
+}

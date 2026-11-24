@@ -65,6 +65,7 @@ export async function approvalRoutes(app: FastifyInstance, ctx: Services): Promi
           decision: body.data.decision,
           ...(body.data.message ? { message: body.data.message } : {}),
           ...(body.data.answers ? { answers: body.data.answers } : {}),
+          ...(body.data.remember ? { remember: true } : {}),
           ip: req.ip,
         });
         return { approval: toApprovalDto(a) };

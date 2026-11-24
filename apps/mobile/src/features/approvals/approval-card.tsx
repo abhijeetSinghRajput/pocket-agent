@@ -7,21 +7,21 @@ import { Pressable, ScrollView, StyleSheet, TextInput, useWindowDimensions, View
 import Animated, { interpolateColor, useAnimatedStyle, withTiming } from 'react-native-reanimated';
 import { dur, ease, layout } from '@/lib/motion';
 import { alpha, fonts, radius, useTheme } from '@/lib/theme';
-import { buzz, Card, Press, T } from '@/ui/core';
+import { Card, Press, T } from '@/ui/core';
 import { Notice } from '@/ui/feedback';
 import { CodeBlock } from '@/ui/code-block';
-import { AnswerButtons, CountdownPill, DecisionButtons, OptionMark, SentNote } from './parts';
+import { AnswerButtons, CountdownPill, OptionMark, PermissionDecision, SentNote } from './parts';
 import {
   answerText,
   describeRequest,
   NO_PICK,
   readableInput,
-  sendDecision,
+  requestPurpose,
   sentText,
   SKIP_MESSAGE,
   timeoutText,
   useCountdown,
-  type Decision,
+  useDecision,
   type Pick,
 } from './shared';
 
@@ -229,31 +229,16 @@ export function ApprovalCard({
   const { height } = useWindowDimensions();
   const router = useRouter();
   const left = useCountdown(approval.expiresAt);
-  const [busy, setBusy] = useState<Decision | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [sent, setSent] = useState<Decision | null>(approval.decision);
+  const decision = useDecision(approval, onDecided);
+  const { busy, sent, error, decide } = decision;
   const [picks, setPicks] = useState<Record<string, Pick>>({});
   const target = toolTarget(approval.input);
   const expired = left <= 0;
 
-  async function decide(decision: Decision, extra: Record<string, unknown> = {}) {
-    setBusy(decision);
-    setError(null);
-    try {
-      await sendDecision(approval.id, { decision, ...extra });
-      buzz(true);
-      setSent(decision);
-      onDecided();
-    } catch (err) {
-      buzz(false);
-      setError((err as Error).message);
-    } finally {
-      setBusy(null);
-    }
-  }
-
   const what = describeRequest(approval.toolName);
   const shown = target || readableInput(approval.input);
+  // Claude's own words for what the command is for, above it.
+  const purpose = requestPurpose(approval.input);
   const asking = approval.toolName === 'AskUserQuestion';
   const questions = asking ? parseQuestions(approval.input) : [];
   // Claude's question: answered right here (the options are the buttons), not allowed or denied.
@@ -387,12 +372,19 @@ export function ApprovalCard({
                 </T>
               </View>
             ) : (
-              <CodeBlock
-                text={shown}
-                shell={what.shell}
-                // In the sheet the command scrolls inside its block, so Deny / Allow stay in view.
-                maxHeight={inSheet ? Math.round(height * 0.3) : 224}
-              />
+              <>
+                {purpose && (
+                  <T variant="small" style={{ color: alpha(c.foreground, 0.85) }} testID="approval-purpose">
+                    {purpose}
+                  </T>
+                )}
+                <CodeBlock
+                  text={shown}
+                  shell={what.shell}
+                  // In the sheet the command scrolls inside its block, so Deny / Allow stay in view.
+                  maxHeight={inSheet ? Math.round(height * 0.3) : 224}
+                />
+              </>
             )}
             <T variant="caption" tone="muted">
               {timeoutText(approval.sessionMode)}
@@ -415,8 +407,8 @@ export function ApprovalCard({
                 }
           }
         >
-          {sent ? (
-            <SentNote text={sentText(sent, answering)} />
+          {answering && sent ? (
+            <SentNote text={sentText(sent, true)} />
           ) : answering ? (
             <AnswerButtons
               busy={busy}
@@ -429,7 +421,7 @@ export function ApprovalCard({
               }
             />
           ) : (
-            <DecisionButtons busy={busy} disabled={expired} onDecide={(d) => void decide(d)} />
+            <PermissionDecision approval={approval} decision={decision} expired={expired} />
           )}
           {error && <Notice>{error}</Notice>}
         </Animated.View>

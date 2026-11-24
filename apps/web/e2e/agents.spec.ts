@@ -85,9 +85,10 @@ test('a Claude Code session streams into the dashboard live, survives a reconnec
   // The conversation scrolls inside the chat; the page itself never grows a scrollbar.
   const size = page.viewportSize()!;
   await page.setViewportSize({ width: 400, height: 420 });
-  expect(
-    await page.evaluate(() => document.documentElement.scrollHeight - window.innerHeight),
-  ).toBeLessThanOrEqual(0);
+  // Measured once the page has laid itself out again for the new size.
+  await expect
+    .poll(() => page.evaluate(() => document.documentElement.scrollHeight - window.innerHeight))
+    .toBeLessThanOrEqual(0);
   await page.setViewportSize(size);
   await expect(chatStatus(page)).toHaveAttribute('data-status', 'WaitingForInput');
 

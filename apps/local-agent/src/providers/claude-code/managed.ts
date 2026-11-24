@@ -11,6 +11,7 @@ import path from 'node:path';
 import { truncate, type SessionRegistry } from '../../sessions/registry.js';
 import type { CommandAck } from './instructions.js';
 import { summarizeToolInput, summarizeToolOutput } from './summarize.js';
+import { describeRules, sessionRules } from './session-rules.js';
 
 export type QueryFn = (args: { prompt: AsyncIterable<SDKUserMessage>; options: Options }) => Query;
 
@@ -76,8 +77,11 @@ export function approvalGate(
   approvals: ManagedApprovalOptions | undefined,
   now: () => number,
 ): CanUseTool {
-  return async (toolName, toolInput, { toolUseID, signal }) => {
+  return async (toolName, toolInput, { toolUseID, signal, suggestions }) => {
     const inputSummary = summarizeToolInput(toolName, toolInput);
+    // What "Allow for this session" may add (narrow, session-only), and its words for the phone.
+    const rules = sessionRules(suggestions);
+    const remember = describeRules(rules);
     const remote = !!approvals?.enabled();
     const waitMs = approvals?.waitMs ?? APPROVAL_WAIT_MS.managed;
     registry.event(id, 'agent.permission.requested', {
@@ -86,6 +90,7 @@ export function approvalGate(
       input: inputSummary,
       requestId: toolUseID,
       ...(remote ? { awaitingRemote: true, expiresAt: new Date(now() + waitMs).toISOString() } : {}),
+      ...(remote && remember ? { remember } : {}),
     });
     if (!remote) {
       // No approval channel: deny, never allow.
@@ -109,7 +114,11 @@ export function approvalGate(
     // Exactly what Claude asked for: the input is passed back unchanged, never modified. The one
     // exception is Claude's own question to the user, which gets the user's answers added.
     const answered = answeredQuestionInput(toolName, toolInput, decision.answers);
-    return { behavior: 'allow', updatedInput: answered ?? toolInput };
+    return {
+      behavior: 'allow',
+      updatedInput: answered ?? toolInput,
+      ...(decision.remember && rules.length ? { updatedPermissions: rules } : {}),
+    };
   };
 }
 

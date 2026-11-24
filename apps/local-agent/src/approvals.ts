@@ -1,6 +1,10 @@
 export type RemoteDecision =
-  /** `answers`: the user's answers to Claude's question (used for AskUserQuestion only). */
-  { behavior: 'allow'; answers?: Record<string, string> } | { behavior: 'deny'; message: string };
+  /**
+   * `answers`: the user's answers to Claude's question (used for AskUserQuestion only).
+   * `remember`: also allow what the request offered, for the rest of the session.
+   */
+  | { behavior: 'allow'; answers?: Record<string, string>; remember?: boolean }
+  | { behavior: 'deny'; message: string };
 
 /**
  * The input AskUserQuestion runs with when the user answered in Pocket Agent: Claude's own questions,

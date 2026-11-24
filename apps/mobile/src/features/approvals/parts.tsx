@@ -1,5 +1,5 @@
 import { mmss } from '@pocket-agent/core';
-import { Check, Clock, Send, X, type LucideIcon } from 'lucide-react-native';
+import { Check, CheckCheck, Clock, Send, X, type LucideIcon } from 'lucide-react-native';
 import { useEffect, type ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated, {
@@ -13,7 +13,8 @@ import { dur, ease, enter, layout } from '@/lib/motion';
 import { alpha, fonts, radius, useTheme } from '@/lib/theme';
 import { Press, Spinner, T, thud, toneColor, type Tone } from '@/ui/core';
 import { Roll } from '@/ui/feedback';
-import { SHORT_MS, type Decision } from './shared';
+import type { ApprovalDto } from '@pocket-agent/protocol';
+import { SHORT_MS, sentText, type Decision, type useDecision } from './shared';
 
 /** A panel docked at the bottom of the chat rising into place (the web app's `sheet-in`). */
 export const sheetIn = FadeInDown.duration(dur.sheet)
@@ -199,6 +200,53 @@ export function DecisionButtons({
   );
 }
 
+/**
+ * Allow this kind of action for the rest of the session (Claude Code's own "Yes, and don't ask
+ * again", session only). `what` is what it would allow, in Claude Code's words, shown under it.
+ */
+export function SessionAllowButton({
+  what,
+  busy,
+  disabled,
+  onPress,
+}: {
+  what: string;
+  busy: boolean;
+  disabled: boolean;
+  onPress: () => void;
+}) {
+  const { c } = useTheme();
+  return (
+    <Press
+      accessibilityRole="button"
+      accessibilityLabel={`Allow for this session: ${what}`}
+      accessibilityState={{ disabled, busy }}
+      disabled={disabled}
+      onPress={onPress}
+      scale={0.98}
+      testID="allow-session"
+      style={{
+        borderRadius: radius.lg,
+        borderWidth: 1,
+        borderColor: alpha(c.success, 0.45),
+        paddingHorizontal: 14,
+        paddingVertical: 10,
+        gap: 2,
+      }}
+    >
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+        {busy ? <Spinner tone="success" /> : <CheckCheck size={16} color={c.success} strokeWidth={2.4} />}
+        <T variant="smallMedium" style={{ color: c.success }}>
+          {busy ? 'Allowing for this session…' : 'Allow for this session'}
+        </T>
+      </View>
+      <T variant="caption" tone="muted" numberOfLines={2}>
+        Won’t ask again for: {what}
+      </T>
+    </Press>
+  );
+}
+
 /** The pair under Claude's question: Skip, then Send answer (which waits for a complete answer). */
 export function AnswerButtons({
   busy,
@@ -329,5 +377,39 @@ export function SheetFrame({
     >
       {children}
     </Animated.View>
+  );
+}
+
+/**
+ * How a permission request is decided, wherever it shows (its card, the sheet in its chat): Deny
+ * or Allow, and "Allow for this session" when the PC offers it; once sent, what was sent.
+ */
+export function PermissionDecision({
+  approval,
+  decision,
+  expired,
+}: {
+  approval: ApprovalDto;
+  decision: ReturnType<typeof useDecision>;
+  expired: boolean;
+}) {
+  const { busy, sent, forSession, decide } = decision;
+  if (sent) return <SentNote text={sentText(sent, false, forSession)} />;
+  return (
+    <>
+      <DecisionButtons
+        busy={forSession ? null : busy}
+        disabled={expired || !!busy}
+        onDecide={(d) => void decide(d)}
+      />
+      {approval.remember && (
+        <SessionAllowButton
+          what={approval.remember}
+          busy={forSession && busy === 'allow'}
+          disabled={expired || !!busy}
+          onPress={() => void decide('allow', { remember: true })}
+        />
+      )}
+    </>
   );
 }

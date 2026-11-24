@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { RefreshControl, ScrollView, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { AllowAllButton, allowable } from '@/features/approvals/allow-all';
 import { ApprovalCard } from '@/features/approvals/approval-card';
 import { APPROVAL_STATUS } from '@/features/approvals/shared';
 import { NewChatSheet } from '@/features/sessions/new-chat-sheet';
@@ -234,6 +235,8 @@ export function AgentsScreen() {
             <T variant="overline" style={{ color: c.warning, opacity: 0.6 }}>
               {needs.length}
             </T>
+            <View style={{ flex: 1 }} />
+            <AllowAllButton requests={allowable(needs)} onDone={() => void refreshAll()} />
           </View>
           {needs.map((a, i) => (
             <Animated.View key={a.id} entering={enter.rise(i)} exiting={exit.fade} layout={layout}>

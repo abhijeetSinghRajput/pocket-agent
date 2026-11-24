@@ -1,3 +1,4 @@
+import type { PermissionUpdate } from '@anthropic-ai/claude-agent-sdk';
 import { APPROVAL_WAIT_MS, CLAUDE_CODE_CAPABILITIES, type SessionCapabilities } from '@pocket-agent/protocol';
 import { createHash } from 'node:crypto';
 import { truncate, type SessionRegistry } from '../../sessions/registry.js';
@@ -9,6 +10,7 @@ import type { IdleWake } from './wake.js';
 import { summarizeToolInput, summarizeToolOutput, toolKey } from './summarize.js';
 import { workerStatus } from './managed.js';
 import { TranscriptTail } from './transcript.js';
+import { describeRules, sessionRules } from './session-rules.js';
 
 /** JSON a hook may print to answer Claude Code: Stop (deliver an instruction) or PermissionRequest (remote decision). */
 export type HookOutput =
@@ -36,8 +38,11 @@ export type HookOutput =
   | {
       hookSpecificOutput: {
         hookEventName: 'PermissionRequest';
-        // Exactly what Claude asked for: never updatedInput / updatedPermissions.
-        decision: { behavior: 'allow' } | { behavior: 'deny'; message: string };
+        // Exactly what Claude asked for: never updatedInput. updatedPermissions only with "Allow for
+        // this session", and only narrow, session-only rules (session-rules.ts).
+        decision:
+          | { behavior: 'allow'; updatedPermissions?: PermissionUpdate[] }
+          | { behavior: 'deny'; message: string };
       };
     };
 
@@ -86,6 +91,8 @@ export class ClaudeHookHandler {
   private readonly toolIds = new Map<string, Map<string, string>>();
   /** Per session: permission requests not yet resolved (requestId → toolUseId). */
   private readonly pendingPermissions = new Map<string, Map<string, string>>();
+  /** Per held request: what "Allow for this session" would add. */
+  private readonly sessionRulesOf = new Map<string, PermissionUpdate[]>();
   /** What Claude says between tool calls, read from the session's transcript. */
   readonly transcripts = new TranscriptTail();
 
@@ -212,6 +219,9 @@ export class ClaudeHookHandler {
         // held for Pocket Agent, so the editor shows it at once.
         const hold = !!this.opts.approvals && !!this.opts.holdForRemote?.() && toolName !== 'AskUserQuestion';
         const waitMs = this.opts.approvalWaitMs ?? APPROVAL_WAIT_MS.observed;
+        const rules = hold ? sessionRules(p['permission_suggestions']) : [];
+        const remember = describeRules(rules);
+        if (remember) this.sessionRulesOf.set(toolUseId, rules);
         this.registry.event(sessionId, 'agent.permission.requested', {
           toolUseId,
           toolName,
@@ -221,6 +231,7 @@ export class ClaudeHookHandler {
             ? {
                 awaitingRemote: true,
                 expiresAt: new Date((this.opts.now ?? Date.now)() + waitMs).toISOString(),
+                ...(remember ? { remember } : {}),
               }
             : {}),
         });
@@ -423,6 +434,8 @@ export class ClaudeHookHandler {
     waitMs: number,
   ): Promise<HookOutput | undefined> {
     const decision = await this.opts.approvals!.wait(requestId, waitMs);
+    const rules = this.sessionRulesOf.get(requestId) ?? [];
+    this.sessionRulesOf.delete(requestId);
     const pending = this.pendingPermissions.get(sessionId);
     if (!pending?.has(requestId)) return undefined; // answered on the PC meanwhile
     pending.delete(requestId);
@@ -438,7 +451,10 @@ export class ClaudeHookHandler {
         hookEventName: 'PermissionRequest',
         decision:
           decision.behavior === 'allow'
-            ? { behavior: 'allow' }
+            ? {
+                behavior: 'allow',
+                ...(decision.remember && rules.length ? { updatedPermissions: rules } : {}),
+              }
             : { behavior: 'deny', message: decision.message },
       },
     };

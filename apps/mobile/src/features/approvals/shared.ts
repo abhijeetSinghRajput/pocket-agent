@@ -2,7 +2,7 @@ import type { AskedQuestion } from '@pocket-agent/core';
 import { ApprovalResponse, type ApprovalDto, type DecideApprovalRequest } from '@pocket-agent/protocol';
 import { useEffect, useState } from 'react';
 import { apiRequest } from '@/lib/api';
-import type { Tone } from '@/ui/core';
+import { buzz, type Tone } from '@/ui/core';
 
 /** Status words and tones, the same as the web app's approvals (its "neutral" is our "muted"). */
 export const APPROVAL_STATUS: Record<ApprovalDto['status'], { label: string; tone: Tone }> = {
@@ -91,13 +91,24 @@ export function sendDecision(approvalId: string, body: DecideApprovalRequest): P
 export type Decision = DecideApprovalRequest['decision'];
 
 /** The footer line once a decision has gone out: the PC still has to confirm it. */
-export function sentText(sent: Decision, answering: boolean): string {
+export function sentText(sent: Decision, answering: boolean, forSession = false): string {
   if (answering) {
     return sent === 'allow'
       ? 'Answer sent. Waiting for your PC to confirm…'
       : 'Skipped. Waiting for your PC to confirm…';
   }
-  return `${sent === 'allow' ? 'Allowed' : 'Denied'} — waiting for your PC to confirm…`;
+  const what = sent === 'allow' ? (forSession ? 'Allowed for this session' : 'Allowed') : 'Denied';
+  return `${what} — waiting for your PC to confirm…`;
+}
+
+/** What Claude said the command is for (its `description`), when the request carries one. */
+export function requestPurpose(input: string): string | null {
+  try {
+    const d = (JSON.parse(input) as { description?: unknown }).description;
+    return typeof d === 'string' && d.trim() ? d.trim() : null;
+  } catch {
+    return null;
+  }
 }
 
 /** What happens if nobody decides before the countdown ends. */
@@ -105,4 +116,35 @@ export function timeoutText(mode: ApprovalDto['sessionMode']): string {
   return mode === 'managed'
     ? 'If nobody decides in time, it is denied.'
     : 'If nobody decides in time, Claude Code asks on your PC instead.';
+}
+
+/**
+ * Deciding one request: which decision is on its way, the one sent, whether it was "for this
+ * session", and why it failed. `onDone` runs once the server took it.
+ */
+export function useDecision(approval: ApprovalDto, onDone: () => void) {
+  const [busy, setBusy] = useState<Decision | null>(null);
+  const [sent, setSent] = useState<Decision | null>(approval.decision);
+  const [forSession, setForSession] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function decide(decision: Decision, extra: Omit<DecideApprovalRequest, 'decision'> = {}) {
+    setBusy(decision);
+    setForSession(extra.remember === true);
+    setError(null);
+    try {
+      await sendDecision(approval.id, { decision, ...extra });
+      buzz(true);
+      setSent(decision);
+      onDone();
+    } catch (err) {
+      buzz(false);
+      setForSession(false);
+      setError((err as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return { busy, sent, forSession, error, decide };
 }

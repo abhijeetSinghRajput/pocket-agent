@@ -7,6 +7,7 @@ import {
   END_TEXT,
   isBusy,
   modelLock,
+  QUICK_REPLIES,
   resumeBlocker,
 } from '@pocket-agent/core';
 import {
@@ -17,9 +18,9 @@ import {
   type AgentSessionDto,
   type ModelOption,
 } from '@pocket-agent/protocol';
-import { ArrowUp, CircleStop, Hand, Lock, Plus, Power, Square } from 'lucide-react-native';
+import { ArrowUp, CircleStop, Hand, Lock, Mic, Plus, Power, Square } from 'lucide-react-native';
 import { useEffect, useEffectEvent, useRef, useState, type ComponentRef } from 'react';
-import { findNodeHandle, Pressable, TextInput, View } from 'react-native';
+import { findNodeHandle, Pressable, ScrollView, TextInput, View } from 'react-native';
 import Animated, {
   cancelAnimation,
   interpolateColor,
@@ -29,6 +30,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { Ticks } from '@/features/chat/capabilities';
+import { canDictate, useDictation } from '@/features/chat/dictation';
 import { DraftFiles } from '@/features/chat/draft-files';
 import { AttachMenu, ModelPicker, ModePicker } from '@/features/chat/pickers';
 import { newId } from '@/features/chat/upload';
@@ -168,6 +170,63 @@ export function AttachButton({ disabled, onPress }: { disabled: boolean; onPress
   );
 }
 
+/** The mic beside Send: the same size; while listening it fills with the accent and glows with your voice. */
+export function MicButton({
+  dictation,
+  disabled,
+}: {
+  dictation: ReturnType<typeof useDictation>;
+  disabled: boolean;
+}) {
+  const { c } = useTheme();
+  const { listening, level, toggle } = dictation;
+  const on = useSharedValue(0);
+  useEffect(() => {
+    on.set(withTiming(listening ? 1 : 0, { duration: dur.quick, easing: ease.out }));
+  }, [listening, on]);
+  const glow = useAnimatedStyle(() => ({
+    opacity: on.value * (0.25 + 0.45 * level.value),
+    transform: [{ scale: 1 + 0.35 * level.value * on.value }],
+  }));
+  return (
+    <View style={{ width: SEND_SIZE, height: SEND_SIZE }}>
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          {
+            position: 'absolute',
+            inset: 0,
+            borderRadius: SEND_RADIUS,
+            backgroundColor: alpha(c.primary, 0.5),
+          },
+          glow,
+        ]}
+      />
+      <Press
+        accessibilityRole="button"
+        accessibilityLabel={listening ? 'Stop dictating' : 'Dictate a message'}
+        accessibilityState={{ disabled, selected: listening }}
+        testID="mic-button"
+        disabled={disabled}
+        onPress={toggle}
+        scale={0.92}
+        haptic={false}
+        style={{
+          width: SEND_SIZE,
+          height: SEND_SIZE,
+          borderRadius: SEND_RADIUS,
+          backgroundColor: listening ? c.primary : c.secondary,
+          alignItems: 'center',
+          justifyContent: 'center',
+          opacity: disabled ? 0.4 : 1,
+        }}
+      >
+        <Mic size={18} color={listening ? c.primaryForeground : c.secondaryForeground} strokeWidth={2.2} />
+      </Press>
+    </View>
+  );
+}
+
 // ── Composer ─────────────────────────────────────────────────────────────────
 
 /** Message box pinned to the bottom of a chat. The button sends; files attach from the +. */
@@ -198,6 +257,10 @@ export function Composer({
   const key = useRef(newId());
   const box = useRef<ComponentRef<typeof TextInput>>(null);
   const [attachOpen, setAttachOpen] = useState(false);
+  const dictation = useDictation(text, setText);
+  const [dictates] = useState(canDictate);
+  // Hidden once something is sent, until the session moves on (the reply shows at once).
+  const [quietAt, setQuietAt] = useState<string | null>(null);
 
   // The box is always there, like any chat app; when this session can't take messages it is
   // disabled and says why (never pretends a message could be delivered).
@@ -296,12 +359,24 @@ export function Composer({
   const hasContent = !!text.trim() || ready.length > 0;
   const stopMode = !hasContent && showStop;
 
+  // Claude finished and waits: one tap sends a common next step.
+  const offerReplies =
+    !locked &&
+    !resuming &&
+    !session.endedAt &&
+    session.status === 'WaitingForInput' &&
+    !hasContent &&
+    !dictation.listening &&
+    quietAt !== session.lastActivityAt;
+
   /** Hands the message to the chat's outbox: it shows at once, and the box is empty again. */
-  function send() {
+  function send(reply?: string) {
     // A message can be just files: Claude is then told what they are called.
     const value =
-      text.trim() || (ready.length ? `Attached: ${ready.map((d) => d.ref!.name).join(', ')}` : '');
+      reply ?? (text.trim() || (ready.length ? `Attached: ${ready.map((d) => d.ref!.name).join(', ')}` : ''));
     if (!value || locked || uploading) return;
+    dictation.cancel();
+    setQuietAt(session.lastActivityAt);
     setError(null);
     thud();
     onSending?.();
@@ -318,12 +393,13 @@ export function Composer({
         text: value,
         idempotencyKey: key.current,
         ...choices,
-        ...(ready.length ? { attachmentIds: files.ids } : {}),
+        ...(ready.length && !reply ? { attachmentIds: files.ids } : {}),
       },
       text: value,
-      files: ready.map((d) => d.ref!),
+      files: reply ? [] : ready.map((d) => d.ref!),
     });
     key.current = newId();
+    if (reply) return;
     setText('');
     files.clear();
   }
@@ -350,9 +426,42 @@ export function Composer({
 
   return (
     <Animated.View layout={layout} style={{ gap: 8 }} testID="composer">
-      {error && (
+      {(error ?? dictation.error) && (
         <Animated.View exiting={exit.fade} layout={layout} testID="send-error">
-          <Notice>{error}</Notice>
+          <Notice>{error ?? dictation.error}</Notice>
+        </Animated.View>
+      )}
+      {offerReplies && (
+        <Animated.View entering={enter.fade} exiting={exit.fade} layout={layout}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={{ gap: 8 }}
+            testID="quick-replies"
+          >
+            {QUICK_REPLIES.map((r) => (
+              <Press
+                key={r}
+                accessibilityRole="button"
+                accessibilityLabel={`Send: ${r}`}
+                onPress={() => send(r)}
+                scale={0.96}
+                style={{
+                  borderRadius: radius.full,
+                  borderWidth: 1,
+                  borderColor: alpha(c.primary, 0.35),
+                  backgroundColor: alpha(c.primary, 0.08),
+                  paddingHorizontal: 14,
+                  paddingVertical: 7,
+                }}
+              >
+                <T variant="smallMedium" tone="primary">
+                  {r}
+                </T>
+              </Press>
+            ))}
+          </ScrollView>
         </Animated.View>
       )}
       <Animated.View
@@ -468,6 +577,7 @@ export function Composer({
             </>
           )}
           <View style={{ flex: 1 }} />
+          {dictates && !locked && <MicButton dictation={dictation} disabled={false} />}
           <SendButton
             stopMode={stopMode}
             disabled={stopMode ? interrupting || !canInterrupt : uploading || !hasContent || !!locked}

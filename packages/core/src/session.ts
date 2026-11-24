@@ -201,3 +201,31 @@ export function canConfigureLive(s: AgentSessionDto, device: DeviceDto | undefin
     !versionBelow(device.agentVersion, CONFIGURE_AGENT_VERSION)
   );
 }
+
+/** A folder you chatted in lately, on a PC that can open it now. */
+export type RecentWorkspace = { deviceId: string; deviceName: string; name: string; path: string };
+
+/**
+ * The folders of your latest chats, newest first, once each: only on PCs online now and inside a
+ * folder that PC allows (so one tap can start there).
+ */
+export function recentWorkspaces(
+  sessions: readonly AgentSessionDto[],
+  devices: readonly DeviceDto[],
+  limit = 4,
+): RecentWorkspace[] {
+  const out: RecentWorkspace[] = [];
+  const seen = new Set<string>();
+  const byNewest = [...sessions].sort((a, b) => b.lastActivityAt.localeCompare(a.lastActivityAt));
+  for (const s of byNewest) {
+    if (out.length >= limit) break;
+    const d = devices.find((x) => x.id === s.deviceId);
+    if (!d || d.status !== 'Online' || !s.projectPath) continue;
+    if (!d.projects.some((p) => isWithinFolder(s.projectPath, p.path))) continue;
+    const key = `${d.id}|${s.projectPath.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase()}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ deviceId: d.id, deviceName: d.name, name: s.projectName, path: s.projectPath });
+  }
+  return out;
+}

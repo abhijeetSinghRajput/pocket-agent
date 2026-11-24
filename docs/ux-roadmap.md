@@ -20,10 +20,13 @@ changes), then waits for the owner's go-ahead before the next.
 - **Allow all**: several requests waiting → decide them together.
 
 ## M3 — Fewer taps
-- **Recent workspaces** at the top of New chat: one tap to start.
-- **Quick replies** above the message box when Claude finishes ("Continue", "Run the tests",
-  "Commit this", …).
-- **Voice input**: dictate a message.
+- **Recent workspaces** at the top of New chat: one tap to start (from your latest chats, only
+  folders an online PC still allows).
+- **Quick replies** above the empty message box when Claude finishes ("Continue", "Run the tests",
+  "Commit this", "Explain what you changed"): one tap sends it.
+- **Voice input**: dictate a message (a mic beside Send, in chats and New chat). It uses the
+  phone's own speech service, the one the keyboard's mic uses; the microphone permission is asked
+  the first time and is used only while the mic is on.
 
 ## M4 — Clearer feedback
 - **Turn summary card** when Claude finishes: files changed, commands run, duration.

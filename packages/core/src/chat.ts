@@ -402,3 +402,14 @@ export function readAnswer(
   const own = rest.replace(/^[,\s]+|[,\s]+$/g, '');
   return { chosen, own: own || null };
 }
+
+/**
+ * One-tap replies offered when Claude has finished and waits for you (the phone shows them above
+ * an empty message box). Each is sent as it reads.
+ */
+export const QUICK_REPLIES = [
+  'Continue',
+  'Run the tests',
+  'Commit this',
+  'Explain what you changed',
+] as const;

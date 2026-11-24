@@ -1,12 +1,13 @@
+import { recentWorkspaces } from '@pocket-agent/core';
 import { FolderListResponse, type DeviceDto } from '@pocket-agent/protocol';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import { ArrowLeft, Folder as FolderIcon, FolderOpen } from 'lucide-react-native';
+import { ArrowLeft, Folder as FolderIcon, FolderOpen, History } from 'lucide-react-native';
 import { useEffect, useRef, useState } from 'react';
 import { ScrollView, useWindowDimensions, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 import { apiRequest } from '@/lib/api';
-import { useDevices } from '@/lib/data';
+import { useDevices, useSessions } from '@/lib/data';
 import { enter } from '@/lib/motion';
 import { alpha, fonts, radius, useTheme } from '@/lib/theme';
 import { Button, IconButton, Press, T } from '@/ui/core';
@@ -42,6 +43,7 @@ export function NewChatSheet({
   const { c } = useTheme();
   const { height } = useWindowDimensions();
   const { state, refresh } = useDevices();
+  const sessions = useSessions('all').state.data;
   // Folders opened, deepest last. Empty: the PCs and their projects.
   const [trail, setTrail] = useState<Place[]>([]);
   const [listing, setListing] = useState<Listing>({ status: 'loading' });
@@ -88,6 +90,8 @@ export function NewChatSheet({
 
   const devices = state.data;
   const usable = usableDevices(devices);
+  // Where you chatted lately: one tap starts a new chat there.
+  const recent = recentWorkspaces(sessions ?? [], devices ?? []);
   const into = (deviceId: string, f: Folder) => setTrail((t) => [...t, { ...f, deviceId }]);
 
   function openInChat(place: Place) {
@@ -196,6 +200,24 @@ export function NewChatSheet({
                 </View>
               )}
 
+              {recent.length > 0 && (
+                <View testID="recent-workspaces" style={{ marginBottom: 8 }}>
+                  <T variant="overline" tone="muted" style={{ marginTop: 4, marginBottom: 4 }}>
+                    Recent
+                  </T>
+                  {recent.map((w, i) => (
+                    <FolderRow
+                      key={`${w.deviceId}|${w.path}`}
+                      folder={w}
+                      index={i}
+                      icon="recent"
+                      hint={`Starts a new chat here, on ${w.deviceName}`}
+                      onPress={() => openInChat(w)}
+                    />
+                  ))}
+                </View>
+              )}
+
               {usable.map((d) => (
                 <View key={d.id} style={{ marginBottom: 8 }}>
                   <T variant="overline" tone="muted" style={{ marginTop: 4, marginBottom: 4 }}>
@@ -238,18 +260,21 @@ export function FolderRow({
   index,
   onPress,
   hint = 'Shows the folders inside it',
+  icon = 'folder',
 }: {
   folder: Folder;
   index: number;
   onPress: () => void;
   hint?: string;
+  /** A recent workspace opens straight in a chat: it shows a clock on its folder. */
+  icon?: 'folder' | 'recent';
 }) {
   const { c } = useTheme();
   return (
     <Animated.View entering={enter.rise(Math.min(index, 10))}>
       <Press
         accessibilityRole="button"
-        accessibilityLabel={`Open ${folder.name}`}
+        accessibilityLabel={icon === 'recent' ? `New chat in ${folder.name}` : `Open ${folder.name}`}
         accessibilityHint={hint}
         onPress={onPress}
         scale={0.985}
@@ -263,7 +288,23 @@ export function FolderRow({
           borderRadius: radius.md,
         }}
       >
-        <FolderIcon size={34} color={c.warning} fill={c.warning} strokeWidth={1.2} />
+        <View>
+          <FolderIcon size={34} color={c.warning} fill={c.warning} strokeWidth={1.2} />
+          {icon === 'recent' && (
+            <View
+              style={{
+                position: 'absolute',
+                right: -3,
+                bottom: 1,
+                borderRadius: radius.full,
+                backgroundColor: c.popover,
+                padding: 1.5,
+              }}
+            >
+              <History size={13} color={c.foreground} strokeWidth={2.4} />
+            </View>
+          )}
+        </View>
         <View style={{ flex: 1, minWidth: 0 }}>
           <T variant="bodyMedium" numberOfLines={1}>
             {folder.name}

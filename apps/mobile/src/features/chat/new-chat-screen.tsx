@@ -20,7 +20,8 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { AttachButton, SendButton } from '@/features/chat/composer';
+import { AttachButton, MicButton, SendButton } from '@/features/chat/composer';
+import { canDictate, useDictation } from '@/features/chat/dictation';
 import { DraftFiles } from '@/features/chat/draft-files';
 import { ChatMessages } from '@/features/chat/messages';
 import { AttachMenu, ModelPicker, ModePicker } from '@/features/chat/pickers';
@@ -66,6 +67,8 @@ export function NewChatScreen({ deviceId, path, name }: { deviceId: string; path
   const router = useRouter();
   const device = useDevices().state.data?.find((d) => d.id === deviceId);
   const [text, setText] = useState('');
+  const dictation = useDictation(text, setText);
+  const [dictates] = useState(canDictate);
   // null until picked: the new-chat default (Opus) applies; '' is the PC's own default.
   const [model, setModel] = useState<string | null>(null);
   const [mode, setMode] = useState<string>(NEW_CHAT_MODE);
@@ -110,6 +113,7 @@ export function NewChatScreen({ deviceId, path, name }: { deviceId: string; path
   const hasContent = !!text.trim() || files.ready.length > 0;
 
   async function start() {
+    dictation.cancel();
     // A first message can be just files: Claude is then told what they are called.
     const value =
       text.trim() ||
@@ -255,9 +259,9 @@ export function NewChatScreen({ deviceId, path, name }: { deviceId: string; path
               gap: 8,
             }}
           >
-            {error && (
+            {(error ?? dictation.error) && (
               <Animated.View exiting={exit.fade} layout={layout} testID="send-error">
-                <Notice>{error}</Notice>
+                <Notice>{error ?? dictation.error}</Notice>
               </Animated.View>
             )}
             <Animated.View
@@ -326,6 +330,7 @@ export function NewChatScreen({ deviceId, path, name }: { deviceId: string; path
                   </>
                 )}
                 <View style={{ flex: 1 }} />
+                {dictates && !locked && <MicButton dictation={dictation} disabled={starting} />}
                 <SendButton
                   stopMode={false}
                   disabled={starting || files.uploading || !hasContent || !!locked}

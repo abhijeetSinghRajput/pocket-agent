@@ -414,15 +414,6 @@ type Join = { joinAbove: boolean; joinBelow: boolean };
 
 function AssistantMessage({ item, ...join }: { item: Of<'assistant'> } & Join) {
   const { c } = useTheme();
-  const body = useRef<ComponentRef<typeof View>>(null);
-  const [menu, setMenu] = useState<Anchor | null>(null);
-  const [selecting, setSelecting] = useState(false);
-  const openMenu = () => {
-    body.current?.measureInWindow((x, y, width, height) => {
-      thud();
-      setMenu({ x, y, width, height });
-    });
-  };
   return (
     <Step dot={alpha(c.mutedForeground, 0.45)} dotTop={16 + 7} {...join}>
       <View style={{ paddingTop: 16 }}>
@@ -440,25 +431,11 @@ function AssistantMessage({ item, ...join }: { item: Of<'assistant'> } & Join) {
         >
           {clockTime(item.at)}
         </T>
-        {/* Long-press for Copy and Select text (selecting in place doesn't work in the list). */}
-        <Pressable
-          ref={body}
-          onLongPress={openMenu}
-          delayLongPress={350}
-          accessibilityLabel="Claude:"
-          accessibilityHint="Long-press for options"
-          accessibilityActions={[{ name: 'longpress', label: 'Show options' }]}
-          onAccessibilityAction={openMenu}
-        >
+        {/* No long-press on a reply: a press held on a table must stay free to scroll it. Copying
+            is the button under the reply; your own messages keep their long-press menu. */}
+        <View accessibilityLabel="Claude:">
           <Markdown text={item.text} />
-        </Pressable>
-        <BubbleMenu
-          anchor={menu}
-          text={item.text}
-          onClose={() => setMenu(null)}
-          onSelect={() => setSelecting(true)}
-        />
-        <SelectTextSheet text={item.text} open={selecting} onClose={() => setSelecting(false)} />
+        </View>
         {/* As in the editor: the reply that ends a turn can be copied whole. */}
         {!join.joinBelow && (
           <View style={{ flexDirection: 'row', marginTop: 4, marginLeft: -8 }}>

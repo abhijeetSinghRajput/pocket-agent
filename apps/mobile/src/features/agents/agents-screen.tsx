@@ -13,6 +13,7 @@ import { enter, exit, layout } from '@/lib/motion';
 import { alpha, fonts, radius, useTheme } from '@/lib/theme';
 import { Button, Card, Divider, Press, T, tap, toneColor } from '@/ui/core';
 import { EmptyState, Notice, Roll, Skeleton } from '@/ui/feedback';
+import { Segmented } from '@/ui/form';
 import { Screen } from '@/ui/screen';
 
 /** How long a decided request stays, showing its result, before the list closes over its place. */
@@ -136,6 +137,8 @@ export function AgentsScreen() {
   const pending = useApprovals('pending');
   const history = useApprovals('all');
   const [creating, setCreating] = useState(false);
+  // Running agents first; the ones that finished (and decisions made) are a tab away.
+  const [tab, setTab] = useState<'active' | 'finished'>('active');
   const [pulling, setPulling] = useState(false);
 
   // Decided requests stay a moment, showing their result, before the refresh takes them away.
@@ -172,7 +175,6 @@ export function AgentsScreen() {
   const recent = (history.state.data ?? []).filter((a) => a.status !== 'Pending' || a.decision).slice(0, 20);
 
   const loading = workers.state.status === 'loading' || pending.state.status === 'loading';
-  const empty = !loading && !needs.length && !list.length;
   const summary = loading
     ? undefined
     : [
@@ -199,6 +201,15 @@ export function AgentsScreen() {
       actions={<Button label="New chat" icon={Plus} size="sm" onPress={() => setCreating(true)} />}
       contentStyle={{ paddingHorizontal: 16, gap: 22 }}
     >
+      <Segmented
+        options={[
+          { value: 'active', label: running.length ? `Active · ${running.length}` : 'Active' },
+          { value: 'finished', label: finished.length ? `Finished · ${finished.length}` : 'Finished' },
+        ]}
+        value={tab}
+        onChange={setTab}
+        label="Which agents"
+      />
       {loading && (
         <Animated.View
           entering={enter.fade}
@@ -236,25 +247,43 @@ export function AgentsScreen() {
         </Animated.View>
       )}
 
-      {list.length > 0 && (
-        <Animated.View entering={enter.rise(step++)} layout={layout}>
-          <AgentMap workers={list} />
+      {!loading && tab === 'active' && running.length > 0 && (
+        <Animated.View key="active" entering={enter.rise(step++)} layout={layout}>
+          <AgentMap workers={running} />
+        </Animated.View>
+      )}
+      {!loading && tab === 'finished' && finished.length > 0 && (
+        <Animated.View key="finished" entering={enter.rise(step++)} layout={layout}>
+          <AgentMap workers={finished} />
         </Animated.View>
       )}
 
-      {empty && (
+      {!loading && tab === 'active' && !running.length && !needs.length && (
         <View testID="no-agents">
           <EmptyState
             icon={Bot}
-            title="No background agents"
-            body="When a chat sends sub-agents or a workflow to work in the background, they show up here while they run and for a day after they finish. Anything that needs you shows up here too."
+            title="Nothing running"
+            body={
+              finished.length
+                ? 'Sub-agents and workflows your chats start show up here while they run. The ones that finished today are under Finished.'
+                : 'When a chat sends sub-agents or a workflow to work, they show up here while they run. Anything that needs you shows up here too.'
+            }
             action="New chat"
             onAction={() => setCreating(true)}
           />
         </View>
       )}
+      {!loading && tab === 'finished' && !finished.length && (
+        <View testID="no-finished-agents">
+          <EmptyState
+            icon={Bot}
+            title="Nothing finished today"
+            body="Agents that finish stay here for a day."
+          />
+        </View>
+      )}
 
-      {!loading && <RecentDecisions items={recent} />}
+      {!loading && tab === 'finished' && <RecentDecisions items={recent} />}
 
       <NewChatSheet open={creating} onClose={() => setCreating(false)} />
     </Screen>

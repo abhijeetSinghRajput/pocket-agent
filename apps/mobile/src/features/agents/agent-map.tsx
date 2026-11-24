@@ -98,7 +98,6 @@ function ChatBranch({ chat, index }: { chat: Chat; index: number }) {
         render={(w) => (
           <WorkerRow
             w={w}
-            inTree
             // A sub-agent opens its own page (prompt, tool calls, transcript); a workflow its chat.
             onPress={() =>
               w.kind === 'subagent'

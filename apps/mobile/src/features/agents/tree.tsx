@@ -1,12 +1,13 @@
 import type { ReactNode } from 'react';
 import { View } from 'react-native';
 import { alpha, useTheme } from '@/lib/theme';
+import { ROW_DOT_Y } from './worker-row';
 
 /** How far a child row sits in from its parent, and where its branch line runs. */
 export const TREE_INDENT = 28;
 const LINE_X = 13;
-/** Where the branch meets the row: the middle of a row's 40px icon. */
-const ELBOW_Y = 32;
+/** Where the branch meets the row: its status dot. */
+const ELBOW_Y = ROW_DOT_Y;
 
 /**
  * One child in a tree, like a file tree: a line comes down from the parent and turns into the row

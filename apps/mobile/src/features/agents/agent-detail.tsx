@@ -1,7 +1,7 @@
 import { buildChat, type ChatItem } from '@pocket-agent/core';
 import type { SubagentInfo, WorkerStatus } from '@pocket-agent/protocol';
 import { useRouter } from 'expo-router';
-import { Bot, ChevronRight, FileText } from 'lucide-react-native';
+import { FileText } from 'lucide-react-native';
 import { useMemo, useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
 import Animated from 'react-native-reanimated';
@@ -9,12 +9,12 @@ import { Markdown } from '@/features/chat/markdown';
 import { duration } from '@/features/sessions/badges';
 import { useSubagent } from '@/lib/data';
 import { enter } from '@/lib/motion';
-import { alpha, fonts, radius, useTheme } from '@/lib/theme';
+import { fonts, radius, useTheme } from '@/lib/theme';
 import { Button, Dot, Press, T } from '@/ui/core';
 import { Notice, Skeleton } from '@/ui/feedback';
 import { NavBar } from '@/ui/screen';
 import { TreeChildren } from './tree';
-import { WorkerBadge } from './worker-row';
+import { SubagentRow, WorkerBadge } from './worker-row';
 
 type Tool = Extract<ChatItem, { kind: 'tool' }>;
 /** Tool calls listed here; the transcript has them all. */
@@ -106,45 +106,6 @@ function ToolRow({ tool }: { tool: Tool }) {
         {tool.target}
       </Text>
     </View>
-  );
-}
-
-/** An agent in the map: what it does, its type, its status. */
-export function AgentNode({ agent, onPress }: { agent: SubagentInfo; onPress: () => void }) {
-  const { c } = useTheme();
-  const running = !agent.finished;
-  return (
-    <Press
-      accessibilityRole="button"
-      accessibilityLabel={`${agent.type}: ${agent.description}. Open`}
-      onPress={onPress}
-      scale={0.99}
-      testID="agent-node"
-      style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 12, paddingRight: 8 }}
-    >
-      <View
-        style={{
-          width: 40,
-          height: 40,
-          borderRadius: 12,
-          alignItems: 'center',
-          justifyContent: 'center',
-          backgroundColor: running ? alpha(c.primary, 0.13) : c.muted,
-        }}
-      >
-        <Bot size={19} color={running ? c.primary : c.mutedForeground} strokeWidth={2} />
-      </View>
-      <View style={{ flex: 1, minWidth: 0 }}>
-        <T variant="bodyMedium" numberOfLines={2}>
-          {agent.description || agent.type}
-        </T>
-        <T variant="caption" tone="muted" numberOfLines={1}>
-          {agent.type} · {agent.toolCalls} tool call{agent.toolCalls === 1 ? '' : 's'}
-        </T>
-      </View>
-      <WorkerBadge status={statusOf(agent)} />
-      <ChevronRight size={16} color={c.mutedForeground} />
-    </Press>
   );
 }
 
@@ -251,7 +212,7 @@ export function AgentDetailScreen({ sessionId, toolUseId }: { sessionId: string;
                 <TreeChildren
                   items={children}
                   keyOf={(a) => a.toolUseId}
-                  render={(a) => <AgentNode agent={a} onPress={() => openAgent(a.toolUseId)} />}
+                  render={(a) => <SubagentRow agent={a} onPress={() => openAgent(a.toolUseId)} />}
                 />
               </View>
             </Section>

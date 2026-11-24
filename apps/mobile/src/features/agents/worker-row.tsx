@@ -1,18 +1,22 @@
 import { timeAgo } from '@pocket-agent/core';
-import type { WorkerDto, WorkerStatus } from '@pocket-agent/protocol';
-import { Bot, ChevronRight, Workflow } from 'lucide-react-native';
+import type { SubagentInfo, WorkerDto, WorkerStatus } from '@pocket-agent/protocol';
+import { ChevronRight } from 'lucide-react-native';
 import { View } from 'react-native';
 import { duration } from '@/features/sessions/badges';
 import { alpha, radius, useTheme } from '@/lib/theme';
 import { Dot, Press, T, toneColor, type Tone } from '@/ui/core';
 import { Roll } from '@/ui/feedback';
 
+/** Running is green; finished work steps back (muted); a failure stands out. */
 const STATUS: Record<WorkerStatus, { label: string; tone: Tone }> = {
-  running: { label: 'Running', tone: 'primary' },
-  done: { label: 'Done', tone: 'success' },
+  running: { label: 'Running', tone: 'success' },
+  done: { label: 'Done', tone: 'muted' },
   failed: { label: 'Failed', tone: 'danger' },
   stopped: { label: 'Stopped', tone: 'muted' },
 };
+
+/** Where a row's status dot sits from its top: on the first line of its title. */
+export const ROW_DOT_Y = 23;
 
 /** A worker's status as a pill: the word rolls when it changes; a running one breathes. */
 export function WorkerBadge({ status }: { status: WorkerStatus }) {
@@ -38,73 +42,116 @@ export function WorkerBadge({ status }: { status: WorkerStatus }) {
 }
 
 /**
- * One background worker: what it was asked to do, what kind it is, which chat it belongs to, how
- * long it has run (or when it ended). In the agent map (`inTree`) its chat is the branch above it.
+ * One agent in the map: a status dot where its branch meets it, its task across the whole width,
+ * then what it is and when, how it ended, and its status.
  */
-export function WorkerRow({ w, onPress, inTree }: { w: WorkerDto; onPress: () => void; inTree?: boolean }) {
+function AgentRow({
+  title,
+  meta,
+  summary,
+  status,
+  accessibilityLabel,
+  onPress,
+}: {
+  title: string;
+  meta: string;
+  summary?: string | null;
+  status: WorkerStatus;
+  accessibilityLabel: string;
+  onPress: () => void;
+}) {
   const { c } = useTheme();
-  const running = w.status === 'running';
-  const Icon = w.kind === 'workflow' ? Workflow : Bot;
-  const kind = w.kind === 'workflow' ? 'Workflow' : 'Sub-agent';
-  const when = running ? duration(w.startedAt, null) : timeAgo(w.finishedAt ?? w.startedAt);
+  const tone = toneColor(c, STATUS[status].tone);
   return (
     <Press
       accessibilityRole="button"
-      accessibilityLabel={`${kind}: ${w.title}, ${STATUS[w.status].label}, in ${w.projectName}. ${w.kind === 'subagent' ? 'Open' : 'Open chat'}`}
+      accessibilityLabel={accessibilityLabel}
       testID="worker-row"
       onPress={onPress}
       scale={0.99}
       style={{
         flexDirection: 'row',
-        alignItems: 'center',
-        gap: 12,
-        paddingLeft: inTree ? 6 : 14,
-        paddingRight: inTree ? 4 : 14,
+        alignItems: 'flex-start',
+        gap: 10,
         paddingVertical: 12,
+        paddingRight: 4,
       }}
     >
-      <View
-        style={{
-          width: 40,
-          height: 40,
-          borderRadius: 12,
-          alignItems: 'center',
-          justifyContent: 'center',
-          backgroundColor: running ? alpha(c.primary, 0.13) : c.muted,
-        }}
-      >
-        <Icon size={19} color={running ? c.primary : c.mutedForeground} strokeWidth={2} />
+      <View style={{ marginTop: ROW_DOT_Y - 12 - 4 }}>
+        <Dot
+          color={status === 'running' ? tone : alpha(c.mutedForeground, 0.55)}
+          size={8}
+          pulse={status === 'running'}
+        />
       </View>
-      <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-        <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 8 }}>
-          <T variant="subheading" numberOfLines={2} style={{ flex: 1, fontSize: 15, lineHeight: 21 }}>
-            {w.title}
-          </T>
-          <T
-            variant="caption"
-            style={{ fontVariant: ['tabular-nums'], color: running ? c.primary : c.mutedForeground }}
-          >
-            {when}
-          </T>
-        </View>
-        <T variant="small" tone="muted" numberOfLines={1}>
-          {[w.label && w.label !== w.title ? w.label : kind, w.background ? 'background' : null]
-            .filter(Boolean)
-            .join(' · ')}
+      <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
+        <T variant="subheading" numberOfLines={2} style={{ fontSize: 15, lineHeight: 21 }}>
+          {title}
         </T>
-        {w.summary && !running && (
-          <T variant="small" numberOfLines={2} style={{ color: alpha(c.foreground, 0.8) }}>
-            {w.summary}
+        <T variant="caption" tone="muted" numberOfLines={1} style={{ fontVariant: ['tabular-nums'] }}>
+          {meta}
+        </T>
+        {summary ? (
+          <T variant="small" numberOfLines={2} style={{ color: alpha(c.foreground, 0.75) }}>
+            {summary}
           </T>
-        )}
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 }}>
-          <WorkerBadge status={w.status} />
-          <T variant="caption" tone="muted" numberOfLines={1} style={{ flexShrink: 1 }}>
-            {inTree ? (w.background ? 'In the background' : '') : `${w.projectName} · ${w.deviceName}`}
-          </T>
+        ) : null}
+        <View style={{ flexDirection: 'row', marginTop: 4 }}>
+          <WorkerBadge status={status} />
         </View>
       </View>
-      <ChevronRight size={18} color={alpha(c.mutedForeground, 0.6)} strokeWidth={2} />
+      <ChevronRight
+        size={18}
+        color={alpha(c.mutedForeground, 0.6)}
+        strokeWidth={2}
+        style={{ marginTop: ROW_DOT_Y - 12 - 9 }}
+      />
     </Press>
+  );
+}
+
+const when = (status: WorkerStatus, startedAt: string, endedAt: string | null) =>
+  status === 'running' ? `for ${duration(startedAt, null)}` : timeAgo(endedAt ?? startedAt);
+
+/** A background worker of a chat (sub-agent or workflow), as the agent map lists it. */
+export function WorkerRow({ w, onPress }: { w: WorkerDto; onPress: () => void }) {
+  const kind = w.kind === 'workflow' ? 'Workflow' : 'Sub-agent';
+  const meta = [
+    w.label && w.label !== w.title ? w.label : kind,
+    w.background ? 'background' : null,
+    when(w.status, w.startedAt, w.finishedAt),
+  ]
+    .filter(Boolean)
+    .join(' · ');
+  return (
+    <AgentRow
+      title={w.title}
+      meta={meta}
+      summary={w.status === 'running' ? null : w.summary}
+      status={w.status}
+      accessibilityLabel={`${kind}: ${w.title}, ${STATUS[w.status].label}, in ${w.projectName}. ${w.kind === 'subagent' ? 'Open' : 'Open chat'}`}
+      onPress={onPress}
+    />
+  );
+}
+
+/** A sub-agent another agent started, as its page lists them. */
+export function SubagentRow({ agent: a, onPress }: { agent: SubagentInfo; onPress: () => void }) {
+  const status: WorkerStatus = a.finished ? 'done' : 'running';
+  const meta = [
+    a.type,
+    `${a.toolCalls} tool call${a.toolCalls === 1 ? '' : 's'}`,
+    a.startedAt ? when(status, a.startedAt, a.lastActivityAt) : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+  return (
+    <AgentRow
+      title={a.description || a.type}
+      meta={meta}
+      status={status}
+      accessibilityLabel={`${a.type}: ${a.description}, ${STATUS[status].label}. Open`}
+      onPress={onPress}
+    />
   );
 }

@@ -36,11 +36,8 @@ export function hooksAreConnected(s: Pick<AgentSessionDto, 'metadata' | 'capabil
 /** When the instruction will actually reach Claude — stated honestly per session type. */
 export function deliveryHint(s: AgentSessionDto): string {
   if (s.capabilities.instructAnytime) {
-    if (isBusy(s)) {
-      return s.capabilities.interrupt
-        ? 'Claude is busy: this runs as soon as the current task finishes (or interrupt it).'
-        : 'Claude is busy: it reads this at its next step, or when the current turn finishes.';
-    }
+    // Busy: the header's spinner already says Claude is working; a message waits its turn.
+    if (isBusy(s)) return '';
     return s.mode === 'managed'
       ? 'Claude starts on this right away.'
       : 'Claude starts on this right away on your PC. Your editor won’t show it live; follow it here.';

@@ -14,7 +14,7 @@ const config: ExpoConfig = {
   name: 'Pocket Agent',
   slug: 'pocket-agent',
   owner: 'pocket-agents-team',
-  version: '2.3.0',
+  version: '2.3.1',
   orientation: 'portrait',
   icon: './assets/images/icon.png',
   scheme: 'pocketagent',
@@ -25,7 +25,7 @@ const config: ExpoConfig = {
   },
   android: {
     package: 'com.mrcodium.pocketagent',
-    versionCode: 6,
+    versionCode: 7,
     // Firebase config for push (Firebase console → project settings → the Android app). Locally:
     // GOOGLE_SERVICES_JSON=./google-services.json; on EAS: a file environment variable of that name.
     ...(process.env.GOOGLE_SERVICES_JSON ? { googleServicesFile: process.env.GOOGLE_SERVICES_JSON } : {}),

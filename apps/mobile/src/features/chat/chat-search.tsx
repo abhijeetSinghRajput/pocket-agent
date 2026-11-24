@@ -95,22 +95,26 @@ export function ChatSearchBar({
           </T>
         )}
       </View>
-      <IconButton
-        icon={ChevronUp}
-        label="Older match"
-        tone="default"
-        disabled={!count || index <= 0}
-        onPress={() => go(index - 1)}
-        testID="chat-search-older"
-      />
-      <IconButton
-        icon={ChevronDown}
-        label="Newer match"
-        tone="default"
-        disabled={!count || index >= count - 1}
-        onPress={() => go(index + 1)}
-        testID="chat-search-newer"
-      />
+      <View style={{ opacity: !count || index <= 0 ? 0.3 : 1 }}>
+        <IconButton
+          icon={ChevronUp}
+          label="Older match"
+          tone="default"
+          disabled={!count || index <= 0}
+          onPress={() => go(index - 1)}
+          testID="chat-search-older"
+        />
+      </View>
+      <View style={{ opacity: !count || index >= count - 1 ? 0.3 : 1 }}>
+        <IconButton
+          icon={ChevronDown}
+          label="Newer match"
+          tone="default"
+          disabled={!count || index >= count - 1}
+          onPress={() => go(index + 1)}
+          testID="chat-search-newer"
+        />
+      </View>
     </Animated.View>
   );
 }

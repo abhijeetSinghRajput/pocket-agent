@@ -75,7 +75,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Path, Svg } from 'react-native-svg';
-import { SearchQuery, useMark } from '@/features/chat/search-mark';
+import { MatchAnchor, SearchQuery, useMark } from '@/features/chat/search-mark';
 import { Markdown } from '@/features/chat/markdown';
 import { SelectTextSheet } from '@/features/chat/select-text-sheet';
 import { SentAttachments } from '@/features/chat/sent-attachments';
@@ -269,6 +269,9 @@ export const EditContext = createContext<((item: Extract<ChatItem, { kind: 'user
 function UserMessage({ item }: { item: Of<'user'> }) {
   const { c } = useTheme();
   const mark = useMark();
+  // A long message the search found something in is shown whole.
+  const query = useContext(SearchQuery).trim().toLowerCase();
+  const found = query.length >= 2 && item.text.toLowerCase().includes(query);
   const bubble = useRef<ComponentRef<typeof View>>(null);
   const [menu, setMenu] = useState<Anchor | null>(null);
   const [selecting, setSelecting] = useState(false);
@@ -344,7 +347,7 @@ function UserMessage({ item }: { item: Of<'user'> }) {
       >
         {item.attachments && <SentAttachments files={item.attachments} />}
         <Text
-          numberOfLines={long && !open ? FOLD_LINES : undefined}
+          numberOfLines={long && !open && !found ? FOLD_LINES : undefined}
           style={{
             fontFamily: fonts.regular,
             fontSize: 15.25,
@@ -1361,7 +1364,18 @@ function Mark({ text }: { text: string }) {
 type Hit = 'current' | 'match' | undefined;
 
 const ListRow = memo(
-  function ListRow({ row, fresh, hit }: { row: Row; fresh: number | undefined; hit: Hit }) {
+  function ListRow({
+    row,
+    fresh,
+    hit,
+    anchor,
+  }: {
+    row: Row;
+    fresh: number | undefined;
+    hit: Hit;
+    /** The found word's anchor (only in the match the search went to). */
+    anchor?: (node: ComponentRef<typeof View> | null) => () => void;
+  }) {
     const { c } = useTheme();
     // The match the search went to lights up, then fades: the marked words stay.
     const glow = useSharedValue(0);
@@ -1397,11 +1411,17 @@ const ListRow = memo(
             ]}
           />
         )}
-        <RowContent row={row} />
+        {anchor ? (
+          <MatchAnchor.Provider value={anchor}>
+            <RowContent row={row} />
+          </MatchAnchor.Provider>
+        ) : (
+          <RowContent row={row} />
+        )}
       </Animated.View>
     );
   },
-  (a, b) => a.fresh === b.fresh && a.hit === b.hit && same(a.row, b.row),
+  (a, b) => a.fresh === b.fresh && a.hit === b.hit && a.anchor === b.anchor && same(a.row, b.row),
 );
 
 const rowKey = (row: Row) => row.key;
@@ -1467,6 +1487,7 @@ export function ChatMessages({
 
   const onScroll = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
     // Inverted: offset 0 is the newest message.
+    offset.current = e.nativeEvent.contentOffset.y;
     const near = e.nativeEvent.contentOffset.y < NEAR_BOTTOM;
     if (near !== atBottom.current) {
       atBottom.current = near;
@@ -1489,10 +1510,48 @@ export function ChatMessages({
 
   // Searching: the match being shown is brought to the middle of the screen.
   const current = search?.current ?? null;
+  // The found word's place: an anchor in front of each mark of the match being shown.
+  const offset = useRef(0);
+  const box = useRef<ComponentRef<typeof View>>(null);
+  const anchors = useRef(new Set<ComponentRef<typeof View>>());
+  const anchor = useCallback((node: ComponentRef<typeof View> | null) => {
+    if (!node) return () => undefined;
+    anchors.current.add(node);
+    return () => {
+      anchors.current.delete(node);
+    };
+  }, []);
   useEffect(() => {
     if (!current) return;
     const index = rows.findIndex((r) => r.key === current);
     if (index >= 0) list.current?.scrollToIndex({ index, viewPosition: 0.5, animated: true });
+    // The message is in view, but in a long one (or above the keyboard) the word may not be:
+    // measure the word and move the chat so it sits in the middle of what is visible.
+    const bring = () => {
+      const nodes = [...anchors.current];
+      if (!nodes.length || !box.current) return;
+      box.current.measureInWindow((_x, top, _w, height) => {
+        const visible = height - bottomInset;
+        let first: number | null = null;
+        let left = nodes.length;
+        for (const n of nodes)
+          n.measureInWindow((_nx, y) => {
+            if (first === null || y < first) first = y;
+            if (--left > 0 || first === null) return;
+            if (first >= top + 56 && first <= top + visible - 56) return;
+            list.current?.scrollToOffset({
+              offset: Math.max(0, offset.current - (first - (top + visible / 2))),
+              animated: true,
+            });
+          });
+      });
+    };
+    const t1 = setTimeout(bring, 450);
+    const t2 = setTimeout(bring, 1000);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
     // Only when the match changes, not as rows arrive.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [current]);
@@ -1512,13 +1571,14 @@ export function ChatMessages({
         row={item}
         fresh={fresh.get(item.key)}
         hit={item.key === current ? 'current' : matches?.has(item.key) ? 'match' : undefined}
+        {...(item.key === current ? { anchor } : {})}
       />
     ),
-    [fresh, current, matches],
+    [fresh, current, matches, anchor],
   );
 
   return (
-    <View style={{ flex: 1, minHeight: 0 }}>
+    <View ref={box} collapsable={false} style={{ flex: 1, minHeight: 0 }}>
       {/* Searching: every message marks the searched words. */}
       <SearchQuery.Provider value={search?.query ?? ''}>
         <FlatList

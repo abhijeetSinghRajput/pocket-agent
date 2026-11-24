@@ -15,6 +15,8 @@ import struct
 import wave
 
 RATE = 44100
+# Master volume, as the sound tool plays them (pitch 1.0x, volume 200%).
+VOLUME = 2.0
 
 SOUNDS = {
     # Toggles and segmented choices (theme, effort): a quick paper-feed ratchet.
@@ -99,7 +101,7 @@ def render(bursts, seed=7):
                 t = (i - atk) / max(1, n - atk)
                 env = b['gain'] * (0.0001 / b['gain']) ** t
             if start + i < len(mix):
-                mix[start + i] += noise[i] * env
+                mix[start + i] += noise[i] * env * VOLUME
     return mix
 
 

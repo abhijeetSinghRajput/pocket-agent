@@ -16,14 +16,16 @@ import { useLiveState } from '@/lib/live';
  * to a screen shows its cached data at once instead of fetching again.
  */
 export function QueryProvider({ children }: { children: ReactNode }) {
-  const [client] = useState(
-    () =>
-      new QueryClient({
-        defaultOptions: {
-          queries: { staleTime: 60_000, gcTime: 10 * 60_000, retry: 1, refetchOnWindowFocus: true },
-        },
-      }),
-  );
+  const [client] = useState(() => {
+    const c = new QueryClient({
+      defaultOptions: {
+        queries: { staleTime: 60_000, gcTime: 10 * 60_000, retry: 1, refetchOnWindowFocus: true },
+      },
+    });
+    // A chat's conversation (useEventFeed) stays longer: going back to a chat is common.
+    c.setQueryDefaults(['feed'], { gcTime: 30 * 60_000 });
+    return c;
+  });
   // "Window focus" on a phone is the app coming back to the foreground.
   useEffect(() => {
     const sub = AppState.addEventListener('change', (s) => focusManager.setFocused(s === 'active'));

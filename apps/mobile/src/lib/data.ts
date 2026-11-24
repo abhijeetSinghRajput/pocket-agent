@@ -11,6 +11,7 @@ import {
   type AgentEventDto,
   type BackendToWeb,
 } from '@pocket-agent/protocol';
+import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { apiRequest } from '@/lib/api';
 import { foreground, useLiveRefresh, useLiveState } from '@/lib/live';
@@ -123,6 +124,13 @@ export async function markRead(what: { ids?: string[]; link?: string } = {}): Pr
   await apiRequest('/notifications/read', null, { method: 'POST', body: what });
 }
 
+/** A chat's loaded conversation, kept between visits. */
+interface FeedCache {
+  events: AgentEventDto[];
+  cursor: string | null;
+  loadedOlder: boolean;
+}
+
 /** The API's largest page. */
 const PAGE = 100;
 /** "Load older" keeps going (up to this many pages) until it reaches an earlier message. */
@@ -138,14 +146,25 @@ const isMessage = (e: AgentEventDto) =>
  *
  * A single reply can be dozens of tool steps, so a page of events may hold no message at all:
  * loading older pages continues until one brings an earlier message (or the start is reached).
+ *
+ * Opened again, a chat shows what it had at once (kept in the app's query cache, which signing
+ * out clears) while the newest page is fetched behind it: no loading on the way back.
  */
 export function useEventFeed(path: string) {
-  const [events, setEvents] = useState<AgentEventDto[]>([]);
-  const [cursor, setCursor] = useState<string | null>(null);
-  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+  const client = useQueryClient();
+  const [cached] = useState(() => client.getQueryData<FeedCache>(['feed', path]));
+  const [events, setEvents] = useState<AgentEventDto[]>(cached?.events ?? []);
+  const [cursor, setCursor] = useState<string | null>(cached?.cursor ?? null);
+  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>(cached ? 'ready' : 'loading');
   const [error, setError] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
-  const loadedOlder = useRef(false);
+  const loadedOlder = useRef(cached?.loadedOlder ?? false);
+
+  // What is on screen is kept for the next time this chat opens.
+  useEffect(() => {
+    if (status !== 'ready') return;
+    client.setQueryData<FeedCache>(['feed', path], { events, cursor, loadedOlder: loadedOlder.current });
+  }, [client, path, status, events, cursor]);
 
   const refreshHead = useCallback(async () => {
     try {

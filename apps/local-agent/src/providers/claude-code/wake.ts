@@ -37,7 +37,8 @@ const MAX_MISSED = 5;
  * Wakes an idle session the user started themselves (VS Code, terminal) when an instruction
  * arrives from Pocket Agent. Claude Code can't take a prompt into an idle interactive session, so
  * the Local Agent resumes the same session through the Claude Agent SDK and runs one turn per
- * instruction (verified: same session id, full history). Opt-in on the PC (`instructions wake enable`).
+ * instruction (verified: same session id, full history). Automatic whenever phone messages to these
+ * sessions are allowed (`instructions enable`, asked at setup).
  *
  * Caveat, handled here: the editor keeps its own copy of the conversation in memory, so it doesn't
  * see these turns. While one runs, a prompt typed on the PC is held back (`blockPrompt`), and the

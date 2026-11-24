@@ -149,11 +149,7 @@ export class CommandRouter {
           const item = { commandId: p.commandId, text: p.text, expiresAt: QUEUED_UNTIL_RUN };
           // Idle (or already woken): run it now instead of waiting for the next turn on the PC.
           const wake = this.deps.wake;
-          if (
-            wake &&
-            this.deps.policy().wakeIdle &&
-            (wake.isRunning(sid) || s.status === 'WaitingForInput')
-          ) {
+          if (wake && (wake.isRunning(sid) || s.status === 'WaitingForInput')) {
             return wake.run(sid, s.projectPath, {
               ...item,
               ...(model ? { model } : {}),

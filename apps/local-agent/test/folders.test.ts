@@ -17,7 +17,6 @@ function workspace() {
 const policyFor = (root: string): Policy => ({
   projects: [{ name: 'ws', path: root }],
   observedInstructions: false,
-  wakeIdle: false,
   shareAttachments: false,
   remoteApproval: false,
 });

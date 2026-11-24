@@ -67,7 +67,6 @@ function setup(policy: Partial<Policy> = {}) {
   const full: Policy = {
     projects: [],
     observedInstructions: true,
-    wakeIdle: true,
     shareAttachments: false,
     remoteApproval: false,
     ...policy,
@@ -86,7 +85,7 @@ function setup(policy: Partial<Policy> = {}) {
   const hooks = new ClaudeHookHandler(registry, managed.isManaged, {
     instructions: observed,
     instructionsAllowed: () => full.observedInstructions,
-    wakeIdleAllowed: () => full.observedInstructions && full.wakeIdle,
+    wakeIdleAllowed: () => full.observedInstructions,
     wake,
   });
   // A VS Code session with hooks, idle.
@@ -212,14 +211,13 @@ describe('waking an idle session from Pocket Agent', () => {
     ).toBeUndefined();
   });
 
-  it('without the wake opt-in, an idle session still waits for the next turn on the PC', async () => {
-    const h = setup({ wakeIdle: false });
-    const c = instruction('later');
+  it('an idle session is always woken when phone messages are on: there is no separate switch', async () => {
+    const h = setup();
+    const c = instruction('now please');
     await h.router.handle(c);
     await h.tick();
-    expect(h.sdk.calls).toHaveLength(0);
-    expect(h.observed.pending('obs')).toBe(1);
-    expect(h.statuses(c.payload.commandId)).toEqual(['Delivered', 'Accepted']);
+    expect(h.sdk.calls).toHaveLength(1);
+    expect(h.observed.pending('obs')).toBe(0);
   });
 
   it('a busy session is never woken: the instruction waits for the end of its turn', async () => {
@@ -237,7 +235,7 @@ describe('waking an idle session from Pocket Agent', () => {
   });
 
   it('a busy session gets the message at its next tool step, in the same turn', async () => {
-    const h = setup({ wakeIdle: false });
+    const h = setup();
     const base = { session_id: 'obs', cwd: 'C:\\work\\app' };
     h.hooks.handle({ ...base, hook_event_name: 'UserPromptSubmit', prompt: 'refactor it' });
     const a = instruction('Also add tests');
@@ -287,7 +285,7 @@ describe('waking an idle session from Pocket Agent', () => {
   });
 
   it('without the instructions opt-in, tool steps never carry anything', async () => {
-    const h = setup({ observedInstructions: false, wakeIdle: false });
+    const h = setup({ observedInstructions: false });
     const base = { session_id: 'obs', cwd: 'C:\\work\\app' };
     h.hooks.handle({ ...base, hook_event_name: 'UserPromptSubmit', prompt: 'work' });
     const c = instruction('sneak in');
@@ -321,7 +319,7 @@ describe('waking an idle session from Pocket Agent', () => {
   });
 
   it('stops a working session at its next tool step', async () => {
-    const h = setup({ wakeIdle: false });
+    const h = setup();
     const base = { session_id: 'obs', cwd: 'C:\\work\\app' };
     h.hooks.handle({ ...base, hook_event_name: 'UserPromptSubmit', prompt: 'long job' });
     const stop = control('interrupt');
@@ -389,7 +387,7 @@ describe('waking an idle session from Pocket Agent', () => {
   });
 
   it('never stops or ends a session without the PC owner’s opt-in', async () => {
-    const h = setup({ observedInstructions: false, wakeIdle: false });
+    const h = setup({ observedInstructions: false });
     const t = h.registry.get('obs')!;
     h.registry.announce({ ...t }, 'discovery', { pid: 4242 });
     for (const kind of ['interrupt', 'session.stop'] as const) {

@@ -134,7 +134,6 @@ function harness(download: (id: string, refs: AttachmentRef[]) => Promise<LocalF
   const policy: Policy = {
     projects: [],
     observedInstructions: true,
-    wakeIdle: true,
     shareAttachments: false,
     remoteApproval: false,
   };

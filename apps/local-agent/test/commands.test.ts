@@ -69,7 +69,6 @@ function harness(policy: Partial<Policy> = {}) {
   const full: Policy = {
     projects: [],
     observedInstructions: false,
-    wakeIdle: false,
     shareAttachments: false,
     remoteApproval: false,
     ...policy,
@@ -86,7 +85,6 @@ describe('PC policy', () => {
     expect(await loadPolicy(home)).toEqual({
       projects: [],
       observedInstructions: false,
-      wakeIdle: false,
       shareAttachments: false,
       remoteApproval: true,
     });
@@ -101,7 +99,6 @@ describe('PC policy', () => {
     await savePolicy(home, {
       projects: [{ name: 'api', path: 'C:\\Work\\API' }],
       observedInstructions: true,
-      wakeIdle: false,
       shareAttachments: false,
       remoteApproval: false,
     });
@@ -112,7 +109,6 @@ describe('PC policy', () => {
     const policy: Policy = {
       projects: [{ name: 'api', path: 'C:\\Work\\API' }],
       observedInstructions: false,
-      wakeIdle: false,
       shareAttachments: false,
       remoteApproval: false,
     };
@@ -299,7 +295,6 @@ describe('continuing an ended session', () => {
       // Continuing needs no allowed folder: it runs where the conversation ran.
       projects: [],
       observedInstructions: false,
-      wakeIdle: false,
       shareAttachments: false,
       remoteApproval: false,
     };

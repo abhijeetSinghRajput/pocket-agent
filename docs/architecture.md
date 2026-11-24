@@ -44,7 +44,7 @@ mechanisms. Pocket Agent models this explicitly, and the UI shows each session's
 | Discovery | Known from creation | `SessionStart` hook; best-effort scan of `~/.claude/sessions/*.json` (undocumented) |
 | Live status, tool events | Yes (SDK message stream) | Yes (hooks) |
 | Remote approve/deny | Yes, via `canUseTool`. No timeout, so the request can wait indefinitely | Yes, via `PermissionRequest` hook (bounded by hook timeout) |
-| Send instruction anytime | **Yes**, as an SDK streaming input message | **While Claude works**, at its next tool step, through `PostToolUse` → `additionalContext` (Claude reads it in the same turn); otherwise **at the end of a turn**, through `Stop` → `{"decision":"block","reason":…}`. **While idle**, only with the PC opt-in `instructions wake enable`: the Local Agent resumes the same session through the SDK (`resume: <session id>`) for one turn (see "Waking idle observed sessions") |
+| Send instruction anytime | **Yes**, as an SDK streaming input message | **While Claude works**, at its next tool step, through `PostToolUse` → `additionalContext` (Claude reads it in the same turn); otherwise **at the end of a turn**, through `Stop` → `{"decision":"block","reason":…}`. **While idle**, at once: the Local Agent resumes the same session through the SDK (`resume: <session id>`) for one turn (see "Waking idle observed sessions"; automatic since agent 2.2.0) |
 | Interrupt / stop | Yes (`interrupt()`, abort), at once | With the PC opt-in `instructions enable`: **stop** at Claude's next tool step (`PreToolUse`/`PostToolUse` → `{"continue": false}`); **end** by closing the session's Claude Code process (pid from discovery). A turn run by wake is aborted at once |
 | Choose the model | Yes: `model` at start, `setModel()` before a turn | Only for turns Pocket Agent runs itself (wake: `model` for that turn). A turn running in the editor keeps the editor's model |
 | Conversation history | SDK stream | Transcript JSONL (`transcript_path` from hook input) |
@@ -192,9 +192,9 @@ Agent SDK query() ◄── `pocket-agent run` ──► ManagedSessions ──�
 
 ### Waking idle observed sessions (as built)
 
-Claude Code has no supported way to push a prompt into an idle interactive session. With the PC opt-in
-`pocket-agent instructions wake enable` (off by default; it also enables `instructions`), an instruction to an observed
-session that is `WaitingForInput` runs at once: the Local Agent calls the Agent SDK with `resume: <session id>`, one turn
+Claude Code has no supported way to push a prompt into an idle interactive session. Whenever messages to observed
+sessions are allowed (`instructions enable`, asked at setup), an instruction to one that is `WaitingForInput` runs at
+once; there is no separate switch (since agent 2.2.0; owner decision 2026-11-25: never make the user configure it): the Local Agent calls the Agent SDK with `resume: <session id>`, one turn
 per instruction, queued while one runs. Verified with real Claude Code: the same session id continues with its full
 history, and a message sent in the browser gets Claude's answer in the chat.
 

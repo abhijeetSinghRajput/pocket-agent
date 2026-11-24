@@ -36,7 +36,7 @@ export function midTurnContext(texts: string[]): string {
  * - while Claude is working, at its next tool step: PostToolUse answers with `additionalContext`,
  *   and Claude reads the message in the same turn (like a message typed while it works);
  * - otherwise when the turn ends: Stop answers `{"decision":"block","reason":…}` and Claude continues.
- * An idle session receives it only after its next turn (or at once with `instructions wake`).
+ * An idle session is woken to run it at once (see `IdleWake`).
  */
 export class ObservedInstructions {
   private readonly queues = new Map<string, Item[]>();

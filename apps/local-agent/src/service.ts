@@ -64,7 +64,6 @@ export class AgentService {
   private policy: Policy = {
     projects: [],
     observedInstructions: false,
-    wakeIdle: false,
     shareAttachments: false,
     remoteApproval: false,
   };
@@ -114,7 +113,8 @@ export class AgentService {
       },
       instructions: this.observed,
       instructionsAllowed: () => this.policy.observedInstructions,
-      wakeIdleAllowed: () => this.policy.observedInstructions && this.policy.wakeIdle,
+      // Idle sessions are woken whenever phone messages are allowed (no separate switch).
+      wakeIdleAllowed: () => this.policy.observedInstructions,
       wake: this.wake,
       approvals: this.approvals,
       remoteApprovalAllowed: () => this.policy.remoteApproval,

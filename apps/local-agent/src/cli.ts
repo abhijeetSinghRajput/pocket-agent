@@ -379,13 +379,13 @@ async function connectThisPc(codeArg: string | undefined, opts: ConnectOptions):
           true,
         )
       : true;
-    // Idle chats run the message at once instead of waiting for your next turn on the PC.
-    if (on) Object.assign(policy, { observedInstructions: true, wakeIdle: true });
+    // Idle chats run the message at once (they are woken), instead of waiting for your next turn.
+    if (on) policy.observedInstructions = true;
   }
   line(
     policy.observedInstructions ? 'ok' : 'info',
     'Phone messages',
-    policy.observedInstructions ? 'on' : 'off (turn on later: pocket-agent instructions wake enable)',
+    policy.observedInstructions ? 'on' : 'off (turn on later: pocket-agent instructions enable)',
   );
   const policyChanged = JSON.stringify(policy) !== policyBefore;
   if (policyChanged) await savePolicy(ctx.home, policy);
@@ -1029,7 +1029,7 @@ export function buildCli(): Command {
     await savePolicy(home, { ...(await loadPolicy(home)), observedInstructions: on });
     console.log(
       on
-        ? 'Enabled. Sessions with Pocket Agent hooks can receive instructions from the dashboard; each one is delivered when Claude finishes its current turn. Claude Code still asks you for every permission.'
+        ? 'Enabled. Chats you start in VS Code or a terminal can receive messages from your phone: while Claude works, at its next step; while it is idle, at once (Pocket Agent continues that chat on this PC). Claude Code still asks for every permission.'
         : 'Disabled. Only managed sessions can receive instructions.',
     );
     await reloadAgent();
@@ -1056,28 +1056,15 @@ export function buildCli(): Command {
   instructions.command('enable').action(() => setInstructions(true));
   instructions.command('disable').action(() => setInstructions(false));
   instructions.command('status').action(async () => {
-    const { observedInstructions, wakeIdle } = await loadPolicy(agentHome());
+    const { observedInstructions } = await loadPolicy(agentHome());
     console.log(observedInstructions ? 'Enabled' : 'Disabled (default)');
-    console.log(`Wake idle sessions: ${observedInstructions && wakeIdle ? 'on' : 'off (default)'}`);
   });
 
-  const wake = instructions
-    .command('wake')
-    .description('Run an instruction at once when the session is idle, instead of after your next turn');
-  const setWake = async (on: boolean) => {
-    const home = agentHome();
-    const policy = await loadPolicy(home);
-    // Waking only makes sense with instructions allowed; enabling it allows both (explicit consent).
-    await savePolicy(home, { ...policy, wakeIdle: on, ...(on ? { observedInstructions: true } : {}) });
-    console.log(
-      on
-        ? 'On. When a session you started is idle, an instruction from the dashboard runs right away: Pocket Agent resumes that session on this PC (same conversation) for one turn. Your Claude Code permission rules apply; anything that would ask you is sent to Pocket Agent if remote approval is on, otherwise denied. Your editor does not show these turns live; the next prompt you type there gets a summary of them.'
-        : 'Off. Instructions to an idle session wait until you finish a turn on the PC.',
-    );
-    await reloadAgent();
-  };
-  wake.command('enable').action(() => setWake(true));
-  wake.command('disable').action(() => setWake(false));
+  // Waking idle sessions is automatic now (with instructions on); kept, hidden, for old scripts.
+  instructions
+    .command('wake', { hidden: true })
+    .argument('[state]')
+    .action(() => console.log('Idle sessions are woken automatically now; nothing to set.'));
 
   const approvals = program
     .command('approvals')

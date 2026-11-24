@@ -40,7 +40,7 @@ export function deliveryHint(s: AgentSessionDto): string {
     return '';
   }
   return s.status === 'WaitingForInput'
-    ? 'Claude is idle, so this waits for the next turn you start on the PC. To run it at once, turn on wake on the PC: pocket-agent instructions wake enable'
+    ? 'Claude is idle, so this waits for your next turn on the PC. Update Pocket Agent on the PC to run it at once.'
     : '';
 }
 
@@ -138,7 +138,7 @@ export function capabilityRows(s: AgentSessionDto): CapabilityRow[] {
             label: 'Send instructions',
             state: 'yes',
             detail:
-              'While Claude works, it reads your message at its next step (or when the turn ends). To run it at once when Claude is idle, run `pocket-agent instructions wake enable` on the PC.',
+              'While Claude works, it reads your message at its next step (or when the turn ends). When Claude is idle it waits for your next turn on the PC: update Pocket Agent there to run it at once.',
           }
         : hooksConnected
           ? {

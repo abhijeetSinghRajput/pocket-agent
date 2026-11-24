@@ -9,13 +9,11 @@ import { z } from 'zod';
 export const Policy = z.object({
   /** Folders managed sessions may be started in from the dashboard. */
   projects: z.array(z.object({ name: z.string(), path: z.string() })).default([]),
-  /** Instructions to sessions the user started themselves (delivered between turns). Off by default. */
-  observedInstructions: z.boolean().default(false),
   /**
-   * An instruction to an idle session the user started is run at once, by resuming that session
-   * through the SDK (instead of waiting for the next turn on the PC). Needs observedInstructions. Off by default.
+   * Messages from the phone to sessions the user started themselves (VS Code, terminal). An idle
+   * one is woken to run it at once (always: there is no separate switch). Off until setup asks.
    */
-  wakeIdle: z.boolean().default(false),
+  observedInstructions: z.boolean().default(false),
   /**
    * Photos and PDFs the user attaches to prompts in the editor are uploaded so the app can show
    * them (kept 30 days). Off by default: they are the user's files, leaving the PC.
@@ -33,7 +31,6 @@ export type Policy = z.infer<typeof Policy>;
 const RESTRICTIVE: Policy = {
   projects: [],
   observedInstructions: false,
-  wakeIdle: false,
   shareAttachments: false,
   remoteApproval: false,
 };

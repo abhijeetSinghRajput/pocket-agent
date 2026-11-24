@@ -93,10 +93,22 @@ export class CommandRouter {
             if (!allowed) return fail('project_not_allowed');
             projectPath = allowed.path;
           }
+          // Files sent with the first message are fetched first: Claude gets all of it or nothing.
+          let startFiles: LocalFile[] = [];
+          if (p.attachments?.length) {
+            if (!this.deps.attachments) return fail('attachments_not_supported');
+            try {
+              startFiles = await this.deps.attachments.download(p.commandId, p.attachments);
+            } catch (err) {
+              this.deps.log?.('warn', `attachments of ${p.commandId}: ${(err as Error).message}`);
+              return fail('attachment_download_failed');
+            }
+          }
           const id = await this.deps.managed.start({
             projectPath,
             prompt: p.text,
             commandId: p.commandId,
+            ...(startFiles.length ? { files: startFiles } : {}),
             ...(resume ? { resumeSessionId: resume } : {}),
             ...(model ? { model } : {}),
             ...turn,

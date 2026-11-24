@@ -4,6 +4,7 @@ import {
   CommandResponse,
   isWithinFolder,
   RESUME_ANY_FOLDER_AGENT_VERSION,
+  RESUME_FILES_AGENT_VERSION,
   RESUME_MIN_AGENT_VERSION,
   type AgentSessionDto,
   type DeviceDto,
@@ -277,7 +278,8 @@ export function Composer({
           'Messages can’t be sent to this session.');
   // Images from the keyboard (Gboard's clipboard, stickers) join the message like picked files,
   // wherever files can be attached.
-  const canAttach = !locked && !resuming;
+  const canAttach =
+    !locked && (!resuming || !versionBelow(device?.agentVersion ?? '0', RESUME_FILES_AGENT_VERSION));
   const onPasted = useEffectEvent((files: PastedImage[]) => addFiles(files));
   useEffect(() => {
     const tag = canAttach && box.current ? findNodeHandle(box.current) : null;
@@ -319,7 +321,12 @@ export function Composer({
         ? // Ended: the PC reopens this conversation and runs the message in it.
           await apiRequest(`/sessions/${session.id}/resume`, CommandResponse, {
             method: 'POST',
-            body: { text: value, idempotencyKey: key.current, ...choices },
+            body: {
+              text: value,
+              idempotencyKey: key.current,
+              ...choices,
+              ...(ready.length ? { attachmentIds: ready.map((d) => d.ref!.id) } : {}),
+            },
           })
         : await apiRequest(`/sessions/${session.id}/instructions`, CommandResponse, {
             method: 'POST',
@@ -471,7 +478,7 @@ export function Composer({
           }}
         >
           {/* Files can't be sent with the message that continues an ended session. */}
-          {!locked && !resuming && (
+          {canAttach && (
             // The same size and shape as Send, in the quiet colour.
             <Press
               accessibilityRole="button"

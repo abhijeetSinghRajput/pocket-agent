@@ -64,7 +64,10 @@ export const StartSessionRequest = z.object({
 export type StartSessionRequest = z.infer<typeof StartSessionRequest>;
 
 /** Continue an ended session from the app: same conversation, reopened on the PC. */
-export const ResumeSessionRequest = StartSessionRequest.omit({ projectPath: true });
+export const ResumeSessionRequest = StartSessionRequest.omit({ projectPath: true }).extend({
+  /** Uploaded attachments to send with the message (PC agents from 0.1.6). */
+  attachmentIds: z.array(z.uuid()).max(ATTACHMENT_MAX_PER_MESSAGE).optional(),
+});
 export type ResumeSessionRequest = z.infer<typeof ResumeSessionRequest>;
 
 /** First Local Agent version that can continue an ended session. */
@@ -76,6 +79,9 @@ export const RESUME_MIN_AGENT_VERSION = '0.1.4';
  * require the folder to be on it.
  */
 export const RESUME_ANY_FOLDER_AGENT_VERSION = '0.1.5';
+
+/** First Local Agent version that takes files with the message that continues an ended session. */
+export const RESUME_FILES_AGENT_VERSION = '0.1.6';
 
 export const SessionControlRequest = z.object({ idempotencyKey });
 export type SessionControlRequest = z.infer<typeof SessionControlRequest>;

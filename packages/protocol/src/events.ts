@@ -276,6 +276,8 @@ export const CommandExecute = defineEvent(
       model: ModelId.optional(),
       permissionMode: TurnMode.optional(),
       effort: TurnEffort.optional(),
+      /** Files sent with the first message (PC agents from 0.1.6; older ones drop the field). */
+      attachments: AttachmentRefs.optional(),
       expiresAt,
     }),
     z.object({ commandId: z.uuid(), commandType: z.literal('interrupt'), expiresAt }),

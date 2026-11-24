@@ -1,13 +1,13 @@
 import { timeAgo } from '@pocket-agent/core';
 import type { ClaudeUsage } from '@pocket-agent/protocol';
-import { MonitorOff } from 'lucide-react-native';
+import { Image } from 'expo-image';
 import { useEffect, useState } from 'react';
 import { View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withDelay, withTiming } from 'react-native-reanimated';
 import { useDevices } from '@/lib/data';
 import { ease, enter, exit, layout } from '@/lib/motion';
 import { alpha, useTheme } from '@/lib/theme';
-import { Card, IconTile, T } from '@/ui/core';
+import { Card, T } from '@/ui/core';
 import { Count, Notice, Skeleton } from '@/ui/feedback';
 
 /** "Resets at 1:30 PM" today, "Resets Fri, Nov 27 at 1:30 AM" otherwise. */
@@ -141,13 +141,19 @@ export function ClaudeUsageCard() {
               style={{
                 alignItems: 'center',
                 paddingHorizontal: 8,
-                paddingTop: 16,
+                paddingTop: 4,
                 paddingBottom: 12,
                 gap: 2,
               }}
             >
-              <IconTile icon={MonitorOff} size={56} tone="muted" />
-              <T variant="smallMedium" center style={{ marginTop: 12 }}>
+              {/* The same picture as the web app. */}
+              <Image
+                source={require('../../../assets/images/pc-offline.webp')}
+                accessible={false}
+                style={{ width: 240, aspectRatio: 768 / 512, borderRadius: 16 }}
+                contentFit="contain"
+              />
+              <T variant="smallMedium" center style={{ marginTop: 4 }}>
                 {empty.title}
               </T>
               <T variant="small" tone="muted" center>

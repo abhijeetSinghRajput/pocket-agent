@@ -259,7 +259,7 @@ describe('managed sessions: one instruction per turn', () => {
 });
 
 describe('continuing an ended session', () => {
-  function resumeHarness(exists: boolean) {
+  function resumeHarness(exists: boolean, attachments?: unknown) {
     const dir = mkdtempSync(path.join(os.tmpdir(), 'pocket-agent-resume-'));
     const acks: Array<{ id: string; status: string; extra?: Record<string, unknown> }> = [];
     const ack = (id: string, status: string, extra?: Record<string, unknown>) =>
@@ -288,6 +288,7 @@ describe('continuing an ended session', () => {
       policy: () => policy,
       ack: ack as never,
       findConversation: async () => (exists ? { cwd: dir } : null),
+      ...(attachments ? { attachments: attachments as never } : {}),
     });
     const statuses = (id: string) => acks.filter((a) => a.id === id).map((a) => a.status);
     return { dir, acks, registry, sdk, options, router, statuses };
@@ -309,6 +310,32 @@ describe('continuing an ended session', () => {
     expect(h.registry.get(OLD)?.mode).toBe('managed');
     expect(h.registry.get(OLD)?.metadata).toMatchObject({ startSource: 'resume' });
     expect(h.sdk.turns).toEqual(['More updates']);
+  });
+
+  it('hands Claude the files sent with the message that continues it', async () => {
+    const ref = {
+      id: '0b9d7c2e-2222-4a4a-9b9b-123456789abc',
+      name: 'notes.txt',
+      mime: 'text/plain',
+      size: 5,
+    };
+    const downloads: unknown[] = [];
+    const h = resumeHarness(true, {
+      download: async (commandId: string, refs: unknown[]) => {
+        downloads.push([commandId, refs]);
+        return [{ ref, path: '/tmp/notes.txt', data: Buffer.from('hello') }];
+      },
+    });
+    const c = cmd(
+      { commandType: 'session.start', projectPath: h.dir, text: 'Read this', resume: true, attachments: [ref] },
+      OLD,
+    );
+    await h.router.handle(c);
+    await new Promise((r) => setTimeout(r, 30));
+    expect(downloads).toHaveLength(1);
+    expect(h.statuses(c.payload.commandId)).toContain('Executing');
+    expect(JSON.stringify(h.sdk.turns[0])).toContain('notes.txt');
+    expect(JSON.stringify(h.sdk.turns[0])).toContain('hello');
   });
 
   it('refuses when the conversation is gone or the session is still running', async () => {

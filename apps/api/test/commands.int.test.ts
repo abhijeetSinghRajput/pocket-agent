@@ -389,6 +389,18 @@ describe('continuing an ended session', () => {
     s.agent.ws.close();
   });
 
+  it('files go with it only to a PC that takes them (0.1.6+)', async () => {
+    const s = await ended('0.1.5');
+    const res = await post(`/sessions/${s.session.id}/resume`, s.cookie, {
+      text: 'Look at this',
+      idempotencyKey: randomUUID(),
+      attachmentIds: [randomUUID()],
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json()).toMatchObject({ error: 'agent_outdated' });
+    s.agent.ws.close();
+  });
+
   it('an older agent still needs the folder on the list', async () => {
     const s = await ended('0.1.4');
     const res = await resume(s);

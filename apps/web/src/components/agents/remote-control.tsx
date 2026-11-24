@@ -7,6 +7,7 @@ import {
   DeviceListResponse,
   isWithinFolder,
   RESUME_ANY_FOLDER_AGENT_VERSION,
+  RESUME_FILES_AGENT_VERSION,
   RESUME_MIN_AGENT_VERSION,
   type AgentSessionDto,
   type DeviceDto,
@@ -406,6 +407,8 @@ export function Composer({
   const maxFiles = attachmentLimit(device?.agentVersion);
   // Ended: sending continues the same conversation on the PC, when that's possible.
   const resuming = !!session.endedAt && resumeBlocker(session, device) === null;
+  // Files go with the message that continues an ended session when the PC takes them (0.1.6+).
+  const filesOnResume = !versionBelow(device?.agentVersion ?? '0', RESUME_FILES_AGENT_VERSION);
   const locked =
     canInstruct(session) || resuming
       ? null
@@ -434,7 +437,7 @@ export function Composer({
   const [dragging, setDragging] = useState(false);
   const addRef = useRef<(files: Iterable<File>) => void>(() => undefined);
   useEffect(() => {
-    if (locked || resuming) return;
+    if (locked || (resuming && !filesOnResume)) return;
     let depth = 0;
     const hasFiles = (e: DragEvent) => !!e.dataTransfer && [...e.dataTransfer.types].includes('Files');
     const enter = (e: DragEvent) => {
@@ -470,7 +473,7 @@ export function Composer({
       window.removeEventListener('dragleave', leave);
       window.removeEventListener('drop', drop);
     };
-  }, [locked, resuming]);
+  }, [locked, resuming, filesOnResume]);
 
   useEffect(() => {
     addRef.current = addFiles;
@@ -493,7 +496,12 @@ export function Composer({
         ? // Ended: the PC reopens this conversation and runs the message in it.
           await apiRequest(`/sessions/${session.id}/resume`, CommandResponse, {
             method: 'POST',
-            body: { text: value, idempotencyKey: key.current, ...choices },
+            body: {
+              text: value,
+              idempotencyKey: key.current,
+              ...choices,
+              ...(ready.length ? { attachmentIds: ready.map((d) => d.ref!.id) } : {}),
+            },
           })
         : await apiRequest(`/sessions/${session.id}/instructions`, CommandResponse, {
             method: 'POST',
@@ -581,7 +589,7 @@ export function Composer({
             onPaste={(e) => {
               // A screenshot pasted from the clipboard is attached like a picked file.
               const files = [...e.clipboardData.files];
-              if (!files.length || resuming) return;
+              if (!files.length || (resuming && !filesOnResume)) return;
               e.preventDefault();
               addFiles(files);
             }}
@@ -626,8 +634,8 @@ export function Composer({
           )}
           {/* Like the editor's input: what the message runs with on the left, stop and send on the right. */}
           <div className="pointer-events-none! flex items-center gap-2 px-2 pt-1 pb-2 *:pointer-events-auto">
-            {/* Files can't be sent with the message that continues an ended session. */}
-            {!locked && !resuming && (
+            {/* Files go with a message that continues an ended session only if the PC takes them. */}
+            {!locked && (!resuming || filesOnResume) && (
               <>
                 <input
                   ref={picker}

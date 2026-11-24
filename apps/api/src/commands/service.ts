@@ -108,6 +108,7 @@ export function commandFrame(c: Command, externalSessionId: string | null) {
             projectPath: p.projectPath!,
             text: p.text!,
             ...(p.resume ? { resume: true } : {}),
+            ...(p.attachments?.length ? { attachments: p.attachments } : {}),
           }
         : { ...base, commandType: c.commandType as 'interrupt' | 'session.stop' };
   return BackendToAgent.parse(

@@ -7,6 +7,7 @@ import {
   isWithinFolder,
   attachmentLimit,
   RESUME_ANY_FOLDER_AGENT_VERSION,
+  RESUME_FILES_AGENT_VERSION,
   RESUME_MIN_AGENT_VERSION,
   type AttachmentRef,
   type CommandKind,
@@ -233,6 +234,24 @@ export async function commandRoutes(app: FastifyInstance, ctx: Services): Promis
       );
     }
     if (!knownModel(s.device, body.data.model)) return unknownModel(reply);
+    // Files sent with the message that continues it (the user's own, fully uploaded).
+    let attachments: AttachmentRef[] | undefined;
+    const ids = body.data.attachmentIds;
+    if (ids?.length) {
+      if (versionBelow(s.device.agentVersion, RESUME_FILES_AGENT_VERSION))
+        return bad(
+          reply,
+          'agent_outdated',
+          `Sending files when continuing a session needs Pocket Agent ${RESUME_FILES_AGENT_VERSION} or newer on the PC. Run \`pocket-agent update\` there.`,
+          400,
+        );
+      const max = attachmentLimit(s.device.agentVersion);
+      if (ids.length > max)
+        return bad(reply, 'too_many_files', `Pocket Agent on this PC takes at most ${max} files per message.`, 400);
+      attachments = await ownedAttachments(ctx, req.user!.id, ids);
+      if (!attachments)
+        return bad(reply, 'attachment_not_found', 'An attached file is missing. Attach it again.', 400);
+    }
     const { command, created } = await createCommand(ctx, {
       userId: req.user!.id,
       deviceId: s.deviceId,
@@ -245,8 +264,14 @@ export async function commandRoutes(app: FastifyInstance, ctx: Services): Promis
       ...(body.data.model ? { model: body.data.model } : {}),
       ...(body.data.permissionMode ? { permissionMode: body.data.permissionMode } : {}),
       ...(body.data.effort ? { effort: body.data.effort } : {}),
+      ...(attachments ? { attachments } : {}),
       ip: req.ip,
     });
+    if (attachments)
+      await markUsed(
+        ctx,
+        attachments.map((a) => a.id),
+      );
     return reply.code(created ? 201 : 200).send({ command: toCommandDto(command) });
   });
 

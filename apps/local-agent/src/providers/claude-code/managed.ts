@@ -210,6 +210,8 @@ export class ManagedSessions {
     commandId?: string;
     /** Continue this ended session (same id, full history) instead of starting a new one. */
     resumeSessionId?: string;
+    /** Files sent with the first message. */
+    files?: LocalFile[];
   }): Promise<string> {
     const projectPath = path.resolve(input.projectPath);
     const st = await stat(projectPath).catch(() => null);
@@ -273,7 +275,11 @@ export class ManagedSessions {
     this.enqueue(
       id,
       m,
-      { text: input.prompt, ...(input.commandId ? { commandId: input.commandId } : {}) },
+      {
+        text: input.prompt,
+        ...(input.commandId ? { commandId: input.commandId } : {}),
+        ...(input.files?.length ? { files: input.files } : {}),
+      },
       false,
     );
     void this.consume(id, m, m.query);

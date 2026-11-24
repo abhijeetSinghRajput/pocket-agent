@@ -352,7 +352,6 @@ function Table({ table }: { table: Tokens.Table }) {
                 {widths.map((w, i) => (
                   <Text
                     key={i}
-                    selectable
                     style={[
                       cellStyle(r === 0, table.align[i] ?? null, c.foreground),
                       { width: w, paddingHorizontal: CELL_PAD_X, paddingVertical: CELL_PAD_Y },

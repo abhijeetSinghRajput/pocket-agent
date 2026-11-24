@@ -29,8 +29,10 @@ import {
   type LucideIcon,
 } from 'lucide-react-native';
 import {
+  createContext,
   memo,
   useCallback,
+  useContext,
   useEffect,
   useMemo,
   useRef,
@@ -219,6 +221,12 @@ function BubbleMenu({
   );
 }
 
+/**
+ * Sends again a message that could not be sent (the chat's outbox, by the message's key). Given
+ * by the chat around the list.
+ */
+export const RetryContext = createContext<(key: string) => void>(() => undefined);
+
 function UserMessage({ item }: { item: Of<'user'> }) {
   const { c } = useTheme();
   const bubble = useRef<ComponentRef<typeof View>>(null);
@@ -231,14 +239,20 @@ function UserMessage({ item }: { item: Of<'user'> }) {
     });
   };
   const cmd = item.command;
-  const tick = cmd ? TICK[cmd.status] : null;
+  const retry = useContext(RetryContext);
+  // Not confirmed yet: a clock, like a message still on its way; not sent: a red mark.
+  const tick = cmd
+    ? TICK[cmd.status]
+    : item.local
+      ? TICK[item.local === 'failed' ? 'Failed' : 'Pending']
+      : null;
   const err = cmd ? commandError(cmd) : null;
   const long = item.text.length > FOLD_CHARS || item.text.split('\n').length > FOLD_LINES;
   const [open, setOpen] = useState(false);
   const status = cmd ? STATUS_LABEL[cmd.status] : null;
   // The tick settles in only when the status changes under you, not for history.
   const [firstStatus] = useState(cmd?.status);
-  const Device = cmd ? Smartphone : Laptop;
+  const Device = cmd || item.local ? Smartphone : Laptop;
   return (
     <View
       style={{ alignItems: 'flex-end', gap: 4 }}
@@ -256,11 +270,13 @@ function UserMessage({ item }: { item: Of<'user'> }) {
         <T variant="caption" tone="muted" style={{ fontSize: 11, fontVariant: ['tabular-nums'] }}>
           {clockTime(item.at)}
         </T>
-        {tick && cmd && (
+        {tick && (
           <Animated.View
-            key={cmd.status}
-            entering={cmd.status !== firstStatus ? enter.pop : undefined}
-            accessibilityLabel={status ?? undefined}
+            key={cmd?.status ?? item.local}
+            entering={
+              cmd && cmd.status !== firstStatus ? enter.pop : item.local === 'failed' ? enter.pop : undefined
+            }
+            accessibilityLabel={status ?? (item.local === 'failed' ? 'Not sent' : 'Sending')}
           >
             <tick.Icon size={14} color={tick.color(c)} strokeWidth={2.2} />
           </Animated.View>
@@ -328,6 +344,22 @@ function UserMessage({ item }: { item: Of<'user'> }) {
           <T variant="caption" tone="danger" style={{ fontSize: 11, textAlign: 'right' }}>
             {err}
           </T>
+        </Animated.View>
+      )}
+      {item.local === 'failed' && (
+        <Animated.View entering={enter.fade}>
+          <Press
+            accessibilityRole="button"
+            accessibilityLabel="Not sent. Send again"
+            onPress={() => retry(item.key.replace(/^out-/, ''))}
+            scale={0.96}
+            hitSlop={8}
+            testID="retry-send"
+          >
+            <T variant="captionMedium" tone="danger" style={{ fontSize: 12, textAlign: 'right' }}>
+              Not sent · Tap to retry
+            </T>
+          </Press>
         </Animated.View>
       )}
     </View>

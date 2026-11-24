@@ -404,3 +404,22 @@ describe('queued messages', () => {
     expect(items.filter(isQueued).map((i) => (i.kind === 'user' ? i.text : ''))).toEqual(['and then deploy']);
   });
 });
+
+describe('messages sent from the app before the server confirms them', () => {
+  const local = (state: 'sending' | 'failed') =>
+    ({
+      kind: 'user',
+      key: `out-${state}`,
+      at: '2026-11-24T10:00:00.000Z',
+      text: 'Run the tests',
+      local: state,
+    }) as const;
+
+  it('wait with the queued ones, under everything, until the server has them', () => {
+    expect(isQueued(local('sending'))).toBe(true);
+    expect(isQueued(local('failed'))).toBe(true);
+    expect(
+      isQueued({ kind: 'user', key: 'e1', at: '2026-11-24T10:00:00.000Z', text: 'typed on the PC' }),
+    ).toBe(false);
+  });
+});

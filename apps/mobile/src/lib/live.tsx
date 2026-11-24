@@ -141,6 +141,11 @@ export function useLiveState(): LiveState {
   return useContext(LiveContext)?.state ?? 'connecting';
 }
 
+/** The live connection's state, or null where there is none (signed out: sign-in screens). */
+export function useLiveConnection(): LiveState | null {
+  return useContext(LiveContext)?.state ?? null;
+}
+
 /**
  * Calls `onChange` when a matching live event arrives, and after every reconnect. A burst (Claude
  * streaming tool steps) is throttled: the first event refreshes soon, then at most once every

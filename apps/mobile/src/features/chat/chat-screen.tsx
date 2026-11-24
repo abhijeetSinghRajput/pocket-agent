@@ -12,7 +12,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { PermissionSheet } from '@/features/approvals/permission-sheet';
 import { QuestionSheet } from '@/features/approvals/question-sheet';
 import { Composer, EndSessionButton } from '@/features/chat/composer';
-import { ChatMessages } from '@/features/chat/messages';
+import { useOutbox } from '@/features/chat/outbox';
+import { ChatMessages, RetryContext } from '@/features/chat/messages';
 import { SessionInfo } from '@/features/chat/session-info';
 import { SessionAvatar } from '@/features/sessions/badges';
 import { markRead, useApprovals, useCommands, useEventFeed, useSession } from '@/lib/data';
@@ -20,7 +21,8 @@ import { chatLink } from '@/lib/links';
 import { foreground, useLiveEvents, useLiveRefresh } from '@/lib/live';
 import { ease, enter } from '@/lib/motion';
 import { alpha, radius, useTheme } from '@/lib/theme';
-import { Button, IconButton, Press, T } from '@/ui/core';
+import { ConnectionStrip } from '@/ui/connection-strip';
+import { Button, buzz, IconButton, Press, T } from '@/ui/core';
 import { Roll, Skeleton } from '@/ui/feedback';
 
 /** How far above the message box the background starts fading in. */
@@ -208,13 +210,31 @@ export function ChatScreen({ id }: { id: string }) {
     () => void feed.refreshHead(),
     (e) => e.sessionId === id || e.eventType === 'device.status.changed',
   );
+  // Messages sent from here show at once; one that could not be sent stays, to send again.
+  const outbox = useOutbox({
+    accepted: (command) => {
+      if (command.status === 'Failed') {
+        buzz(false);
+        setSentAt(null);
+      }
+      void commands.refresh();
+      void feed.refreshHead();
+      void refresh();
+    },
+    failed: () => {
+      buzz(false);
+      setSentAt(null);
+    },
+  });
   const items = useMemo(() => {
     // Messages you sent are listed separately; while older events aren't loaded yet, show only
     // the ones from the loaded stretch, so your messages and Claude's replies always line up.
     const all = commands.state.data ?? [];
     const sent = feed.hasMore && feed.oldestAt ? all.filter((c) => c.createdAt >= feed.oldestAt!) : all;
-    return buildChat(feed.events, sent);
-  }, [feed.events, feed.hasMore, feed.oldestAt, commands.state.data]);
+    return [...buildChat(feed.events, sent), ...outbox.items(all)];
+    // `outbox.items` reads `outbox.outgoing`.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [feed.events, feed.hasMore, feed.oldestAt, commands.state.data, outbox.outgoing]);
   // Claude already answered (too fast for its status to be seen here): nothing is on its way.
   if (
     sentAt !== null &&
@@ -296,6 +316,7 @@ export function ChatScreen({ id }: { id: string }) {
       accessibilityLabel={`Conversation with ${s.projectName}`}
     >
       <Header session={s} sending={sending} onInfo={() => setInfoOpen(true)} onChange={changed} />
+      <ConnectionStrip />
       <SessionInfo session={s} open={infoOpen} onClose={() => setInfoOpen(false)} onChange={changed} />
 
       {/*
@@ -314,27 +335,29 @@ export function ChatScreen({ id }: { id: string }) {
               </T>
             </View>
           ) : (
-            <ChatMessages
-              items={
-                // The question being asked is shown below, not also in the conversation.
-                question ? items.filter((i) => !(i.kind === 'question' && i.state === 'running')) : items
-              }
-              typing={typingKind(s) ?? (sending ? 'sending' : null)}
-              bottomInset={dock}
-              jumpKey={jump}
-              header={
-                feed.hasMore ? (
-                  <Button
-                    label={feed.loadingMore ? 'Loading…' : 'Load older messages'}
-                    variant="outline"
-                    size="sm"
-                    disabled={feed.loadingMore}
-                    onPress={() => void feed.loadMore()}
-                    style={{ alignSelf: 'center', borderRadius: radius.full, marginVertical: 8 }}
-                  />
-                ) : undefined
-              }
-            />
+            <RetryContext.Provider value={outbox.retry}>
+              <ChatMessages
+                items={
+                  // The question being asked is shown below, not also in the conversation.
+                  question ? items.filter((i) => !(i.kind === 'question' && i.state === 'running')) : items
+                }
+                typing={typingKind(s) ?? (sending ? 'sending' : null)}
+                bottomInset={dock}
+                jumpKey={jump}
+                header={
+                  feed.hasMore ? (
+                    <Button
+                      label={feed.loadingMore ? 'Loading…' : 'Load older messages'}
+                      variant="outline"
+                      size="sm"
+                      disabled={feed.loadingMore}
+                      onPress={() => void feed.loadMore()}
+                      style={{ alignSelf: 'center', borderRadius: radius.full, marginVertical: 8 }}
+                    />
+                  ) : undefined
+                }
+              />
+            </RetryContext.Provider>
           )}
 
           {/*
@@ -395,7 +418,7 @@ export function ChatScreen({ id }: { id: string }) {
                   // its way at once; the PC's own status takes over when it arrives.
                   if (s.capabilities.instructAnytime) setSentAt(Date.now());
                 }}
-                onSendFailed={() => setSentAt(null)}
+                submit={outbox.send}
                 onSent={changed}
                 onInfo={() => setInfoOpen(true)}
               />

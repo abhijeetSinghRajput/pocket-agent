@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { enter } from '@/lib/motion';
 import { useTheme } from '@/lib/theme';
 import { IconButton, T } from '@/ui/core';
+import { ConnectionStrip } from '@/ui/connection-strip';
 
 /** Height of the floating tab bar above the bottom inset (content pads itself by this). */
 export const TAB_BAR_HEIGHT = 64;
@@ -72,6 +73,7 @@ export function Screen({
   );
   return (
     <View style={{ flex: 1, backgroundColor: c.background, paddingTop: insets.top }}>
+      <ConnectionStrip />
       {pinned !== undefined && (
         <View style={{ backgroundColor: c.background, zIndex: 1 }}>
           {header}

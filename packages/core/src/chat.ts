@@ -99,6 +99,11 @@ export type ChatItem =
       command?: CommandDto;
       /** Photos/PDFs sent with it (from the app, or attached in the editor). */
       attachments?: AttachmentRef[];
+      /**
+       * Sent from this app and not confirmed by the server yet ('sending'), or not sent at all
+       * ('failed': it can be sent again). Absent for everything the server knows.
+       */
+      local?: 'sending' | 'failed';
     }
   | { kind: 'assistant'; key: string; at: string; text: string }
   | {
@@ -145,8 +150,10 @@ const THOUGHT = /^Thought for (\d+m )?\d+s$/;
  * so far: it waits at the bottom until it is delivered.
  */
 export function isQueued(item: ChatItem): boolean {
+  if (item.kind !== 'user') return false;
+  // Not confirmed yet (or not sent): it waits with the others, under everything.
+  if (item.local) return true;
   return (
-    item.kind === 'user' &&
     !!item.command &&
     item.key.startsWith('cmd-') &&
     (item.command.status === 'Pending' ||

@@ -32,6 +32,7 @@ import { Ticks } from '@/features/chat/capabilities';
 import { DraftFiles } from '@/features/chat/draft-files';
 import { AttachMenu, ModelPicker, ModePicker } from '@/features/chat/pickers';
 import { newId } from '@/features/chat/upload';
+import type { OutgoingMessage } from '@/features/chat/outbox';
 import { useDraftFiles } from '@/features/chat/use-draft-files';
 import { apiRequest } from '@/lib/api';
 import { useDevices } from '@/lib/data';
@@ -39,7 +40,7 @@ import { dur, ease, enter, exit, layout } from '@/lib/motion';
 import { alpha, fonts, radius, useTheme } from '@/lib/theme';
 import { getDraft, saveDraft, useDraft } from '@/lib/drafts';
 import { useStored } from '@/lib/storage';
-import { Button, IconButton, Press, T, buzz, thud } from '@/ui/core';
+import { Button, IconButton, Press, T, thud } from '@/ui/core';
 import { enableImagePaste, type PastedImage } from '../../../modules/image-paste';
 import { Notice } from '@/ui/feedback';
 import { Sheet } from '@/ui/sheet';
@@ -173,15 +174,15 @@ export function AttachButton({ disabled, onPress }: { disabled: boolean; onPress
 export function Composer({
   session,
   onSending,
-  onSendFailed,
+  submit,
   onSent,
   onInfo,
 }: {
   session: AgentSessionDto;
   /** A message is on its way: the chat goes to its newest message, where it will show up. */
   onSending?: () => void;
-  /** The message did not go out (the chat stops showing it as on its way). */
-  onSendFailed?: () => void;
+  /** Sends a message through the chat's outbox (shown at once, kept to retry if it fails). */
+  submit: (message: OutgoingMessage) => void;
   /** Something was sent (a message, a stop, a new mode): the chat refreshes. */
   onSent: () => void;
   onInfo?: () => void;
@@ -191,7 +192,6 @@ export function Composer({
   const { draft, ready: draftReady } = useDraft(session.id);
   const text = draft?.text ?? '';
   const setText = (next: string) => saveDraft(session.id, { ...getDraft(session.id), text: next });
-  const [pending, setPending] = useState(false);
   const [interrupting, setInterrupting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // One key per message: retrying after a network error can never send it twice.
@@ -296,57 +296,36 @@ export function Composer({
   const hasContent = !!text.trim() || ready.length > 0;
   const stopMode = !hasContent && showStop;
 
-  async function send() {
+  /** Hands the message to the chat's outbox: it shows at once, and the box is empty again. */
+  function send() {
     // A message can be just files: Claude is then told what they are called.
     const value =
       text.trim() || (ready.length ? `Attached: ${ready.map((d) => d.ref!.name).join(', ')}` : '');
-    if (!value || pending || locked || uploading) return;
-    setPending(true);
+    if (!value || locked || uploading) return;
     setError(null);
     thud();
     onSending?.();
-    try {
-      const choices = {
-        ...(model && !modelLocked ? { model } : {}),
-        ...(mode && !modelLocked ? { permissionMode: mode } : {}),
-        ...(effort && !modelLocked ? { effort } : {}),
-      };
-      const { command } = resuming
-        ? // Ended: the PC reopens this conversation and runs the message in it.
-          await apiRequest(`/sessions/${session.id}/resume`, CommandResponse, {
-            method: 'POST',
-            body: {
-              text: value,
-              idempotencyKey: key.current,
-              ...choices,
-              ...(ready.length ? { attachmentIds: files.ids } : {}),
-            },
-          })
-        : await apiRequest(`/sessions/${session.id}/instructions`, CommandResponse, {
-            method: 'POST',
-            body: {
-              text: value,
-              idempotencyKey: key.current,
-              ...choices,
-              ...(ready.length ? { attachmentIds: files.ids } : {}),
-            },
-          });
-      key.current = newId();
-      setText('');
-      files.clear();
-      if (command.status === 'Failed') {
-        setError(commandError(command));
-        buzz(false);
-        onSendFailed?.();
-      }
-      onSent();
-    } catch (err) {
-      setError((err as Error).message);
-      buzz(false);
-      onSendFailed?.();
-    } finally {
-      setPending(false);
-    }
+    const choices = {
+      ...(model && !modelLocked ? { model } : {}),
+      ...(mode && !modelLocked ? { permissionMode: mode } : {}),
+      ...(effort && !modelLocked ? { effort } : {}),
+    };
+    submit({
+      key: key.current,
+      // Ended: the PC reopens this conversation and runs the message in it.
+      path: resuming ? `/sessions/${session.id}/resume` : `/sessions/${session.id}/instructions`,
+      body: {
+        text: value,
+        idempotencyKey: key.current,
+        ...choices,
+        ...(ready.length ? { attachmentIds: files.ids } : {}),
+      },
+      text: value,
+      files: ready.map((d) => d.ref!),
+    });
+    key.current = newId();
+    setText('');
+    files.clear();
   }
 
   async function interrupt() {
@@ -491,10 +470,8 @@ export function Composer({
           <View style={{ flex: 1 }} />
           <SendButton
             stopMode={stopMode}
-            disabled={
-              stopMode ? interrupting || !canInterrupt : pending || uploading || !hasContent || !!locked
-            }
-            busy={pending || interrupting}
+            disabled={stopMode ? interrupting || !canInterrupt : uploading || !hasContent || !!locked}
+            busy={interrupting}
             label={
               stopMode
                 ? canInterrupt
@@ -502,11 +479,9 @@ export function Composer({
                     ? 'Stop Claude'
                     : 'Stop Claude (it stops at its next step)'
                   : 'Stopping is turned off on this PC (pocket-agent instructions enable)'
-                : pending
-                  ? 'Sending…'
-                  : 'Send'
+                : 'Send'
             }
-            onPress={() => void (stopMode ? interrupt() : send())}
+            onPress={() => (stopMode ? void interrupt() : send())}
           />
         </View>
       </Animated.View>

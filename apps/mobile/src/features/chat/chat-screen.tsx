@@ -1,4 +1,4 @@
-import { buildChat, pendingQuestion, timeAgo } from '@pocket-agent/core';
+import { buildChat, isBusy, pendingQuestion, timeAgo } from '@pocket-agent/core';
 import type { AgentSessionDto } from '@pocket-agent/protocol';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
@@ -27,8 +27,10 @@ import { Roll, Skeleton } from '@/ui/feedback';
 const FADE = 28;
 
 /** What the header says under the name, like a messenger's "online" / "typing…". */
-function presence(s: AgentSessionDto): { text: string; live: boolean } {
-  if (s.endedAt) return { text: `ended ${timeAgo(s.endedAt)}`, live: false };
+function presence(s: AgentSessionDto, sending: boolean): { text: string; live: boolean } {
+  if (s.endedAt && !sending) return { text: `ended ${timeAgo(s.endedAt)}`, live: false };
+  // Just sent, before the PC reports Claude on it: shown at once instead of seconds later.
+  if (sending && !isBusy(s)) return { text: 'sending…', live: true };
   switch (s.status) {
     case 'Starting':
       return { text: 'starting…', live: true };
@@ -77,17 +79,19 @@ function useMarkChatRead(sessionId: string) {
 /** The bar on top of the chat: back, who you are talking to and how it is doing (tap for details), end. */
 function Header({
   session: s,
+  sending,
   onInfo,
   onChange,
 }: {
   session: AgentSessionDto;
+  sending: boolean;
   onInfo: () => void;
   onChange: () => void;
 }) {
   const { c } = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const p = presence(s);
+  const p = presence(s, sending);
   return (
     <View
       testID="chat-header"
@@ -188,6 +192,16 @@ export function ChatScreen({ id }: { id: string }) {
   const [infoOpen, setInfoOpen] = useState(false);
   // Bumped on every send: the conversation scrolls back to the newest message.
   const [jump, setJump] = useState(0);
+  // When a message was just sent, until the PC reports Claude working on it (or 20s pass).
+  const [sentAt, setSentAt] = useState<number | null>(null);
+  // The PC says Claude is on it: its own status takes over.
+  if (sentAt !== null && state.data && isBusy(state.data)) setSentAt(null);
+  useEffect(() => {
+    if (sentAt === null) return;
+    const t = setTimeout(() => setSentAt(null), 20_000);
+    return () => clearTimeout(t);
+  }, [sentAt]);
+  const sending = sentAt !== null;
   // Height of what floats over the list's foot (the message box), so the last message clears it.
   const [dock, setDock] = useState(0);
   useLiveRefresh(
@@ -201,6 +215,12 @@ export function ChatScreen({ id }: { id: string }) {
     const sent = feed.hasMore && feed.oldestAt ? all.filter((c) => c.createdAt >= feed.oldestAt!) : all;
     return buildChat(feed.events, sent);
   }, [feed.events, feed.hasMore, feed.oldestAt, commands.state.data]);
+  // Claude already answered (too fast for its status to be seen here): nothing is on its way.
+  if (
+    sentAt !== null &&
+    items.some((i) => (i.kind === 'assistant' || i.kind === 'tool') && Date.parse(i.at) >= sentAt)
+  )
+    setSentAt(null);
 
   if (state.status === 'loading') {
     return (
@@ -275,7 +295,7 @@ export function ChatScreen({ id }: { id: string }) {
       style={{ flex: 1, backgroundColor: c.background }}
       accessibilityLabel={`Conversation with ${s.projectName}`}
     >
-      <Header session={s} onInfo={() => setInfoOpen(true)} onChange={changed} />
+      <Header session={s} sending={sending} onInfo={() => setInfoOpen(true)} onChange={changed} />
       <SessionInfo session={s} open={infoOpen} onClose={() => setInfoOpen(false)} onChange={changed} />
 
       {/*
@@ -299,7 +319,7 @@ export function ChatScreen({ id }: { id: string }) {
                 // The question being asked is shown below, not also in the conversation.
                 question ? items.filter((i) => !(i.kind === 'question' && i.state === 'running')) : items
               }
-              typing={typingKind(s)}
+              typing={typingKind(s) ?? (sending ? 'working' : null)}
               bottomInset={dock}
               jumpKey={jump}
               header={
@@ -369,7 +389,13 @@ export function ChatScreen({ id }: { id: string }) {
             >
               <Composer
                 session={s}
-                onSending={() => setJump((j) => j + 1)}
+                onSending={() => {
+                  setJump((j) => j + 1);
+                  // Optimistic: Claude starts on it right away in these sessions, so it shows as on
+                  // its way at once; the PC's own status takes over when it arrives.
+                  if (s.capabilities.instructAnytime) setSentAt(Date.now());
+                }}
+                onSendFailed={() => setSentAt(null)}
                 onSent={changed}
                 onInfo={() => setInfoOpen(true)}
               />

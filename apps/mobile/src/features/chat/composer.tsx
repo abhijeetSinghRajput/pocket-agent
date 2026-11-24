@@ -172,12 +172,15 @@ export function AttachButton({ disabled, onPress }: { disabled: boolean; onPress
 export function Composer({
   session,
   onSending,
+  onSendFailed,
   onSent,
   onInfo,
 }: {
   session: AgentSessionDto;
   /** A message is on its way: the chat goes to its newest message, where it will show up. */
   onSending?: () => void;
+  /** The message did not go out (the chat stops showing it as on its way). */
+  onSendFailed?: () => void;
   /** Something was sent (a message, a stop, a new mode): the chat refreshes. */
   onSent: () => void;
   onInfo?: () => void;
@@ -303,11 +306,13 @@ export function Composer({
       if (command.status === 'Failed') {
         setError(commandError(command));
         buzz(false);
+        onSendFailed?.();
       }
       onSent();
     } catch (err) {
       setError((err as Error).message);
       buzz(false);
+      onSendFailed?.();
     } finally {
       setPending(false);
     }

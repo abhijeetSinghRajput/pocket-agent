@@ -30,6 +30,7 @@ async function main(): Promise<void> {
 
   const app = await buildApp({
     env,
+    updates: { base: env.OTA_MANIFEST_BASE },
     logger: {
       level: env.LOG_LEVEL,
       redact: ['req.headers.authorization', 'req.headers.cookie'],

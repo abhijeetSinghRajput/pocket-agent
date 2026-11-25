@@ -23,6 +23,7 @@ import { commandRoutes } from './routes/commands.js';
 import { agentRoutes, deviceRoutes } from './routes/devices.js';
 import { pairingAgentRoutes, pairingUserRoutes } from './routes/pairing.js';
 import { healthRoutes, type HealthDeps } from './routes/health.js';
+import { updatesRoutes, type UpdatesDeps } from './routes/updates.js';
 import { notificationRoutes } from './routes/notifications.js';
 import { sessionRoutes } from './routes/sessions.js';
 import { subagentRoutes } from './routes/subagents.js';
@@ -36,6 +37,8 @@ export interface AppDeps {
    * exercise the HTTP shell (health, CORS, headers) without infrastructure.
    */
   ctx?: AppContext & GatewayOptions & { offlineCheckMs?: number };
+  /** Over-the-air updates for the phone app (signed manifests published on GitHub). */
+  updates?: UpdatesDeps;
   /** Web push sender (FCM). Defaults to none: notifications are recorded but not pushed. */
   push?: PushSender;
   /** Where attachments are stored. Defaults to Cloudinary when CLOUDINARY_URL is set, else off. */
@@ -67,6 +70,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   app.decorateRequest('user', null);
 
   await app.register(healthRoutes, deps.health);
+  if (deps.updates) await app.register(updatesRoutes, deps.updates);
 
   const ctx = deps.ctx;
   if (deps.disableRateLimits && deps.env.NODE_ENV !== 'test') {

@@ -48,6 +48,10 @@ export const EnvSchema = z.object({
     .regex(/^cloudinary:\/\/\d+:[A-Za-z0-9_-]+@[a-z0-9-]+$/)
     .optional(),
   /** Absolute lifetime of a browser login session. */
+  /** Where the phone app's signed update manifests are published (see routes/updates.ts). */
+  OTA_MANIFEST_BASE: z
+    .url()
+    .default('https://github.com/abhijeetSinghRajput/pocket-agent/releases/download/ota-updates'),
   SESSION_TTL_DAYS: z.coerce.number().int().min(1).max(90).default(30),
   /** Defaults to true in production. Only set false for plain-http local development. */
   COOKIE_SECURE: z

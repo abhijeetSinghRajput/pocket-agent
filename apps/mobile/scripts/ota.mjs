@@ -28,6 +28,8 @@ const key = path.join(root, 'keys', 'private-key.pem');
 const win = process.platform === 'win32';
 const run = (cmd, args, opts = {}) =>
   execFileSync(cmd, args, { cwd: root, shell: win, encoding: 'utf8', ...opts });
+// gh is a plain program: no shell (a shell would split text with spaces and quotes).
+const gh = (args, opts = {}) => execFileSync('gh', args, { cwd: root, encoding: 'utf8', ...opts });
 
 const args = process.argv.slice(2);
 const force = args.includes('--force');
@@ -99,9 +101,9 @@ const assets = meta.assets.map((a) => describe(a.path, a.ext, false));
 // Releases that hold the files and the manifests (made once).
 const ensure = (tag, notes) => {
   try {
-    run('gh', ['release', 'view', tag, '--repo', REPO, '--json', 'tagName']);
+    gh(['release', 'view', tag, '--repo', REPO, '--json', 'tagName']);
   } catch {
-    run('gh', ['release', 'create', tag, '--repo', REPO, '--prerelease', '--title', tag, '--notes', notes]);
+    gh(['release', 'create', tag, '--repo', REPO, '--prerelease', '--title', tag, '--notes', notes]);
   }
 };
 ensure(
@@ -111,9 +113,7 @@ ensure(
 ensure(MANIFESTS, "Signed manifests of the app's over-the-air updates, one per app version.");
 
 const have = new Set(
-  JSON.parse(run('gh', ['release', 'view', ASSETS, '--repo', REPO, '--json', 'assets'])).assets.map(
-    (a) => a.name,
-  ),
+  JSON.parse(gh(['release', 'view', ASSETS, '--repo', REPO, '--json', 'assets'])).assets.map((a) => a.name),
 );
 const upload = path.join(out, '_upload');
 mkdirSync(upload, { recursive: true });
@@ -121,7 +121,7 @@ const missing = files.filter((f) => !have.has(f.name));
 for (const f of missing) copyFileSync(f.src, path.join(upload, f.name));
 if (missing.length) {
   console.log(`Uploading ${missing.length} new file(s) (${files.length - missing.length} reused)…`);
-  run('gh', ['release', 'upload', ASSETS, ...missing.map((f) => path.join(upload, f.name)), '--repo', REPO], {
+  gh(['release', 'upload', ASSETS, ...missing.map((f) => path.join(upload, f.name)), '--repo', REPO], {
     stdio: 'inherit',
   });
 }
@@ -138,6 +138,6 @@ const manifest = JSON.stringify({
 const signature = createSign('RSA-SHA256').update(manifest, 'utf8').sign(readFileSync(key, 'utf8'), 'base64');
 const file = path.join(out, `manifest-${version}.json`);
 writeFileSync(file, JSON.stringify({ kind: 'manifest', body: manifest, signature }));
-run('gh', ['release', 'upload', MANIFESTS, file, '--clobber', '--repo', REPO], { stdio: 'inherit' });
+gh(['release', 'upload', MANIFESTS, file, '--clobber', '--repo', REPO], { stdio: 'inherit' });
 rmSync(out, { recursive: true, force: true });
 console.log(`Published a signed update for ${version}: ${message}`);

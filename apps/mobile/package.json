@@ -73,7 +73,8 @@
     "apk": "node scripts/build-apk.mjs",
     "release:apk": "node scripts/release-apk.mjs",
     "ota": "node scripts/ota.mjs",
-    "ota:rollback": "node scripts/ota-rollback.mjs"
+    "ota:rollback": "node scripts/ota-rollback.mjs",
+    "ota:verify": "node scripts/ota-verify.mjs"
   },
   "private": true
 }

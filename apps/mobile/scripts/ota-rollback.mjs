@@ -30,6 +30,5 @@ const file = path.join(os.tmpdir(), `manifest-${version}.json`);
 writeFileSync(file, JSON.stringify({ kind: 'directive', body, signature }));
 execFileSync('gh', ['release', 'upload', 'ota-updates', file, '--clobber', '--repo', REPO], {
   stdio: 'inherit',
-  shell: process.platform === 'win32',
 });
 console.log(`Phones on ${version} go back to the code inside their APK at their next start.`);

@@ -11,7 +11,7 @@ import {
 import { useRouter } from 'expo-router';
 import { ArrowLeft } from 'lucide-react-native';
 import { useEffect, useEffectEvent, useMemo, useRef, useState, type ComponentRef } from 'react';
-import { findNodeHandle, Pressable, TextInput, View } from 'react-native';
+import { findNodeHandle, Keyboard, Pressable, TextInput, View } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import Animated, {
   interpolateColor,
@@ -119,6 +119,8 @@ export function NewChatScreen({ deviceId, path, name }: { deviceId: string; path
       text.trim() ||
       (files.ready.length ? `Attached: ${files.ready.map((d) => d.ref!.name).join(', ')}` : '');
     if (!value || starting || locked || files.uploading) return;
+    // Sent: the keyboard goes away, so the conversation has the screen (like a messenger).
+    Keyboard.dismiss();
     const typed = text;
     setError(null);
     thud();

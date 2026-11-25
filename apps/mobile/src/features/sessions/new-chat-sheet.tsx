@@ -165,7 +165,14 @@ export function NewChatSheet({
             ) : (
               <>
                 {listing.data.folders.map((f, i) => (
-                  <FolderRow key={f.path} folder={f} index={i} onPress={() => into(here.deviceId, f)} />
+                  <FolderRow
+                    key={f.path}
+                    folder={f}
+                    index={i}
+                    // Inside a folder: its path is in the header, so each row is just a name.
+                    path={false}
+                    onPress={() => into(here.deviceId, f)}
+                  />
                 ))}
                 {listing.data.truncated && (
                   <T variant="caption" tone="muted" center style={{ marginTop: 8 }}>
@@ -261,11 +268,14 @@ export function FolderRow({
   onPress,
   hint = 'Shows the folders inside it',
   icon = 'folder',
+  path = true,
 }: {
   folder: Folder;
   index: number;
   onPress: () => void;
   hint?: string;
+  /** Its full path under the name (left out where the path is already shown above). */
+  path?: boolean;
   /** A recent workspace opens straight in a chat: it shows a clock on its folder. */
   icon?: 'folder' | 'recent';
 }) {
@@ -309,9 +319,11 @@ export function FolderRow({
           <T variant="bodyMedium" numberOfLines={1}>
             {folder.name}
           </T>
-          <T variant="caption" tone="muted" numberOfLines={1} style={{ fontFamily: fonts.mono }}>
-            {folder.path}
-          </T>
+          {path && (
+            <T variant="caption" tone="muted" numberOfLines={1} style={{ fontFamily: fonts.mono }}>
+              {folder.path}
+            </T>
+          )}
         </View>
       </Press>
     </Animated.View>

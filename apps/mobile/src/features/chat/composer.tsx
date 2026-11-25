@@ -20,7 +20,7 @@ import {
 } from '@pocket-agent/protocol';
 import { ArrowUp, CircleStop, Hand, Lock, Mic, Plus, Power, Square } from 'lucide-react-native';
 import { useEffect, useEffectEvent, useRef, useState, type ComponentRef } from 'react';
-import { findNodeHandle, Pressable, ScrollView, TextInput, View } from 'react-native';
+import { findNodeHandle, Keyboard, Pressable, ScrollView, TextInput, View } from 'react-native';
 import Animated, {
   cancelAnimation,
   interpolateColor,
@@ -372,6 +372,8 @@ export function Composer({
     const value =
       reply ?? (text.trim() || (ready.length ? `Attached: ${ready.map((d) => d.ref!.name).join(', ')}` : ''));
     if (!value || locked || uploading) return;
+    // Sent: the keyboard goes away, so the conversation has the screen (like a messenger).
+    Keyboard.dismiss();
     dictation.cancel();
     setQuietAt(session.lastActivityAt);
     setError(null);

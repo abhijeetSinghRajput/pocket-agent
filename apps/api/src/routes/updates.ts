@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
+import type { limit } from '../context.js';
 
 /**
  * Over-the-air updates for the phone app, in Expo's open update protocol (v1), without Expo's
@@ -26,7 +27,7 @@ export interface UpdatesDeps {
   /** How long a fetched manifest is reused (ms). */
   cacheMs?: number;
   /** Per-address throttle (route config), when the rate limiter is available. */
-  rateLimit?: ReturnType<typeof import('../context.js').limit>;
+  rateLimit?: ReturnType<typeof limit>;
 }
 
 const Published = z.object({

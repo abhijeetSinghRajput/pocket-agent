@@ -22,6 +22,8 @@ const PageQuery = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(50),
 });
 const ListQuery = z.object({ scope: z.enum(['active', 'all']).default('active') });
+/** What makes a session a conversation: something said, or a step taken. */
+const CONVERSATION_EVENTS = ['agent.output', 'agent.tool.started', 'agent.permission.requested'];
 
 const NO_CAPABILITIES: SessionCapabilities = {
   monitor: false,
@@ -122,7 +124,23 @@ export async function sessionRoutes(app: FastifyInstance, ctx: AppContext): Prom
       orderBy: { lastActivityAt: 'desc' },
       take: 200,
     });
-    return { sessions: sessions.map(toSessionDto) };
+    // Claude Code sometimes starts a session nobody uses (e.g. the editor's panel opened in a window
+    // with no folder) that exits again: ended, nothing ever said, nothing to show or continue. Those
+    // aren't chats. One still running stays (it can be messaged).
+    const blank = sessions.filter((s) => s.endedAt && !s.currentTask).map((s) => s.id);
+    const said = blank.length
+      ? new Set(
+          (
+            await ctx.prisma.agentEvent.findMany({
+              where: { sessionId: { in: blank }, eventType: { in: CONVERSATION_EVENTS } },
+              select: { sessionId: true },
+              distinct: ['sessionId'],
+            })
+          ).map((e) => e.sessionId),
+        )
+      : new Set<string | null>();
+    const empty = new Set(blank.filter((id) => !said.has(id)));
+    return { sessions: sessions.filter((s) => !empty.has(s.id)).map(toSessionDto) };
   });
 
   // Pin a chat to the top of the list, or archive it out of the list (archiving unpins it).

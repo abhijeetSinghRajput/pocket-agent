@@ -331,3 +331,30 @@ describe('pinning and archiving chats', () => {
     expect((await organize(id, s.cookie, {})).statusCode).toBe(400);
   });
 });
+
+describe('sessions nobody used', () => {
+  const ended = (ext: string) =>
+    createEvent(
+      'agent.session.ended',
+      { externalSessionId: ext, reason: 'process exited' },
+      { sessionId: ext },
+    );
+
+  it('an ended session with nothing said is not a chat; a used or running one is', async () => {
+    const s = await setup();
+    const blank = sid();
+    const used = sid();
+    const open = sid();
+    for (const ext of [blank, used, open]) await s.agent.send(sessionStarted(ext));
+    await s.agent.send(
+      createEvent('agent.output', { role: 'assistant', text: 'Hello' }, { sessionId: used }),
+    );
+    await s.agent.send(ended(blank));
+    await s.agent.send(ended(used));
+    const list = SessionListResponse.parse((await get('/sessions?scope=all', s.cookie)).json());
+    const shown = list.sessions.map((x) => x.externalSessionId);
+    expect(shown).toContain(used);
+    expect(shown).toContain(open);
+    expect(shown).not.toContain(blank);
+  });
+});

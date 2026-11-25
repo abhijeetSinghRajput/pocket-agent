@@ -194,8 +194,11 @@ Agent SDK query() ◄── `pocket-agent run` ──► ManagedSessions ──�
 
 Claude Code has no supported way to push a prompt into an idle interactive session. Whenever messages to observed
 sessions are allowed (`instructions enable`, asked at setup), an instruction to one that is `WaitingForInput` runs at
-once; there is no separate switch (since agent 2.2.0; owner decision 2026-11-25: never make the user configure it): the Local Agent calls the Agent SDK with `resume: <session id>`, one turn
-per instruction, queued while one runs. Verified with real Claude Code: the same session id continues with its full
+once; there is no separate switch (since agent 2.2.0; owner decision 2026-11-25: never make the user configure it): the Local Agent calls the Agent SDK with `resume: <session id>`.
+Since agent 2.3.0 that process is kept (streaming input, one turn per message): the next message from the phone runs in it
+at once, without loading the conversation again. It exits after 5 minutes without a message, when the session ends, when
+Pocket Agent stops, when a message needs another effort (a new process takes over), or as soon as a prompt is typed on the
+PC (a turn from the phone that is still running holds that prompt back instead). Verified with real Claude Code: the same session id continues with its full
 history, and a message sent in the browser gets Claude's answer in the chat.
 
 - Permissions are never widened. The user's Claude Code settings (all sources) apply first; anything that would ask goes to

@@ -92,6 +92,7 @@ export class AgentService {
       broker: this.approvals,
       enabled: () => this.policy.remoteApproval,
     });
+    this.wake.filesRoot = this.managed.filesRoot;
     const attachments = new AttachmentClient({
       apiUrl: opts.apiUrl,
       deviceId: opts.deviceId,

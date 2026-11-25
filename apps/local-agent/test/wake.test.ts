@@ -35,8 +35,11 @@ function fakeSdk() {
   const contexts: string[] = [];
   const releases: Array<() => void> = [];
   let hold = false;
-  const fn: QueryFn = (args) =>
-    (async function* (): AsyncGenerator<SDKMessage> {
+  // Claude processes started (a woken one is kept for the next message).
+  const processes = { started: 0, ended: 0 };
+  const fn: QueryFn = (args) => {
+    processes.started++;
+    return (async function* (): AsyncGenerator<SDKMessage> {
       for await (const m of args.prompt as AsyncIterable<SDKUserMessage>) {
         // The first woken turn of a session starts with the app context; the user's text is last.
         const content = m.message.content as string | Array<{ type: string; text?: string }>;
@@ -50,11 +53,20 @@ function fakeSdk() {
         } as SDKMessage;
         yield { type: 'result', subtype: 'success' } as SDKMessage;
       }
+      processes.ended++;
     })() as unknown as Query;
-  return { fn, calls, contexts, holdTurns: (v: boolean) => (hold = v), release: () => releases.shift()?.() };
+  };
+  return {
+    fn,
+    calls,
+    contexts,
+    processes,
+    holdTurns: (v: boolean) => (hold = v),
+    release: () => releases.shift()?.(),
+  };
 }
 
-function setup(policy: Partial<Policy> = {}) {
+function setup(policy: Partial<Policy> = {}, keepMs?: number) {
   const events: SessionEventOut[] = [];
   const acks: Array<{ id: string; status: string; extra?: Record<string, unknown> }> = [];
   const ack = (id: string, status: string, extra?: Record<string, unknown>) =>
@@ -63,7 +75,7 @@ function setup(policy: Partial<Policy> = {}) {
   const sdk = fakeSdk();
   const managed = new ManagedSessions(registry, sdk.fn, () => undefined, ack as never);
   const observed = new ObservedInstructions(registry, ack as never);
-  const wake = new IdleWake(registry, sdk.fn, ack as never);
+  const wake = new IdleWake(registry, sdk.fn, ack as never, undefined, undefined, undefined, keepMs);
   const full: Policy = {
     projects: [],
     observedInstructions: true,
@@ -406,5 +418,77 @@ describe('waking an idle session from Pocket Agent', () => {
     expect(observedCapabilities(true, false, true).instructAnytime).toBe(true);
     expect(observedCapabilities(true, false, false).instructAnytime).toBe(false);
     expect(observedCapabilities(false, false, true).instructAnytime).toBe(false);
+  });
+});
+
+describe('a woken process is kept for the next message', () => {
+  it('the next message from the phone runs in the same process (no history reload)', async () => {
+    const h = setup();
+    const a = instruction('first');
+    const b = instruction('second');
+    await h.router.handle(a);
+    await h.tick();
+    await h.router.handle(b);
+    await h.tick();
+    expect(h.sdk.calls.map((c) => c.prompt)).toEqual(['first', 'second']);
+    expect(h.sdk.processes.started).toBe(1);
+    expect(h.statuses(b.payload.commandId)).toEqual(['Delivered', 'Accepted', 'Executing', 'Completed']);
+    expect(h.wake.isRunning('obs')).toBe(true);
+  });
+
+  it('closes after a while without messages, and a later message starts a fresh one', async () => {
+    const h = setup({}, 30);
+    await h.router.handle(instruction('first'));
+    await h.tick();
+    expect(h.wake.isRunning('obs')).toBe(true);
+    await new Promise((r) => setTimeout(r, 80));
+    expect(h.wake.isRunning('obs')).toBe(false);
+    expect(h.sdk.processes.ended).toBe(1);
+    await h.router.handle(instruction('later'));
+    await h.tick();
+    expect(h.sdk.processes.started).toBe(2);
+  });
+
+  it('gives the session back to the PC at once when only waiting; holds the PC prompt mid-turn', async () => {
+    const h = setup();
+    const base = { session_id: 'obs', cwd: String.raw`C:\work\app` };
+    h.sdk.holdTurns(true);
+    await h.router.handle(instruction('remote job'));
+    await h.tick();
+    // Working: the prompt typed on the PC waits.
+    expect(h.hooks.handle({ ...base, hook_event_name: 'UserPromptSubmit', prompt: 'mine' })).toMatchObject({
+      decision: 'block',
+    });
+    h.sdk.release();
+    await h.tick();
+    // Only waiting for the phone: the PC's prompt goes through, and the woken process exits.
+    const out = h.hooks.handle({ ...base, hook_event_name: 'UserPromptSubmit', prompt: 'mine' });
+    expect(out).not.toMatchObject({ decision: 'block' });
+    await h.tick();
+    expect(h.wake.isRunning('obs')).toBe(false);
+    expect(h.sdk.processes.ended).toBe(1);
+  });
+
+  it('a different effort starts a new process once the open one is done', async () => {
+    const h = setup();
+    await h.router.handle(instruction('normal'));
+    await h.tick();
+    const deep = createEvent(
+      'command.execute',
+      {
+        commandId: crypto.randomUUID(),
+        commandType: 'instruction',
+        text: 'think hard',
+        effort: 'high',
+        expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      },
+      { sessionId: 'obs' },
+    ) as unknown as Exec;
+    await h.router.handle(deep);
+    await h.tick();
+    await h.tick();
+    expect(h.sdk.processes.started).toBe(2);
+    expect(h.sdk.calls.at(-1)).toMatchObject({ prompt: 'think hard', options: { effort: 'high' } });
+    expect(h.statuses(deep.payload.commandId).at(-1)).toBe('Completed');
   });
 });

@@ -20,6 +20,9 @@ execFileSync(
     'update',
     '--channel',
     'production',
+    // Expo's variables for production (none: the app's settings come from release-env.mjs).
+    '--environment',
+    'production',
     '--platform',
     'android',
     '--private-key-path',

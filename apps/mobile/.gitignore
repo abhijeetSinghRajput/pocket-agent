@@ -52,3 +52,8 @@ credentials/
 
 # Firebase config for local builds (EAS gets it as a file env var)
 google-services.json
+
+# Signing key for over-the-air updates: never committed (certs/certificate.pem is public)
+keys/
+*.pem.key
+!certs/certificate.pem

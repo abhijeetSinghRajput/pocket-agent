@@ -3,6 +3,7 @@ import { InAppToasts } from '@/features/alerts/in-app-toasts';
 import { ApprovalPrompt } from '@/features/approvals/approval-prompt';
 import { AppGate } from '@/features/shell/app-gate';
 import { PushBootstrap } from '@/features/shell/push-bootstrap';
+import { UpdateNotice } from '@/features/shell/app-update';
 import { LiveProvider } from '@/lib/live';
 import { useTheme } from '@/lib/theme';
 import { useWidgetSync } from '@/widget/sync';
@@ -31,6 +32,7 @@ export default function AppLayout() {
         <InAppToasts />
         <ApprovalPrompt />
         <PushBootstrap />
+        <UpdateNotice />
       </AppGate>
     </LiveProvider>
   );

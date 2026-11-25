@@ -12,6 +12,7 @@
 import { execFileSync } from 'node:child_process';
 import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
+import { releaseEnv } from './release-env.mjs';
 
 const root = path.resolve(import.meta.dirname, '..');
 const win = process.platform === 'win32';
@@ -21,11 +22,8 @@ const run = (cmd, args, opts = {}) =>
 const creds = JSON.parse(readFileSync(path.join(root, 'credentials.json'), 'utf8')).android?.keystore;
 if (!creds)
   throw new Error('credentials.json has no android keystore: run `eas credentials -p android` → download');
-const env = {
-  ...process.env,
-  EXPO_PUBLIC_API_URL: process.env.EXPO_PUBLIC_API_URL || 'https://pocket-agent-api.onrender.com',
-  GOOGLE_SERVICES_JSON: './google-services.json',
-};
+// The same environment as over-the-air updates (see release-env.mjs).
+const env = releaseEnv();
 
 // 1. Native project from app.config.ts, only with `--clean` (or none yet): Expo regenerates it from
 // scratch each time, and then everything compiles again. Otherwise the existing one is reused and

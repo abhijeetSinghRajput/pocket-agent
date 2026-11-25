@@ -14,7 +14,7 @@ const config: ExpoConfig = {
   name: 'Pocket Agent',
   slug: 'pocket-agent',
   owner: 'pocket-agents-team',
-  version: '2.3.2',
+  version: '2.4.0',
   orientation: 'portrait',
   icon: './assets/images/icon.png',
   scheme: 'pocketagent',
@@ -25,7 +25,7 @@ const config: ExpoConfig = {
   },
   android: {
     package: 'com.mrcodium.pocketagent',
-    versionCode: 8,
+    versionCode: 9,
     // Firebase config for push (Firebase console → project settings → the Android app). Locally:
     // GOOGLE_SERVICES_JSON=./google-services.json; on EAS: a file environment variable of that name.
     ...(process.env.GOOGLE_SERVICES_JSON ? { googleServicesFile: process.env.GOOGLE_SERVICES_JSON } : {}),
@@ -34,6 +34,9 @@ const config: ExpoConfig = {
       foregroundImage: './assets/images/adaptive-foreground.png',
     },
     softwareKeyboardLayoutMode: 'resize',
+    // Installing a new version of this app from inside it (Profile → Update): Android still asks
+    // you, and installs it only if it is signed with the same key as the app already here.
+    permissions: ['android.permission.REQUEST_INSTALL_PACKAGES'],
     // Added by libraries but never used: no drawing over other apps, no writing to shared storage
     // (photos are picked with the system picker). The microphone is used only while you dictate a
     // message (modules/speech-input), and asked for the first time you tap the mic.
@@ -117,6 +120,20 @@ const config: ExpoConfig = {
       },
     ],
   ],
+  // Over-the-air updates (code only): signed with our key (keys/private-key.pem, never committed);
+  // the app refuses anything not signed by it, and only takes updates made for its own native
+  // build (fingerprint). A new native build is installed from the app (see app-update.tsx).
+  runtimeVersion: { policy: 'fingerprint' },
+  updates: {
+    url: 'https://u.expo.dev/8fd9b55c-b6d6-49c4-840d-1cafbcbd2822',
+    // Builds made on this PC have no EAS channel of their own.
+    requestHeaders: { 'expo-channel-name': 'production' },
+    checkAutomatically: 'ON_LOAD',
+    // Start with what is on the phone at once; a new update is used from the next start.
+    fallbackToCacheTimeout: 0,
+    codeSigningCertificate: './certs/certificate.pem',
+    codeSigningMetadata: { keyid: 'main', alg: 'rsa-v1_5-sha256' },
+  },
   experiments: { typedRoutes: true, reactCompiler: true },
   // The Expo (EAS) project the cloud builds belong to.
   extra: { eas: { projectId: '8fd9b55c-b6d6-49c4-840d-1cafbcbd2822' } },

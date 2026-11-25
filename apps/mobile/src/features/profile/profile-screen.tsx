@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { View } from 'react-native';
 import Animated from 'react-native-reanimated';
 import { HealthCheckCard } from '@/features/profile/health-check';
+import { AppUpdateCard } from '@/features/shell/app-update';
 import { ApiStatus } from '@/features/profile/api-status';
 import { ClaudeUsageCard } from '@/features/profile/claude-usage';
 import { NotificationSettings } from '@/features/profile/notification-settings';
@@ -178,6 +179,9 @@ export function ProfileScreen() {
       </Animated.View>
       <Animated.View entering={enter.rise(4)}>
         <ApiStatus />
+      </Animated.View>
+      <Animated.View entering={enter.rise(5)}>
+        <AppUpdateCard />
       </Animated.View>
       <Animated.View entering={enter.rise(5)}>
         <SignOut />

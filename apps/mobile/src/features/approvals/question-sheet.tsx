@@ -1,7 +1,14 @@
 import type { AskedQuestion } from '@pocket-agent/core';
 import type { ApprovalDto } from '@pocket-agent/protocol';
 import { ChevronLeft, ChevronRight, Send } from 'lucide-react-native';
-import { useEffect, useState, type ReactNode } from 'react';
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ComponentRef,
+  type ReactElement,
+  type ReactNode,
+} from 'react';
 import { ScrollView, StyleSheet, TextInput, useWindowDimensions, View } from 'react-native';
 import { GestureDetector, usePanGesture } from 'react-native-gesture-handler';
 import Animated, { FadeInLeft, FadeInRight, useAnimatedStyle, withTiming } from 'react-native-reanimated';
@@ -52,7 +59,7 @@ function Option({
     }),
   }));
   return (
-    <Animated.View style={tint} layout={layout}>
+    <Animated.View style={tint}>
       <Press
         accessibilityRole={multi ? 'checkbox' : 'radio'}
         accessibilityState={{ checked: selected, disabled }}
@@ -84,6 +91,66 @@ function Option({
       </Press>
       {children}
     </Animated.View>
+  );
+}
+
+/** Wraps the questions in the swipe gesture only when there is a page to swipe to. */
+function Pager({ swipe, children }: { swipe: ReturnType<typeof usePanGesture> | null; children: ReactNode }) {
+  return swipe ? (
+    <GestureDetector gesture={swipe}>{children as ReactElement}</GestureDetector>
+  ) : (
+    <>{children}</>
+  );
+}
+
+/**
+ * Your own answer. It keeps what you type itself (the sheet redraws every second for its timer,
+ * which must never touch a field being typed in) and takes focus once it is on screen.
+ */
+function OtherInput({
+  initial,
+  disabled,
+  onText,
+}: {
+  initial: string;
+  disabled: boolean;
+  onText: (text: string) => void;
+}) {
+  const { c } = useTheme();
+  const [text, setText] = useState(initial);
+  const field = useRef<ComponentRef<typeof TextInput>>(null);
+  useEffect(() => {
+    const t = setTimeout(() => field.current?.focus(), 250);
+    return () => clearTimeout(t);
+  }, []);
+  return (
+    <TextInput
+      ref={field}
+      accessibilityLabel="Your own answer"
+      testID="other-answer"
+      maxLength={300}
+      value={text}
+      editable={!disabled}
+      onChangeText={(next) => {
+        setText(next);
+        onText(next);
+      }}
+      placeholder="Your answer"
+      placeholderTextColor={c.mutedForeground}
+      selectionColor={c.primary}
+      style={{
+        height: 46,
+        borderRadius: radius.lg,
+        borderWidth: StyleSheet.hairlineWidth * 2,
+        borderColor: c.input,
+        backgroundColor: c.background,
+        paddingHorizontal: 12,
+        paddingVertical: 0,
+        fontFamily: fonts.regular,
+        fontSize: 16,
+        color: c.foreground,
+      }}
+    />
   );
 }
 
@@ -174,28 +241,10 @@ function QuestionBlock({
               exiting={exit.fade}
               style={{ paddingHorizontal: 16, paddingBottom: 14 }}
             >
-              <TextInput
-                accessibilityLabel="Your own answer"
-                autoFocus
-                maxLength={300}
-                value={pick.other}
-                editable={!disabled}
-                onChangeText={(text) => onPick({ ...pick, other: text })}
-                placeholder="Your answer"
-                placeholderTextColor={c.mutedForeground}
-                selectionColor={c.primary}
-                style={{
-                  height: 46,
-                  borderRadius: radius.lg,
-                  borderWidth: StyleSheet.hairlineWidth * 2,
-                  borderColor: c.input,
-                  backgroundColor: c.background,
-                  paddingHorizontal: 12,
-                  paddingVertical: 0,
-                  fontFamily: fonts.regular,
-                  fontSize: 16,
-                  color: c.foreground,
-                }}
+              <OtherInput
+                initial={pick.other}
+                disabled={disabled}
+                onText={(text) => onPick({ ...pick, other: text })}
               />
             </Animated.View>
           )}
@@ -361,7 +410,8 @@ export function QuestionSheet({
           </T>
         </View>
       )}
-      <GestureDetector gesture={swipe}>
+      {/* Swiping between questions: only when there are several. */}
+      <Pager swipe={paged ? swipe : null}>
         <ScrollView
           style={{ maxHeight: Math.round(height * 0.5) }}
           showsVerticalScrollIndicator={false}
@@ -384,7 +434,7 @@ export function QuestionSheet({
             questions.map((q, i) => block(q, i === 0))
           )}
         </ScrollView>
-      </GestureDetector>
+      </Pager>
       <Animated.View
         layout={layout}
         style={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 12 + insets.bottom, gap: 12 }}

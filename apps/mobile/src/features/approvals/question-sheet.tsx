@@ -1,14 +1,7 @@
 import type { AskedQuestion } from '@pocket-agent/core';
 import type { ApprovalDto } from '@pocket-agent/protocol';
 import { ChevronLeft, ChevronRight, Send } from 'lucide-react-native';
-import {
-  useEffect,
-  useRef,
-  useState,
-  type ComponentRef,
-  type ReactElement,
-  type ReactNode,
-} from 'react';
+import { useEffect, useRef, useState, type ComponentRef, type ReactElement, type ReactNode } from 'react';
 import { ScrollView, StyleSheet, TextInput, useWindowDimensions, View } from 'react-native';
 import { GestureDetector, usePanGesture } from 'react-native-gesture-handler';
 import Animated, { FadeInLeft, FadeInRight, useAnimatedStyle, withTiming } from 'react-native-reanimated';

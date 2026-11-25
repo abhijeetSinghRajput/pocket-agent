@@ -12,7 +12,7 @@
 import { execFileSync } from 'node:child_process';
 import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { releaseEnv } from './release-env.mjs';
+import { nativeFingerprint, releaseEnv } from './release-env.mjs';
 
 const root = path.resolve(import.meta.dirname, '..');
 const win = process.platform === 'win32';
@@ -95,3 +95,10 @@ mkdirSync(path.join(root, 'dist'), { recursive: true });
 const out = path.join(root, 'dist', `pocket-agent-${version}.apk`);
 copyFileSync(path.join(root, 'android/app/build/outputs/apk/release/app-release.apk'), out);
 console.log(`\nAPK: ${out}`);
+
+// The native parts this APK was built with: an over-the-air update for this version is refused
+// when they have changed since (scripts/ota.mjs).
+writeFileSync(
+  path.join(root, 'dist', `native-fingerprint-${version}.json`),
+  JSON.stringify({ version, fingerprint: nativeFingerprint(), builtAt: new Date().toISOString() }, null, 2),
+);

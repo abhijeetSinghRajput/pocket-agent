@@ -14,7 +14,7 @@ const config: ExpoConfig = {
   name: 'Pocket Agent',
   slug: 'pocket-agent',
   owner: 'pocket-agents-team',
-  version: '2.4.0',
+  version: '2.4.1',
   orientation: 'portrait',
   icon: './assets/images/icon.png',
   scheme: 'pocketagent',
@@ -25,7 +25,7 @@ const config: ExpoConfig = {
   },
   android: {
     package: 'com.mrcodium.pocketagent',
-    versionCode: 9,
+    versionCode: 10,
     // Firebase config for push (Firebase console → project settings → the Android app). Locally:
     // GOOGLE_SERVICES_JSON=./google-services.json; on EAS: a file environment variable of that name.
     ...(process.env.GOOGLE_SERVICES_JSON ? { googleServicesFile: process.env.GOOGLE_SERVICES_JSON } : {}),
@@ -120,14 +120,13 @@ const config: ExpoConfig = {
       },
     ],
   ],
-  // Over-the-air updates (code only): signed with our key (keys/private-key.pem, never committed);
-  // the app refuses anything not signed by it, and only takes updates made for its own native
-  // build (fingerprint). A new native build is installed from the app (see app-update.tsx).
-  runtimeVersion: { policy: 'fingerprint' },
+  // Over-the-air updates (code only), served by Pocket Agent's own API in Expo's update protocol.
+  // Each update is signed on the owner's PC (keys/private-key.pem, never committed); the app holds
+  // the certificate and refuses anything not signed by that key, and checks every file's hash. An
+  // update targets one app version (a new native build is a new version, installed from the app).
+  runtimeVersion: { policy: 'appVersion' },
   updates: {
-    url: 'https://u.expo.dev/8fd9b55c-b6d6-49c4-840d-1cafbcbd2822',
-    // Builds made on this PC have no EAS channel of their own.
-    requestHeaders: { 'expo-channel-name': 'production' },
+    url: `${process.env.EXPO_PUBLIC_API_URL || 'https://pocket-agent-api.onrender.com'}/updates/manifest`,
     checkAutomatically: 'ON_LOAD',
     // Start with what is on the phone at once; a new update is used from the next start.
     fallbackToCacheTimeout: 0,

@@ -5,7 +5,7 @@ import { buildApp } from '../src/app.js';
 
 const { privateKey, publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
 const sign = (body: string) => createSign('RSA-SHA256').update(body, 'utf8').sign(privateKey, 'base64');
-const RUNTIME = '55d61111991e41a6dea0db5749fb1e974e1bde9a';
+const RUNTIME = '2.4.1';
 
 let app: FastifyInstance | undefined;
 afterEach(async () => {
@@ -113,6 +113,7 @@ describe('over-the-air updates', () => {
   it('anything that is not an update request is refused, and never reaches the store', async () => {
     const { app, asked } = await make({});
     expect((await ask(app, '../../secrets')).statusCode).toBe(400);
+    expect((await ask(app, '55d61111991e41a6dea0db5749fb1e974e1bde9a')).statusCode).toBe(400); // only app versions
     expect((await ask(app, RUNTIME, { 'expo-platform': 'web' })).statusCode).toBe(400);
     expect((await ask(app, RUNTIME, { 'expo-protocol-version': '0' })).statusCode).toBe(400);
     expect(asked).toHaveLength(0);

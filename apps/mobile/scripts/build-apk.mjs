@@ -29,6 +29,20 @@ const env = releaseEnv();
 // scratch each time, and then everything compiles again. Otherwise the existing one is reused and
 // only the version is brought up to date (step 2).
 if (process.argv.includes('--clean') || !existsSync(path.join(root, 'android'))) {
+  // A Gradle daemon from an earlier build keeps the folder open (Windows: EBUSY on delete).
+  if (
+    existsSync(path.join(root, 'android', 'gradlew.bat')) ||
+    existsSync(path.join(root, 'android', 'gradlew'))
+  ) {
+    try {
+      run(win ? path.join(root, 'android', 'gradlew.bat') : './gradlew', ['--stop'], {
+        cwd: path.join(root, 'android'),
+        env,
+      });
+    } catch {
+      /* none running */
+    }
+  }
   run('npx', ['expo', 'prebuild', '--platform', 'android', '--clean', '--no-install'], { env });
 }
 

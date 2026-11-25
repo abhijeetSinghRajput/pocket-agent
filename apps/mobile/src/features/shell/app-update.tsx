@@ -24,13 +24,15 @@ import { useToast } from '@/ui/toast';
  *   installer, which asks you and installs it only if it is signed with this app's key.
  */
 
+const RELEASES = 'https://github.com/abhijeetSinghRajput/pocket-agent/releases/download/';
 const LATEST_URL =
   'https://github.com/abhijeetSinghRajput/pocket-agent/releases/download/mobile-preview/latest.json';
 
 const LatestApkSchema = z.object({
   versionName: z.string().max(40),
   versionCode: z.number().int().positive(),
-  url: z.url().refine((u) => u.startsWith('https://'), 'https only'),
+  // Only from this project's releases (Android also checks the signature before installing).
+  url: z.url().refine((u) => u.startsWith(RELEASES), 'not a Pocket Agent release'),
   size: z.number().int().positive(),
   md5: z.string().regex(/^[0-9a-f]{32}$/i),
   notes: z.string().max(2000).optional(),

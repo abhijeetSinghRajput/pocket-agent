@@ -25,6 +25,8 @@ export interface UpdatesDeps {
   fetch?: typeof fetch;
   /** How long a fetched manifest is reused (ms). */
   cacheMs?: number;
+  /** Per-address throttle (route config), when the rate limiter is available. */
+  rateLimit?: ReturnType<typeof import('../context.js').limit>;
 }
 
 const Published = z.object({
@@ -34,8 +36,10 @@ const Published = z.object({
 });
 type Published = z.infer<typeof Published>;
 
-/** A runtime version as the app sends it (a fingerprint hash, or a plain version). */
-const RuntimeVersion = z.string().regex(/^[A-Za-z0-9._-]{1,128}$/);
+/** A runtime version as the app sends it: its app version ("2.4.1"). Nothing else reaches the store. */
+const RuntimeVersion = z.string().regex(/^\d{1,3}\.\d{1,3}\.\d{1,4}$/);
+/** Most versions remembered at once (old entries go first). */
+const CACHE_MAX = 50;
 
 export async function updatesRoutes(app: FastifyInstance, deps: UpdatesDeps): Promise<void> {
   const get = deps.fetch ?? fetch;
@@ -52,11 +56,12 @@ export async function updatesRoutes(app: FastifyInstance, deps: UpdatesDeps): Pr
     let value: Published | null = null;
     if (res.ok) value = Published.parse(await res.json());
     else if (res.status !== 404) throw new Error(`manifest store answered ${res.status}`);
+    if (cache.size >= CACHE_MAX) cache.delete(cache.keys().next().value!);
     cache.set(runtime, { at: Date.now(), value });
     return value;
   }
 
-  app.get('/updates/manifest', async (req, reply) => {
+  app.get('/updates/manifest', deps.rateLimit ? { config: deps.rateLimit } : {}, async (req, reply) => {
     const h = req.headers;
     const protocol = Number(h['expo-protocol-version'] ?? 0);
     const platform = h['expo-platform'];

@@ -24,6 +24,7 @@ import { agentRoutes, deviceRoutes } from './routes/devices.js';
 import { pairingAgentRoutes, pairingUserRoutes } from './routes/pairing.js';
 import { healthRoutes, type HealthDeps } from './routes/health.js';
 import { updatesRoutes, type UpdatesDeps } from './routes/updates.js';
+import { limit } from './context.js';
 import { notificationRoutes } from './routes/notifications.js';
 import { sessionRoutes } from './routes/sessions.js';
 import { subagentRoutes } from './routes/subagents.js';
@@ -70,7 +71,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   app.decorateRequest('user', null);
 
   await app.register(healthRoutes, deps.health);
-  if (deps.updates) await app.register(updatesRoutes, deps.updates);
+  // Without the database (unit tests of the HTTP shell) it runs unthrottled; otherwise below.
+  if (deps.updates && !deps.ctx) await app.register(updatesRoutes, deps.updates);
 
   const ctx = deps.ctx;
   if (deps.disableRateLimits && deps.env.NODE_ENV !== 'test') {
@@ -91,6 +93,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
         message: `Too many requests. Try again in ${Math.ceil(c.ttl / 1000)}s.`,
       }),
     });
+    // Public (phones ask before signing in): throttled per address.
+    if (deps.updates) await app.register(updatesRoutes, { ...deps.updates, rateLimit: limit(ctx, 30) });
     const google =
       deps.google !== undefined
         ? deps.google

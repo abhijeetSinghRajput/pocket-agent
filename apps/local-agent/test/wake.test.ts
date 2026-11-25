@@ -449,6 +449,30 @@ describe('a woken process is kept for the next message', () => {
     expect(h.sdk.processes.started).toBe(2);
   });
 
+  it('a long task never lets it expire: the idle time counts from the end of each turn', async () => {
+    const h = setup({}, 80);
+    h.sdk.holdTurns(true);
+    const c = instruction('long job');
+    await h.router.handle(c);
+    // Working far longer than the idle time: still open.
+    await new Promise((r) => setTimeout(r, 250));
+    expect(h.wake.isRunning('obs')).toBe(true);
+    expect(h.statuses(c.payload.commandId).at(-1)).toBe('Executing');
+    h.sdk.release();
+    await h.tick();
+    expect(h.statuses(c.payload.commandId).at(-1)).toBe('Completed');
+    // Each finished turn starts the idle time afresh.
+    expect(h.wake.isRunning('obs')).toBe(true);
+    h.sdk.holdTurns(false);
+    await new Promise((r) => setTimeout(r, 30));
+    await h.router.handle(instruction('follow-up')); // ~50 ms after the first turn ended: same process
+    await new Promise((r) => setTimeout(r, 50));
+    expect(h.wake.isRunning('obs')).toBe(true); // ~100 ms since the first turn, ~50 since the second
+    expect(h.sdk.processes.started).toBe(1);
+    await new Promise((r) => setTimeout(r, 120));
+    expect(h.wake.isRunning('obs')).toBe(false);
+  });
+
   it('gives the session back to the PC at once when only waiting; holds the PC prompt mid-turn', async () => {
     const h = setup();
     const base = { session_id: 'obs', cwd: String.raw`C:\work\app` };

@@ -56,6 +56,17 @@ if (!gradle.includes('pocketAgentRelease')) {
     .replace(/\nandroid \{\n/, '\nandroid {\n    externalNativeBuild { cmake { version "4.1.2" } }\n');
   writeFileSync(gradleFile, gradle);
 }
+// Room for the code generators (expo-updates' KSP ran out of Metaspace with the defaults).
+const propsFile = path.join(root, 'android', 'gradle.properties');
+const props = readFileSync(propsFile, 'utf8')
+  .split(/\r?\n/)
+  .filter((l) => !/^(org\.gradle\.jvmargs|kotlin\.daemon\.jvmargs)=/.test(l));
+props.push(
+  'org.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=1536m -Dfile.encoding=UTF-8',
+  'kotlin.daemon.jvmargs=-Xmx3072m -XX:MaxMetaspaceSize=1024m',
+);
+writeFileSync(propsFile, props.filter(Boolean).join('\n') + '\n');
+
 // The version from app.config.ts (versionName, versionCode), so a reused project is never stale.
 const config = readFileSync(path.join(root, 'app.config.ts'), 'utf8');
 const versionName = /version: '([^']+)'/.exec(config)?.[1];

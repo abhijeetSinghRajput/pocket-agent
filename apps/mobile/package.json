@@ -72,7 +72,8 @@
     "lint": "eslint . --max-warnings=0",
     "apk": "node scripts/build-apk.mjs",
     "release:apk": "node scripts/release-apk.mjs",
-    "ota": "node scripts/ota.mjs"
+    "ota": "node scripts/ota.mjs",
+    "ota:rollback": "node scripts/ota-rollback.mjs"
   },
   "private": true
 }

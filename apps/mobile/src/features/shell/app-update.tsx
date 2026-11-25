@@ -53,24 +53,45 @@ export async function newerApk(): Promise<LatestApk | null> {
  * opens Android's installer (which also checks the signature, and asks you).
  */
 export async function installApk(latest: LatestApk, onProgress: (fraction: number) => void): Promise<void> {
+  // Downloaded under a temporary name and renamed only once it is complete and checked: an
+  // interrupted or wrong download is never handed to the installer (it is deleted).
   const file = `${FileSystem.cacheDirectory}pocket-agent-${latest.versionCode}.apk`;
+  const part = `${file}.part`;
+  await FileSystem.deleteAsync(part, { idempotent: true });
   await FileSystem.deleteAsync(file, { idempotent: true });
-  const task = FileSystem.createDownloadResumable(latest.url, file, {}, (p) => {
+  const fail = async (message: string): Promise<never> => {
+    await FileSystem.deleteAsync(part, { idempotent: true });
+    throw new Error(message);
+  };
+  const task = FileSystem.createDownloadResumable(latest.url, part, {}, (p) => {
     if (p.totalBytesExpectedToWrite > 0) onProgress(p.totalBytesWritten / p.totalBytesExpectedToWrite);
   });
-  const done = await task.downloadAsync();
-  if (!done || done.status !== 200) throw new Error('The download failed. Try again.');
-  const info = await FileSystem.getInfoAsync(file, { md5: true });
-  if (!info.exists || info.size !== latest.size || info.md5?.toLowerCase() !== latest.md5.toLowerCase()) {
-    await FileSystem.deleteAsync(file, { idempotent: true });
-    throw new Error('The downloaded file didn’t match the published one, so nothing was installed.');
-  }
+  const done = await task.downloadAsync().catch(() => null);
+  if (!done || done.status !== 200)
+    return fail('The download didn’t finish, so nothing was installed. Try again.');
+  const info = await FileSystem.getInfoAsync(part, { md5: true });
+  if (!info.exists || info.size !== latest.size || info.md5?.toLowerCase() !== latest.md5.toLowerCase())
+    return fail('The downloaded file didn’t match the published one, so nothing was installed.');
+  await FileSystem.moveAsync({ from: part, to: file });
   const contentUri = await FileSystem.getContentUriAsync(file);
   await IntentLauncher.startActivityAsync('android.intent.action.VIEW', {
     data: contentUri,
     flags: 1, // FLAG_GRANT_READ_URI_PERMISSION: the installer may read the file
     type: 'application/vnd.android.package-archive',
   });
+}
+
+/** Downloaded APKs (and unfinished downloads) are removed once they are of no more use. */
+async function cleanDownloads(): Promise<void> {
+  const dir = FileSystem.cacheDirectory;
+  if (!dir) return;
+  const names = await FileSystem.readDirectoryAsync(dir).catch(() => [] as string[]);
+  for (const name of names) {
+    const m = /^pocket-agent-(\d+)\.apk(\.part)?$/.exec(name);
+    // A finished download of a newer version stays until it is installed; the rest goes.
+    if (m && (m[2] || Number(m[1]) <= installedCode()))
+      await FileSystem.deleteAsync(dir + name, { idempotent: true });
+  }
 }
 
 /** Restarts into a downloaded code update. */
@@ -89,6 +110,7 @@ export function UpdateNotice() {
   useEffect(() => {
     if (told.current.apk) return;
     told.current.apk = true;
+    void cleanDownloads();
     void newerApk()
       .then((latest) => {
         if (latest)

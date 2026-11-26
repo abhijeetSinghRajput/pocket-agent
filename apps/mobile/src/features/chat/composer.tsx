@@ -327,9 +327,11 @@ export function Composer({
   const canInterrupt = showStop && session.capabilities.interrupt;
   // Codex has its own models and modes (a mode reaches PCs that apply it; it takes it per message).
   const isCodex = session.provider === 'codex';
-  const codexModes = isCodex && !versionBelow(device?.agentVersion ?? '0', CODEX_MODES_AGENT_VERSION);
+  const isOther = session.provider !== 'claude-code';
+  // Codex takes a mode on PCs from 2.7.0; Antigravity always.
+  const modesOk = !isCodex || !versionBelow(device?.agentVersion ?? '0', CODEX_MODES_AGENT_VERSION);
   const models =
-    (isCodex ? device?.agents.find((a) => a.provider === 'codex')?.models : device?.models) ?? [];
+    (isOther ? device?.agents.find((a) => a.provider === session.provider)?.models : device?.models) ?? [];
   const [model, setModel] = useChosenModel(session.id, models);
   const [mode, setMode] = useStored(`pocket-agent:mode:${session.id}`);
   const [effort, setEffort] = useStored(`pocket-agent:effort:${session.id}`);
@@ -337,7 +339,7 @@ export function Composer({
 
   // A session Pocket Agent runs switches mode or model at once, mid-task too (the chat shows
   // "You switched to …"); any other takes the choice with the next message sent from here.
-  const live = canConfigureLive(session, device) && !isCodex;
+  const live = canConfigureLive(session, device) && !isOther;
   async function applyNow(change: { permissionMode: string } | { model: string }) {
     if (!live) return;
     setError(null);
@@ -392,7 +394,7 @@ export function Composer({
     onSending?.();
     const choices = {
       ...(model && !modelLocked ? { model } : {}),
-      ...(mode && !modelLocked && (!isCodex || codexModes) ? { permissionMode: mode } : {}),
+      ...(mode && !modelLocked && modesOk ? { permissionMode: mode } : {}),
       ...(effort && !modelLocked ? { effort } : {}),
     };
     submit({
@@ -575,7 +577,7 @@ export function Composer({
           {canAttach && <AttachButton disabled={files.room <= 0} onPress={() => setAttachOpen(true)} />}
           {!locked && (
             <>
-              {(!isCodex || codexModes) && (
+              {modesOk && (
                 <ModePicker
                   value={mode}
                   onChange={chooseMode}

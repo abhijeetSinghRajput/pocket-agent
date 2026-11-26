@@ -27,6 +27,7 @@ import { readSubagents } from './providers/claude-code/subagents.js';
 import type { ClaudeUsage, ModelOption, OtherAgent } from '@pocket-agent/protocol';
 import { detectCodex } from './providers/codex/detect.js';
 import { detectAntigravity } from './providers/antigravity/detect.js';
+import { AntigravitySessions, spawnAcp } from './providers/antigravity/sessions.js';
 import { spawnAppServer, type Transport } from './providers/codex/rpc.js';
 import { CodexSessions } from './providers/codex/sessions.js';
 import { readUsage } from './providers/claude-code/usage.js';
@@ -52,6 +53,8 @@ export interface ServiceOptions {
   codex?: () => Transport;
   /** Codex's home (default: CODEX_HOME or ~/.codex). */
   codexDir?: string;
+  /** `agy acp` stand-in (tests). */
+  acp?: () => Transport;
   /** false: don't look for Antigravity CLI (tests). */
   antigravity?: false;
 }
@@ -66,6 +69,7 @@ export class AgentService {
   readonly managed: ManagedSessions;
   /** Chats with Codex run from the app. */
   readonly codex: CodexSessions;
+  readonly antigravity: AntigravitySessions;
   readonly observed: ObservedInstructions;
   readonly wake: IdleWake;
   readonly link: AgentLink;
@@ -113,6 +117,13 @@ export class AgentService {
       ack,
       Date.now,
       { broker: this.approvals, enabled: () => this.policy.remoteApproval },
+    );
+    this.antigravity = new AntigravitySessions(
+      this.registry,
+      opts.acp ?? spawnAcp,
+      opts.agentVersion,
+      opts.log,
+      ack,
     );
     this.observed = new ObservedInstructions(this.registry, ack);
     this.wake = new IdleWake(this.registry, opts.query, ack, opts.log, Date.now, {
@@ -168,7 +179,7 @@ export class AgentService {
       wake: this.wake,
       models: () => this.models,
       // Codex runs only where it is installed and signed in (else: provider_not_available).
-      others: { codex: this.codex },
+      others: { codex: this.codex, antigravity: this.antigravity },
       attachments,
       policy: () => this.policy,
       ack,
@@ -216,6 +227,7 @@ export class AgentService {
         const withdrawn =
           this.managed.withdraw(commandId) ||
           this.codex.withdraw(commandId) ||
+          this.antigravity.withdraw(commandId) ||
           this.observed.withdraw(commandId) ||
           this.wake.withdraw(commandId);
         this.link.send(createEvent('command.withdrawn', { requestId, withdrawn }));
@@ -372,6 +384,7 @@ export class AgentService {
     this.wake.stopAll();
     await this.managed.stopAll();
     await this.codex.stopAll().catch(() => undefined);
+    await this.antigravity.stopAll().catch(() => undefined);
     const deadline = Date.now() + 2000;
     while (this.outbox.size && this.link.isOpen && Date.now() < deadline)
       await new Promise((r) => setTimeout(r, 50));

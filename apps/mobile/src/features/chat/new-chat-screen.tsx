@@ -11,7 +11,7 @@ import {
 import {
   attachmentLimit,
   CommandResponse,
-  PROVIDERS_AGENT_VERSION,
+  providerAgentVersion,
   CODEX_MODES_AGENT_VERSION,
   RESUME_FILES_AGENT_VERSION,
   versionBelow,
@@ -87,13 +87,18 @@ export function NewChatScreen({ deviceId, path, name }: { deviceId: string; path
   const [model, setModel] = useState<string | null>(null);
   const [mode, setMode] = useState<string>(NEW_CHAT_MODE);
   const [effort, setEffort] = useState('');
-  // Which agent: Claude Code, or Codex when the PC reports it (and its agent can start it).
+  // Which agent: Claude Code, or another the PC reports (Codex, Antigravity) that its PC agent
+  // can start.
   const [provider, setProvider] = useState<ProviderId>('claude-code');
-  const codex = device?.agents.find((a) => a.provider === 'codex');
-  const codexUsable = !!codex && !versionBelow(device?.agentVersion ?? '0', PROVIDERS_AGENT_VERSION);
-  const isCodex = provider === 'codex' && codexUsable;
-  const codexModes = !versionBelow(device?.agentVersion ?? '0', CODEX_MODES_AGENT_VERSION);
-  const agent = isCodex ? 'codex' : 'claude-code';
+  const others = (device?.agents ?? []).filter(
+    (a) => !versionBelow(device?.agentVersion ?? '0', providerAgentVersion(a.provider)),
+  );
+  const other = others.find((a) => a.provider === provider);
+  const agent: ProviderId = other ? other.provider : 'claude-code';
+  const isCodex = agent === 'codex';
+  // Codex takes a mode on PCs from 2.7.0; Antigravity always (its PC agent is newer).
+  const modesOk = !isCodex || !versionBelow(device?.agentVersion ?? '0', CODEX_MODES_AGENT_VERSION);
+  const signIn = isCodex ? 'codex login' : 'agy';
   // The first message once sent: shown as sent while the PC starts Claude.
   const [command, setCommand] = useState<CommandDto | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -108,12 +113,12 @@ export function NewChatScreen({ deviceId, path, name }: { deviceId: string; path
     };
   }, []);
 
-  const models = (isCodex ? codex?.models : device?.models) ?? [];
-  // A model the PC no longer offers is never sent. Codex starts on its own default.
+  const models = (other ? other.models : device?.models) ?? [];
+  // A model the PC no longer offers is never sent. Another agent starts on its own default.
   const chosenModel =
     model !== null && (model === '' || models.some((m) => m.id === model))
       ? model
-      : isCodex
+      : other
         ? ''
         : newChatModel(models);
   const starting = command !== null;
@@ -121,8 +126,8 @@ export function NewChatScreen({ deviceId, path, name }: { deviceId: string; path
     ? 'This PC is no longer paired.'
     : device.status !== 'Online'
       ? 'Your PC is offline. Start Pocket Agent on it to begin.'
-      : isCodex && !codex?.signedIn
-        ? 'Sign in to Codex on your PC first (run `codex login` there).'
+      : other && !other.signedIn
+        ? `Sign in to ${agentProduct(agent)} on your PC first (run \`${signIn}\` there).`
         : null;
   const items = useMemo(() => (command ? buildChat([], [command]) : []), [command]);
 
@@ -155,13 +160,12 @@ export function NewChatScreen({ deviceId, path, name }: { deviceId: string; path
       let { command: sent } = await apiRequest(`/devices/${deviceId}/sessions`, CommandResponse, {
         method: 'POST',
         body: {
-          ...(isCodex ? { provider: 'codex' as const } : {}),
+          ...(other ? { provider: agent } : {}),
           projectPath: path,
           text: value,
           idempotencyKey: key.current,
           ...(chosenModel ? { model: chosenModel } : {}),
-          // Codex's approval settings come with approvals from the phone; it keeps its own for now.
-          ...(mode && (!isCodex || codexModes) ? { permissionMode: mode as TurnMode } : {}),
+          ...(mode && modesOk ? { permissionMode: mode as TurnMode } : {}),
           ...(effort ? { effort: effort as TurnEffort } : {}),
           ...(files.ready.length ? { attachmentIds: files.ids } : {}),
         },
@@ -263,14 +267,17 @@ export function NewChatScreen({ deviceId, path, name }: { deviceId: string; path
               }}
             >
               <AgentAvatar size={64} provider={agent} />
-              {codexUsable && (
+              {others.length > 0 && (
                 <View style={{ alignSelf: 'stretch', marginTop: 4 }}>
                   <Segmented
                     label="Agent"
                     testID="agent-choice"
                     options={[
-                      { value: 'claude-code', label: 'Claude' },
-                      { value: 'codex', label: 'Codex' },
+                      { value: 'claude-code' as ProviderId, label: 'Claude' },
+                      ...others.map((a) => ({
+                        value: a.provider as ProviderId,
+                        label: agentName(a.provider),
+                      })),
                     ]}
                     value={agent}
                     onChange={(next) => {
@@ -290,11 +297,13 @@ export function NewChatScreen({ deviceId, path, name }: { deviceId: string; path
               </T>
               <T variant="small" tone="muted" center style={{ marginTop: 4 }}>
                 {agentProduct(agent)} starts on {device?.name ?? 'your PC'} when you send your first message.{' '}
-                {!isCodex
+                {agent === 'claude-code'
                   ? 'Anything that needs permission asks you here.'
-                  : device?.remoteApprovalEnabled
-                    ? 'It works in its sandbox: it changes files in this folder and asks you here for anything more.'
-                    : 'It works in its sandbox: it changes files in this folder. Anything more is declined, because remote approval is off on this PC.'}
+                  : agent === 'antigravity'
+                    ? 'It keeps its own permission settings; when it asks before an action, that is declined for now.'
+                    : device?.remoteApprovalEnabled
+                      ? 'It works in its sandbox: it changes files in this folder and asks you here for anything more.'
+                      : 'It works in its sandbox: it changes files in this folder. Anything more is declined, because remote approval is off on this PC.'}
               </T>
             </Animated.View>
           )}
@@ -372,7 +381,7 @@ export function NewChatScreen({ deviceId, path, name }: { deviceId: string; path
                 {canAttach && <AttachButton disabled={files.room <= 0} onPress={() => setAttachOpen(true)} />}
                 {!locked && (
                   <>
-                    {(!isCodex || codexModes) && (
+                    {modesOk && (
                       <ModePicker value={mode} onChange={setMode} locked={null} modes={modesFor(agent)} />
                     )}
                     <ModelPicker

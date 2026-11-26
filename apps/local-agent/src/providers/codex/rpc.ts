@@ -46,6 +46,8 @@ export class AppServerClient {
       closed: (reason: string) => void;
     },
     private readonly log: (level: 'info' | 'warn' | 'error', msg: string) => void = () => undefined,
+    /** Who answers (for messages), and whether every message names JSON-RPC 2.0 (ACP wants it). */
+    private readonly peer: { name: string; jsonrpc: boolean } = { name: 'codex app-server', jsonrpc: false },
   ) {
     transport.onLine((line) => this.onLine(line));
     transport.onClose((reason) => {
@@ -53,7 +55,7 @@ export class AppServerClient {
       this.closedReason = reason;
       for (const p of this.pending.values()) {
         clearTimeout(p.timer);
-        p.reject(new Error(`codex app-server closed: ${reason}`));
+        p.reject(new Error(`${this.peer.name} closed: ${reason}`));
       }
       this.pending.clear();
       handlers.closed(reason);
@@ -74,21 +76,25 @@ export class AppServerClient {
   }
 
   request<T = Json>(method: string, params: Json = {}, timeoutMs = REQUEST_TIMEOUT_MS): Promise<T> {
-    if (this.closedReason !== null) return Promise.reject(new Error('codex app-server is not running'));
+    if (this.closedReason !== null) return Promise.reject(new Error(`${this.peer.name} is not running`));
     const id = this.nextId++;
     return new Promise<T>((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(id);
-        reject(new Error(`codex ${method} timed out`));
+        reject(new Error(`${this.peer.name} ${method} timed out`));
       }, timeoutMs);
       this.pending.set(id, { resolve: resolve as (v: unknown) => void, reject, timer });
-      this.transport.write(JSON.stringify({ id, method, params }));
+      this.write({ id, method, params });
     });
   }
 
   notify(method: string, params?: Json): void {
     if (this.closedReason !== null) return;
-    this.transport.write(JSON.stringify(params === undefined ? { method } : { method, params }));
+    this.write(params === undefined ? { method } : { method, params });
+  }
+
+  private write(msg: Json): void {
+    this.transport.write(JSON.stringify(this.peer.jsonrpc ? { jsonrpc: '2.0', ...msg } : msg));
   }
 
   close(): void {
@@ -101,7 +107,7 @@ export class AppServerClient {
     try {
       msg = JSON.parse(line) as Json;
     } catch {
-      return this.log('warn', `codex app-server sent something unreadable: ${line.slice(0, 120)}`);
+      return this.log('warn', `${this.peer.name} sent something unreadable: ${line.slice(0, 120)}`);
     }
     const id = msg['id'];
     const method = typeof msg['method'] === 'string' ? msg['method'] : null;
@@ -122,10 +128,8 @@ export class AppServerClient {
     if (id !== undefined && id !== null) {
       void this.handlers
         .request(method, params)
-        .then((result) => this.transport.write(JSON.stringify({ id, result })))
-        .catch((err: Error) =>
-          this.transport.write(JSON.stringify({ id, error: { code: -32601, message: err.message } })),
-        );
+        .then((result) => this.write({ id, result }))
+        .catch((err: Error) => this.write({ id, error: { code: -32601, message: err.message } }));
       return;
     }
     this.handlers.notification(method, params);
@@ -140,11 +144,19 @@ export const codexCommand = () => process.env['CODEX_PATH'] || 'codex';
  * a shell can run; the arguments are fixed, so nothing from outside reaches that shell.
  */
 export function spawnAppServer(): Transport {
-  const child = spawn(codexCommand(), ['app-server'], {
+  return spawnLines(codexCommand(), ['app-server'], process.platform === 'win32');
+}
+
+/**
+ * A child process spoken to in lines on stdin/stdout (fixed arguments only). `shell` only for
+ * npm's .cmd shims on Windows.
+ */
+export function spawnLines(command: string, args: string[], shell: boolean): Transport {
+  const child = spawn(command, args, {
     stdio: ['pipe', 'pipe', 'pipe'],
-    shell: process.platform === 'win32',
+    shell,
     windowsHide: true,
-    // Lets Pocket Agent's own Claude hook relay ignore anything Codex starts.
+    // Lets Pocket Agent's own Claude hook relay ignore anything the agent starts.
     env: { ...process.env, POCKET_AGENT_MANAGED_SESSION: '1' },
   });
   const lineListeners: Array<(line: string) => void> = [];

@@ -361,9 +361,11 @@ export function Composer({
   const canInterrupt = showStop && session.capabilities.interrupt;
   // Codex keeps its approval settings for now (no Mode), and has its own models.
   const isCodex = session.provider === 'codex';
-  const codexModes = isCodex && !versionBelow(device?.agentVersion ?? '0', CODEX_MODES_AGENT_VERSION);
+  const isOther = session.provider !== 'claude-code';
+  // Codex takes a mode on PCs from 2.7.0; Antigravity always.
+  const modesOk = !isCodex || !versionBelow(device?.agentVersion ?? '0', CODEX_MODES_AGENT_VERSION);
   const models =
-    (isCodex ? device?.agents.find((a) => a.provider === 'codex')?.models : device?.models) ?? [];
+    (isOther ? device?.agents.find((a) => a.provider === session.provider)?.models : device?.models) ?? [];
   const [model, setModel] = useChosenModel(session.id, models);
   const [mode, setMode] = useStoredChoice(`pocket-agent:mode:${session.id}`);
   const [effort, setEffort] = useStoredChoice(`pocket-agent:effort:${session.id}`);
@@ -371,7 +373,7 @@ export function Composer({
 
   // A session Pocket Agent runs switches mode or model at once, mid-task too (the chat shows
   // "You switched to …"); any other takes the choice with the next message sent from here.
-  const live = canConfigureLive(session, device) && !isCodex;
+  const live = canConfigureLive(session, device) && !isOther;
   async function applyNow(change: { permissionMode: string } | { model: string }) {
     if (!live) return;
     setError(null);
@@ -457,7 +459,7 @@ export function Composer({
     try {
       const choices = {
         ...(model && !modelLocked ? { model } : {}),
-        ...(mode && !modelLocked && (!isCodex || codexModes) ? { permissionMode: mode } : {}),
+        ...(mode && !modelLocked && modesOk ? { permissionMode: mode } : {}),
         ...(effort && !modelLocked ? { effort } : {}),
       };
       const { command } = resuming
@@ -632,7 +634,7 @@ export function Composer({
             )}
             {!locked && (
               <>
-                {(!isCodex || codexModes) && (
+                {modesOk && (
                   <ModePicker
                     value={mode}
                     onChange={chooseMode}

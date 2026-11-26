@@ -287,9 +287,11 @@ export function NewChatScreen({ deviceId, path, name }: { deviceId: string; path
               </T>
               <T variant="small" tone="muted" center style={{ marginTop: 4 }}>
                 {agentProduct(agent)} starts on {device?.name ?? 'your PC'} when you send your first message.{' '}
-                {isCodex
-                  ? 'It works in its sandbox: it can change files in this folder; anything more is declined for now.'
-                  : 'Anything that needs permission asks you here.'}
+                {!isCodex
+                  ? 'Anything that needs permission asks you here.'
+                  : device?.remoteApprovalEnabled
+                    ? 'It works in its sandbox: it changes files in this folder and asks you here for anything more.'
+                    : 'It works in its sandbox: it changes files in this folder. Anything more is declined, because remote approval is off on this PC.'}
               </T>
             </Animated.View>
           )}

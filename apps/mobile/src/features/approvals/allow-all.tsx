@@ -1,4 +1,4 @@
-import { toolTarget } from '@pocket-agent/core';
+import { requestTarget } from '@pocket-agent/core';
 import type { ApprovalDto } from '@pocket-agent/protocol';
 import { CheckCheck } from 'lucide-react-native';
 import { useState } from 'react';
@@ -76,7 +76,7 @@ export function AllowAllButton({ requests, onDone }: { requests: ApprovalDto[]; 
                 {describeRequest(a.toolName).label} · {a.projectName}
               </T>
               <T numberOfLines={3} style={{ fontFamily: fonts.mono, fontSize: 12.5, lineHeight: 18 }}>
-                {toolTarget(a.input) || readableInput(a.input)}
+                {requestTarget(a.toolName, a.input) || readableInput(a.input)}
               </T>
             </View>
           ))}

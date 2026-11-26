@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { ApprovalStatus } from './enums.js';
+import { ApprovalStatus, ProviderId } from './enums.js';
 
 const iso = z.iso.datetime({ offset: true });
 
@@ -10,6 +10,8 @@ export const ApprovalDto = z.object({
   deviceName: z.string(),
   projectName: z.string(),
   sessionMode: z.enum(['managed', 'observed']),
+  /** The coding agent asking (its name heads the request: "Codex wants to…"). */
+  provider: ProviderId.default('claude-code'),
   requestId: z.string(),
   toolName: z.string(),
   /** Allow-listed summary of the tool input, as sent by the PC (JSON text). */

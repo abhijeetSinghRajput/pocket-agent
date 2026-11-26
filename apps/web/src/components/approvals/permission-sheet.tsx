@@ -7,12 +7,12 @@ import { describeRequest, readableInput, useCountdown } from '@/components/appro
 import { Button } from '@/components/ui/button';
 import { shellTokens } from '@/components/ui/command-line';
 import { apiRequest } from '@/lib/api';
-import { toolTarget } from '@/lib/chat';
+import { agentName, requestTarget } from '@/lib/chat';
 import { mmss } from '@/lib/format';
 
 /**
  * A permission request, docked at the bottom of the chat in place of the message box (like
- * Claude's questions): what Claude wants to do, exactly what will run, then Deny or Allow.
+ * Claude's questions): what the agent wants to do, exactly what will run, then Deny or Allow.
  */
 export function PermissionSheet({
   approval,
@@ -29,7 +29,7 @@ export function PermissionSheet({
   const [busy, setBusy] = useState<'allow' | 'deny' | null>(null);
   const [error, setError] = useState<string | null>(null);
   const what = describeRequest(approval.toolName);
-  const shown = toolTarget(approval.input) || readableInput(approval.input);
+  const shown = requestTarget(approval.toolName, approval.input) || readableInput(approval.input);
 
   async function decide(decision: 'allow' | 'deny') {
     setBusy(decision);
@@ -69,7 +69,9 @@ export function PermissionSheet({
             )}
           </span>
         </div>
-        <p className="mt-1.5 text-lg leading-snug font-semibold text-pretty">Claude wants to {what.verb}</p>
+        <p className="mt-1.5 text-lg leading-snug font-semibold text-pretty">
+          {agentName(approval.provider)} wants to {what.verb}
+        </p>
         <p className="mt-0.5 text-sm text-muted-foreground">
           {what.label} · {approval.toolName}
         </p>

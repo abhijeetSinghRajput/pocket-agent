@@ -91,6 +91,7 @@ describe('remote approvals', () => {
       projectName: 'checkout',
       deviceName: 'Test PC',
       sessionMode: 'managed',
+      provider: 'claude-code',
       decision: null,
     });
     await tab.next((m) => m['eventType'] === 'approval.created');

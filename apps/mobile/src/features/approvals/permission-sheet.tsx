@@ -1,4 +1,4 @@
-import { toolTarget } from '@pocket-agent/core';
+import { agentName, requestTarget } from '@pocket-agent/core';
 import type { ApprovalDto } from '@pocket-agent/protocol';
 import { useWindowDimensions, View } from 'react-native';
 import Animated from 'react-native-reanimated';
@@ -19,7 +19,7 @@ import {
 
 /**
  * A permission request, docked at the bottom of the chat in place of the message box (like
- * Claude's questions): what Claude wants to do, exactly what will run, then Deny or Allow.
+ * Claude's questions): what the agent wants to do, exactly what will run, then Deny or Allow.
  */
 export function PermissionSheet({
   approval,
@@ -37,7 +37,7 @@ export function PermissionSheet({
   const expired = left <= 0;
   const decision = useDecision(approval, onDone);
   const what = describeRequest(approval.toolName);
-  const shown = toolTarget(approval.input) || readableInput(approval.input);
+  const shown = requestTarget(approval.toolName, approval.input) || readableInput(approval.input);
   const purpose = requestPurpose(approval.input);
 
   return (
@@ -57,7 +57,7 @@ export function PermissionSheet({
           <CountdownInline left={left} accent="warning" />
         </View>
         <T variant="heading" style={{ marginTop: 6 }}>
-          Claude wants to {what.verb}
+          {agentName(approval.provider)} wants to {what.verb}
         </T>
         <T variant="small" tone="muted">
           {what.label} · {approval.toolName}

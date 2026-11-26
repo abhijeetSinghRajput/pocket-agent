@@ -1,4 +1,5 @@
 import {
+  APPROVAL_WAIT_MS,
   isPreviewable,
   type SessionCapabilities,
   type TurnEffort,
@@ -10,7 +11,9 @@ import { filesNote, type LocalFile } from '../../attachments.js';
 import { truncate, type SessionRegistry } from '../../sessions/registry.js';
 import { summarizeToolInput, summarizeToolOutput } from '../claude-code/summarize.js';
 import type { CommandAck } from '../claude-code/instructions.js';
+import type { ManagedApprovalOptions } from '../claude-code/managed.js';
 import type { ManagedRuntime } from '../types.js';
+import { codexAnswer, isCodexApproval, readCodexRequest } from './approvals.js';
 import { AppServerClient, type Transport } from './rpc.js';
 
 /**
@@ -19,11 +22,12 @@ import { AppServerClient, type Transport } from './rpc.js';
  * Messages wait in the chat's queue and run one turn at a time, like Claude Code's.
  *
  * Codex works in its sandbox (it may edit files in the project; anything more needs approval).
- * Approving from the phone comes next: until then such a request is declined, and the chat says
- * so. Nothing ever runs with less protection than Codex's own default.
+ * Such a request goes to the phone when the PC owner turned remote approval on (like Claude
+ * Code's); otherwise, or when nobody decides in time, it is declined and the chat says so.
+ * Nothing ever runs with less protection than Codex's own default.
  */
 
-/** What a Codex chat can do from the phone (approvals from the phone: not yet). */
+/** What a Codex chat can do from the phone (remote approval: when the PC owner turned it on). */
 export const CODEX_CAPABILITIES: SessionCapabilities = {
   monitor: true,
   remoteApproval: false,
@@ -67,6 +71,10 @@ interface Thread {
   /** Model and effort for the next turns (the last ones chosen). */
   model?: string;
   effort?: TurnEffort;
+  /** Files of the running turn's file changes, by item (a file change request names only its item). */
+  files: Map<string, string[]>;
+  /** Approval requests waiting for the phone. */
+  waiting: Set<string>;
 }
 
 export class CodexSessions implements ManagedRuntime {
@@ -80,7 +88,13 @@ export class CodexSessions implements ManagedRuntime {
     private readonly log: (level: 'info' | 'warn' | 'error', msg: string) => void = () => undefined,
     private readonly ack: CommandAck = () => undefined,
     private readonly now: () => number = Date.now,
+    private readonly approvals?: ManagedApprovalOptions,
   ) {}
+
+  /** Remote approval only when the PC owner turned it on. */
+  private capabilities(): SessionCapabilities {
+    return { ...CODEX_CAPABILITIES, remoteApproval: this.approvals?.enabled() ?? false };
+  }
 
   isManaged = (id: string) => this.threads.has(id);
 
@@ -116,6 +130,8 @@ export class CodexSessions implements ManagedRuntime {
       starting: false,
       interrupted: false,
       closed: false,
+      files: new Map(),
+      waiting: new Set(),
       ...(input.model ? { model: input.model } : {}),
       ...(input.effort ? { effort: input.effort } : {}),
     };
@@ -127,7 +143,7 @@ export class CodexSessions implements ManagedRuntime {
         mode: 'managed',
         projectPath,
         status: 'Starting',
-        capabilities: CODEX_CAPABILITIES,
+        capabilities: this.capabilities(),
         metadata: {
           entrypoint: 'pocket-agent',
           ...((input.model ?? started.model) ? { model: (input.model ?? started.model)! } : {}),
@@ -179,6 +195,7 @@ export class CodexSessions implements ManagedRuntime {
     if (!t || t.closed) return false;
     if (!t.turnId) return true; // idle: nothing to stop
     t.interrupted = true;
+    this.cancelWaiting(t);
     const client = await this.client;
     await client?.request('turn/interrupt', { threadId: id, turnId: t.turnId }).catch((err: Error) => {
       this.log('warn', `codex interrupt ${id}: ${err.message}`);
@@ -281,7 +298,14 @@ export class CodexSessions implements ManagedRuntime {
     }
   }
 
+  /** Stops waiting for the phone on this chat's requests (they are declined). */
+  private cancelWaiting(t: Thread): void {
+    for (const requestId of [...t.waiting]) this.approvals?.broker.cancel(requestId);
+  }
+
   private finishTurn(t: Thread, outcome: 'Completed' | 'Failed', error?: string): void {
+    this.cancelWaiting(t);
+    t.files.clear();
     if (t.current?.commandId) this.ack(t.current.commandId, outcome, error ? { error } : {});
     t.current = null;
     t.turnId = null;
@@ -291,6 +315,7 @@ export class CodexSessions implements ManagedRuntime {
   private close(t: Thread, reason: string): void {
     if (t.closed) return;
     t.closed = true;
+    this.cancelWaiting(t);
     if (t.current?.commandId) this.ack(t.current.commandId, 'Failed', { error: `session_${reason}` });
     for (const item of t.inbox)
       if (item.commandId) this.ack(item.commandId, 'Failed', { error: `session_${reason}` });
@@ -306,8 +331,14 @@ export class CodexSessions implements ManagedRuntime {
       case 'turn/started':
         t.turnId = String((params['turn'] as Json | undefined)?.['id'] ?? t.turnId ?? '');
         return;
-      case 'item/started':
-        return reportItem(this.registry, t.id, params['item'] as Json, 'started');
+      case 'item/started': {
+        const item = params['item'] as Json | undefined;
+        if (item?.['type'] === 'fileChange' && Array.isArray(item['changes'])) {
+          const paths = (item['changes'] as Json[]).map((c) => String(c['path'] ?? '')).filter(Boolean);
+          t.files.set(String(item['id'] ?? ''), paths);
+        }
+        return reportItem(this.registry, t.id, item, 'started');
+      }
       case 'item/completed':
         return reportItem(this.registry, t.id, params['item'] as Json, 'completed');
       case 'error': {
@@ -342,27 +373,60 @@ export class CodexSessions implements ManagedRuntime {
   }
 
   /**
-   * Requests from Codex. Asking to go beyond its sandbox is declined for now (approving from the
-   * phone comes next) and the chat says so; nothing else is answered.
+   * Requests from Codex. Going beyond its sandbox goes to the phone when the PC owner turned remote
+   * approval on, and is declined otherwise (or when nobody decides in time); the chat says so.
+   * Anything else Codex asks is not supported (answered with an error).
    */
   private async onRequest(method: string, params: Json): Promise<unknown> {
-    const id = String(params['threadId'] ?? '');
-    const what =
-      method === 'item/commandExecution/requestApproval'
-        ? `run \`${truncate(String(params['command'] ?? 'a command'), 300)}\``
-        : method === 'item/fileChange/requestApproval'
-          ? 'change files outside the project'
-          : method === 'item/permissions/requestApproval'
-            ? 'get more permissions'
-            : null;
-    if (what && this.threads.has(id)) {
-      this.registry.event(id, 'agent.output', {
-        role: 'system',
-        text: `Codex asked to ${what}, beyond what its sandbox allows. It was declined: approving Codex from the phone isn't available yet.`,
-      });
-      return { decision: 'decline' };
+    const t = this.threads.get(String(params['threadId'] ?? ''));
+    if (!isCodexApproval(method) || !t || t.closed) {
+      throw new Error(`${method} is not supported by Pocket Agent`);
     }
-    throw new Error(`${method} is not supported by Pocket Agent`);
+    const req = readCodexRequest(method, params, t.files.get(String(params['itemId'] ?? '')));
+    const remote = !!this.approvals?.enabled();
+    const waitMs = this.approvals?.waitMs ?? APPROVAL_WAIT_MS.managed;
+    this.registry.event(t.id, 'agent.permission.requested', {
+      toolUseId: req.itemId || req.requestId,
+      toolName: req.toolName,
+      input: req.input,
+      requestId: req.requestId,
+      ...(remote
+        ? {
+            awaitingRemote: true,
+            expiresAt: new Date(this.now() + waitMs).toISOString(),
+            remember: req.remember,
+          }
+        : {}),
+    });
+    if (!remote) {
+      this.registry.event(t.id, 'agent.permission.resolved', {
+        requestId: req.requestId,
+        outcome: 'auto_denied',
+      });
+      this.registry.event(t.id, 'agent.output', {
+        role: 'system',
+        text: `Codex asked to ${req.what}, beyond what its sandbox allows. It was declined: remote approval is turned off on this PC.`,
+      });
+      return codexAnswer(method, params, null);
+    }
+    this.registry.setStatus(t.id, 'WaitingForPermission');
+    t.waiting.add(req.requestId);
+    const decision = await this.approvals!.broker.wait(req.requestId, waitMs);
+    t.waiting.delete(req.requestId);
+    if (!decision) {
+      const outcome = t.interrupted || t.closed ? 'cancelled' : 'timeout';
+      this.registry.event(t.id, 'agent.permission.resolved', { requestId: req.requestId, outcome });
+      if (outcome === 'timeout') {
+        this.registry.event(t.id, 'agent.output', {
+          role: 'system',
+          text: `Codex asked to ${req.what}. Nobody decided in time, so it was declined.`,
+        });
+      }
+    } else {
+      this.registry.event(t.id, 'agent.permission.resolved', { requestId: req.requestId, outcome: 'remote' });
+    }
+    if (!t.closed && t.turnId && !t.waiting.size) this.registry.setStatus(t.id, 'Running');
+    return codexAnswer(method, params, decision);
   }
 }
 

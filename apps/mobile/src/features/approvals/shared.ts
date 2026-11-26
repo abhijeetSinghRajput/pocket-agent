@@ -27,6 +27,8 @@ export function describeRequest(tool: string): { verb: string; label: string; sh
       return { verb: 'edit a file', label: 'File', shell: false };
     case 'WebFetch':
       return { verb: 'open a web page', label: 'URL', shell: false };
+    case 'Sandbox':
+      return { verb: 'go beyond its sandbox', label: 'Access', shell: false };
     case 'AskUserQuestion':
       return { verb: 'ask you a question', label: 'Question', shell: false };
     default:

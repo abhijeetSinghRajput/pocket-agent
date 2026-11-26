@@ -7,11 +7,11 @@ import type { Services } from '../commands/service.js';
 
 type Db = Prisma.TransactionClient | Services['prisma'];
 export type ApprovalRow = Approval & {
-  session: Pick<AgentSession, 'projectName' | 'mode'>;
+  session: Pick<AgentSession, 'projectName' | 'mode' | 'provider'>;
   device: Pick<Device, 'name'>;
 };
 export const approvalInclude = {
-  session: { select: { projectName: true, mode: true } },
+  session: { select: { projectName: true, mode: true, provider: true } },
   device: { select: { name: true } },
 } as const;
 
@@ -24,6 +24,7 @@ export function toApprovalDto(a: ApprovalRow): ApprovalDto {
     deviceName: a.device.name,
     projectName: a.session.projectName,
     sessionMode: a.session.mode,
+    provider: a.session.provider === 'codex' ? 'codex' : 'claude-code',
     requestId: a.requestId,
     toolName: a.toolName,
     input: typeof payload.input === 'string' ? payload.input : '{}',

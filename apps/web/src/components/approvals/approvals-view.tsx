@@ -3,7 +3,7 @@
 import { Laptop, Lock, ShieldCheck } from 'lucide-react';
 import Link from 'next/link';
 import { APPROVAL_STATUS, ApprovalCard } from '@/components/approvals/approval-card';
-import { toolTarget } from '@/lib/chat';
+import { requestTarget } from '@/lib/chat';
 import { PageHeader } from '@/components/page';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -98,7 +98,9 @@ export function ApprovalsView() {
                   data-status={a.status}
                 >
                   <div className="min-w-0">
-                    <p className="truncate font-mono text-[13px]">{toolTarget(a.input) || a.toolName}</p>
+                    <p className="truncate font-mono text-[13px]">
+                      {requestTarget(a.toolName, a.input) || a.toolName}
+                    </p>
                     <p className="text-xs text-muted-foreground">
                       {a.toolName} · {a.projectName} · {timeAgo(a.createdAt)}
                     </p>

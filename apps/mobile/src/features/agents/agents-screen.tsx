@@ -1,4 +1,4 @@
-import { timeAgo, toolTarget } from '@pocket-agent/core';
+import { requestTarget, timeAgo } from '@pocket-agent/core';
 import type { ApprovalDto } from '@pocket-agent/protocol';
 import { Bot, ChevronDown, Plus } from 'lucide-react-native';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -53,7 +53,7 @@ function RecentRow({ approval: a }: { approval: ApprovalDto }) {
     >
       <View style={{ flex: 1, minWidth: 0 }}>
         <T variant="mono" numberOfLines={1} style={{ fontSize: 13 }}>
-          {toolTarget(a.input) || a.toolName}
+          {requestTarget(a.toolName, a.input) || a.toolName}
         </T>
         <T variant="caption" tone="muted" numberOfLines={1}>
           {a.projectName} · {timeAgo(a.createdAt)}

@@ -2,6 +2,7 @@ import { mkdtempSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { ApprovalBroker } from '../src/approvals.js';
 import { codexVersion, detectCodex } from '../src/providers/codex/detect.js';
 import type { Transport } from '../src/providers/codex/rpc.js';
 import { CodexSessions, codexInput } from '../src/providers/codex/sessions.js';
@@ -55,12 +56,13 @@ function fakeAppServer(opts: { signedIn?: boolean } = {}) {
   return { transport, emit, sent, requests, answers, crash: () => closeListener('exited (1)') };
 }
 
-function harness() {
+function harness(opts: { remote?: boolean; waitMs?: number } = {}) {
   const project = mkdtempSync(path.join(os.tmpdir(), 'pocket-agent-codex-'));
   const events: Json[] = [];
   const registry = new SessionRegistry((e) => events.push(e as unknown as Json));
   const acks: Array<{ id: string; status: string; extra?: Json }> = [];
   const server = fakeAppServer();
+  const broker = new ApprovalBroker();
   const codex = new CodexSessions(
     registry,
     () => server.transport,
@@ -68,11 +70,15 @@ function harness() {
     () => undefined,
     ((id: string, status: string, extra?: Json) =>
       acks.push({ id, status, ...(extra ? { extra } : {}) })) as never,
+    Date.now,
+    opts.remote === undefined
+      ? undefined
+      : { broker, enabled: () => opts.remote!, waitMs: opts.waitMs ?? 5000 },
   );
   const tick = () => new Promise((r) => setTimeout(r, 10));
   const of = (type: string) => events.filter((e) => e['eventType'] === type).map((e) => e['payload'] as Json);
   const statuses = (id: string) => acks.filter((a) => a.id === id).map((a) => a.status);
-  return { project, registry, server, codex, tick, of, acks, statuses };
+  return { project, registry, server, codex, tick, of, acks, statuses, broker };
 }
 
 describe('Codex chats', () => {
@@ -255,6 +261,135 @@ describe('Codex chats', () => {
     expect(input[0]).toEqual({ type: 'localImage', path: 'C:\\files\\a.png' });
     expect(String(input[1]!['text'])).toContain('C:\\files\\b.pdf');
     expect(String(input[1]!['text'])).not.toContain('a.png');
+  });
+});
+
+describe('Codex approvals from the phone', () => {
+  async function running(opts: { remote?: boolean; waitMs?: number }) {
+    const h = harness(opts);
+    await h.codex.start({ projectPath: h.project, prompt: 'go', commandId: 'c1' });
+    await h.tick();
+    h.server.emit({ method: 'turn/started', params: { threadId: 'th-1', turn: { id: 'tu-1' } } });
+    const ask = (id: number, method: string, params: Json) =>
+      h.server.emit({ id, method, params: { threadId: 'th-1', turnId: 'tu-1', ...params } });
+    return { ...h, ask };
+  }
+
+  it('a chat offers remote approval only when the PC owner turned it on', async () => {
+    expect((await running({ remote: true })).registry.get('th-1')?.capabilities.remoteApproval).toBe(true);
+    expect((await running({ remote: false })).registry.get('th-1')?.capabilities.remoteApproval).toBe(false);
+  });
+
+  it('a command beyond the sandbox waits for the phone; Allow for this chat answers acceptForSession', async () => {
+    const h = await running({ remote: true });
+    h.ask(7, 'item/commandExecution/requestApproval', {
+      itemId: 'i5',
+      command: 'npm install',
+      reason: 'Needs the network',
+      networkApprovalContext: { host: 'registry.npmjs.org', protocol: 'https' },
+    });
+    await h.tick();
+    const [req] = h.of('agent.permission.requested');
+    expect(req).toMatchObject({
+      requestId: 'th-1:i5',
+      toolUseId: 'i5',
+      toolName: 'Bash',
+      awaitingRemote: true,
+      remember: 'This command, for the rest of this chat',
+    });
+    expect(JSON.parse(String(req!['input']))).toEqual({
+      command: 'npm install',
+      description: 'Needs the network · Network access to registry.npmjs.org',
+    });
+    expect(h.registry.get('th-1')?.status).toBe('WaitingForPermission');
+    expect(h.server.answers).toHaveLength(0); // nothing answered before the phone decides
+
+    expect(h.broker.decide('th-1:i5', { behavior: 'allow', remember: true })).toBe(true);
+    await h.tick();
+    expect(h.server.answers).toContainEqual({ id: 7, result: { decision: 'acceptForSession' } });
+    expect(h.of('agent.permission.resolved')).toEqual([{ requestId: 'th-1:i5', outcome: 'remote' }]);
+    expect(h.registry.get('th-1')?.status).toBe('Running');
+  });
+
+  it('a file change names its files; Deny declines it', async () => {
+    const h = await running({ remote: true });
+    h.server.emit({
+      method: 'item/started',
+      params: {
+        threadId: 'th-1',
+        item: {
+          type: 'fileChange',
+          id: 'i6',
+          status: 'inProgress',
+          changes: [
+            { path: 'C:/other/a.txt', kind: { type: 'update' }, diff: 'SECRET' },
+            { path: 'C:/other/b.txt', kind: { type: 'add' }, diff: 'SECRET' },
+          ],
+        },
+      },
+    });
+    h.ask(8, 'item/fileChange/requestApproval', { itemId: 'i6', reason: 'Outside the project' });
+    await h.tick();
+    const req = h.of('agent.permission.requested')[0]!;
+    expect(req['toolName']).toBe('Edit');
+    expect(JSON.parse(String(req['input']))).toEqual({
+      file_path: 'C:/other/a.txt',
+      description: 'Outside the project · And 1 more file',
+    });
+    expect(JSON.stringify(h.of('agent.permission.requested'))).not.toContain('SECRET');
+    h.broker.decide('th-1:i6', { behavior: 'deny', message: 'no' });
+    await h.tick();
+    expect(h.server.answers).toContainEqual({ id: 8, result: { decision: 'decline' } });
+  });
+
+  it('more permissions: Allow grants exactly what was asked (this turn), Deny grants nothing', async () => {
+    const h = await running({ remote: true });
+    const permissions = { network: { enabled: true }, fileSystem: { read: null, write: ['C:/data'] } };
+    h.ask(9, 'item/permissions/requestApproval', { itemId: 'i7', reason: 'Fetch and save', permissions });
+    h.ask(10, 'item/permissions/requestApproval', { itemId: 'i8', reason: null, permissions });
+    await h.tick();
+    expect(h.of('agent.permission.requested')[0]!['toolName']).toBe('Sandbox');
+    expect(JSON.parse(String(h.of('agent.permission.requested')[0]!['input']))).toEqual({
+      description: 'Fetch and save',
+      network: 'Internet access',
+      write: ['C:/data'],
+    });
+    h.broker.decide('th-1:i7', { behavior: 'allow' });
+    h.broker.decide('th-1:i8', { behavior: 'deny', message: 'no' });
+    await h.tick();
+    expect(h.server.answers).toContainEqual({ id: 9, result: { permissions, scope: 'turn' } });
+    expect(h.server.answers).toContainEqual({ id: 10, result: { permissions: {}, scope: 'turn' } });
+  });
+
+  it('nobody decides in time: declined, with a word in the chat', async () => {
+    const h = await running({ remote: true, waitMs: 20 });
+    h.ask(11, 'item/commandExecution/requestApproval', { itemId: 'i9', command: 'rm -rf build' });
+    await new Promise((r) => setTimeout(r, 60));
+    expect(h.server.answers).toContainEqual({ id: 11, result: { decision: 'decline' } });
+    expect(h.of('agent.permission.resolved')).toEqual([{ requestId: 'th-1:i9', outcome: 'timeout' }]);
+    expect(JSON.stringify(h.of('agent.output'))).toContain('Nobody decided in time');
+    // Too late: the phone's decision is not applied.
+    expect(h.broker.decide('th-1:i9', { behavior: 'allow' })).toBe(false);
+  });
+
+  it('stopping the turn while it waits declines the request (cancelled)', async () => {
+    const h = await running({ remote: true });
+    h.ask(12, 'item/commandExecution/requestApproval', { itemId: 'i10', command: 'deploy' });
+    await h.tick();
+    await h.codex.interrupt('th-1');
+    await h.tick();
+    expect(h.server.answers).toContainEqual({ id: 12, result: { decision: 'decline' } });
+    expect(h.of('agent.permission.resolved')).toEqual([{ requestId: 'th-1:i10', outcome: 'cancelled' }]);
+  });
+
+  it('remote approval off: declined at once, never sent to the phone', async () => {
+    const h = await running({ remote: false });
+    h.ask(13, 'item/commandExecution/requestApproval', { itemId: 'i11', command: 'curl x' });
+    await h.tick();
+    expect(h.of('agent.permission.requested')[0]!['awaitingRemote']).toBeUndefined();
+    expect(h.of('agent.permission.resolved')).toEqual([{ requestId: 'th-1:i11', outcome: 'auto_denied' }]);
+    expect(h.server.answers).toContainEqual({ id: 13, result: { decision: 'decline' } });
+    expect(JSON.stringify(h.of('agent.output'))).toContain('remote approval is turned off');
   });
 });
 

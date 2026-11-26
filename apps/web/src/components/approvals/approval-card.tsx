@@ -4,7 +4,7 @@ import { ApprovalResponse, type ApprovalDto } from '@pocket-agent/protocol';
 import { Check, Clock, MessageCircleQuestion, Send, ShieldAlert, X } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { parseQuestions, toolTarget, type AskedQuestion } from '@/lib/chat';
+import { agentName, parseQuestions, requestTarget, type AskedQuestion } from '@/lib/chat';
 import { Button } from '@/components/ui/button';
 import { shellTokens } from '@/components/ui/command-line';
 import { apiRequest } from '@/lib/api';
@@ -36,6 +36,8 @@ export function describeRequest(tool: string): { verb: string; label: string; sh
       return { verb: 'edit a file', label: 'File', shell: false };
     case 'WebFetch':
       return { verb: 'open a web page', label: 'URL', shell: false };
+    case 'Sandbox':
+      return { verb: 'go beyond its sandbox', label: 'Access', shell: false };
     case 'AskUserQuestion':
       return { verb: 'ask you a question', label: 'Question', shell: false };
     default:
@@ -195,7 +197,7 @@ export function ApprovalCard({ approval, onDecided }: { approval: ApprovalDto; o
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState<'allow' | 'deny' | null>(approval.decision);
   const [picks, setPicks] = useState<Record<string, Pick>>({});
-  const target = toolTarget(approval.input);
+  const target = requestTarget(approval.toolName, approval.input);
   const expired = left <= 0;
 
   async function decide(decision: 'allow' | 'deny', extra: Record<string, unknown> = {}) {
@@ -249,7 +251,9 @@ export function ApprovalCard({ approval, onDecided }: { approval: ApprovalDto; o
         </span>
         <div className="min-w-0 flex-1">
           <h3 className="text-[15px] leading-snug font-semibold">
-            {answering ? 'Claude is asking you' : `Claude wants to ${what.verb}`}
+            {answering
+              ? `${agentName(approval.provider)} is asking you`
+              : `${agentName(approval.provider)} wants to ${what.verb}`}
           </h3>
           <p className="mt-0.5 truncate text-xs text-muted-foreground">
             <Link

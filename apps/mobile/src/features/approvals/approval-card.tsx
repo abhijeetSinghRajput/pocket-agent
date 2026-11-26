@@ -1,4 +1,4 @@
-import { parseQuestions, timeAgo, toolTarget, type AskedQuestion } from '@pocket-agent/core';
+import { agentName, parseQuestions, requestTarget, timeAgo, type AskedQuestion } from '@pocket-agent/core';
 import type { ApprovalDto } from '@pocket-agent/protocol';
 import { useRouter } from 'expo-router';
 import { MessageCircleQuestion, ShieldAlert } from 'lucide-react-native';
@@ -232,7 +232,7 @@ export function ApprovalCard({
   const decision = useDecision(approval, onDecided);
   const { busy, sent, error, decide } = decision;
   const [picks, setPicks] = useState<Record<string, Pick>>({});
-  const target = toolTarget(approval.input);
+  const target = requestTarget(approval.toolName, approval.input);
   const expired = left <= 0;
 
   const what = describeRequest(approval.toolName);
@@ -298,7 +298,9 @@ export function ApprovalCard({
               accessibilityRole={inSheet ? 'header' : undefined}
               style={inSheet ? undefined : { fontSize: 15, lineHeight: 20 }}
             >
-              {answering ? 'Claude is asking you' : `Claude wants to ${what.verb}`}
+              {answering
+                ? `${agentName(approval.provider)} is asking you`
+                : `${agentName(approval.provider)} wants to ${what.verb}`}
             </T>
             <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2, minWidth: 0 }}>
               <Pressable

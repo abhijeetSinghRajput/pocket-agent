@@ -45,6 +45,26 @@ export function toolTarget(input: unknown): string {
   }
 }
 
+/**
+ * What a permission request is about, as shown with Allow/Deny: the command or file, or for
+ * Codex's sandbox requests ("Sandbox") the access asked for, one per line.
+ */
+export function requestTarget(toolName: string, input: unknown): string {
+  if (toolName !== 'Sandbox') return toolTarget(input);
+  try {
+    const i = JSON.parse(str(input)) as P;
+    const list = (v: unknown) =>
+      Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [];
+    return [
+      ...(str(i['network']) ? [str(i['network'])] : []),
+      ...list(i['write']).map((p) => `Write: ${p}`),
+      ...list(i['read']).map((p) => `Read: ${p}`),
+    ].join('\n');
+  } catch {
+    return '';
+  }
+}
+
 export const PERMISSION_OUTCOME: Record<string, string> = {
   local: 'Answered on the PC',
   remote: 'Answered in Pocket Agent',

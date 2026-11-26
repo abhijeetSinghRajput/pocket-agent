@@ -105,7 +105,7 @@ export type DeviceDto = z.infer<typeof DeviceDto>;
  * The newest Local Agent released. The app's health check compares each PC with it (bumped with
  * every agent release).
  */
-export const LATEST_AGENT_VERSION = '2.5.0';
+export const LATEST_AGENT_VERSION = '2.6.0';
 /** Where the agent's releases are downloaded (the newest is "latest"). */
 export const AGENT_RELEASES_URL = 'https://github.com/abhijeetSinghRajput/pocket-agent/releases/latest';
 

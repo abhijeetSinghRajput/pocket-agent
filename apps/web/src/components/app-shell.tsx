@@ -10,6 +10,7 @@ import { useRef, type ReactNode } from 'react';
 import { ApprovalPrompt } from '@/components/approvals/approval-prompt';
 import { PROFILE_ROUTES, ProfileLink, ProfileRow } from '@/components/user-avatar';
 import { ThemeToggle, useMounted, useSmoothTheme } from '@/components/theme';
+import { SoundToggle } from '@/components/ui/sound';
 import { followStyle, useFollow } from '@/components/ui/segmented';
 import { useLiveState } from '@/lib/live';
 import { useApprovals } from '@/lib/use-approvals';
@@ -107,7 +108,7 @@ function PendingDot() {
 export function Logo() {
   return (
     <Link
-      href="/"
+      href="/chat"
       className="flex items-center gap-2.5 rounded-md outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
     >
       <Image src="/icons/logo-64.png" alt="" width={28} height={28} priority className="size-7" />
@@ -189,6 +190,7 @@ function MobileTopBar() {
       <Logo />
       <div className="flex items-center">
         <LiveDot />
+        <SoundToggle className="size-9 rounded-lg" />
         <ThemeToggle />
       </div>
     </header>

@@ -1,0 +1,1741 @@
+/* The homepage's demos. Every rule is scoped under its demo's class; the kit's own CSS is in
+   @layer stageshow, so these plain rules win without !important. */
+
+/* ── Hero: Claude Code on the PC, Pocket Agent on the phone ─────────────────────────────────── */
+
+/* The page is the ground: no plate. The section's bottom rule is where the window is cut. */
+.pa-hero .ss-stage {
+  --gutter: 40px;
+  overflow: hidden;
+  background: transparent;
+}
+
+.pa-hero .pa-term {
+  position: absolute;
+  top: var(--gutter);
+  left: var(--gutter);
+  width: 520px;
+  height: 560px;
+  box-shadow: var(--ss-shadow-hero);
+  --ss-term-ok: #6ee7a8;
+}
+
+.pa-hero .pa-term .ss-term {
+  gap: 4px;
+  height: 100%;
+  /* The input sits at the foot of what shows, a gutter above the stage's edge; new output
+     fills the room above it */
+  padding: 10px 22px 120px;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.pa-hero .pa-term-welcome {
+  margin-bottom: 10px;
+  padding: 10px 14px;
+  border: 1px solid color-mix(in srgb, var(--ss-accent) 55%, transparent);
+  border-radius: 8px;
+  width: max-content;
+  min-width: 340px;
+}
+
+.pa-hero .pa-term-mark,
+.pa-hero .pa-term-dot {
+  color: var(--ss-accent);
+}
+
+.pa-hero .pa-term-dot--ok {
+  color: #6ee7a8;
+}
+
+.pa-hero .pa-term-strong {
+  color: #f1f1f3;
+  font-weight: 600;
+}
+
+.pa-hero .pa-term-past {
+  color: #6f6f78;
+}
+
+.pa-hero .pa-term-past .pa-term-dot {
+  opacity: 0.55;
+}
+
+.pa-hero .pa-term-from {
+  color: var(--ss-term-dim, #63636b);
+}
+
+.pa-hero .pa-term-user {
+  margin: 2px 0 6px;
+  padding: 4px 10px;
+  width: max-content;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #f1f1f3;
+}
+
+.pa-hero .pa-term-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.pa-hero .pa-term-wait {
+  color: #c9a46a;
+}
+
+/* The spinner and the tick share one cell, so the words beside them never move */
+.pa-hero .pa-term-mark-cell {
+  width: 12px;
+}
+
+.pa-hero .pa-spin {
+  display: inline-flex;
+  width: 12px;
+  height: 12px;
+  color: #c9a46a;
+}
+
+.pa-hero .pa-term-input {
+  margin-top: auto;
+  padding: 6px 12px;
+  border: 1px solid #3a3a42;
+  border-radius: 8px;
+}
+
+/* The phone straddles the window's right edge, a level above it. It sits a gutter off the
+   stage's foot and runs off the top, cropped inside the thread, so its composer shows */
+.pa-hero .pa-phone {
+  position: absolute;
+  bottom: var(--gutter);
+  right: var(--gutter);
+  box-shadow:
+    var(--ss-shadow-satellite),
+    0 30px 60px -24px rgba(30, 20, 10, 0.4);
+}
+
+.pa-hero .ss-stage[data-layout='compact'] {
+  --gutter: 24px;
+}
+
+/* Narrow: the phone alone, a gutter in from the foot and the right, off the top */
+.pa-hero .ss-stage[data-layout='compact'] .pa-phone {
+  right: 24px;
+}
+
+/* ── Pocket Agent's chat screen, in iOS points (the phone scales it) ─────────────────────────── */
+
+.pa-app {
+  height: 100%;
+  background: var(--ss-canvas);
+  color: var(--ss-text-strong);
+  font-family: var(--ss-font);
+}
+
+.pa-app-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 20px 14px 10px;
+  border-bottom: 1px solid var(--ss-line);
+  background: var(--ss-surface);
+}
+
+.pa-app-back {
+  flex: none;
+  color: var(--ss-accent);
+}
+
+.pa-app-tile {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: var(--ss-accent-soft);
+  color: var(--ss-accent);
+}
+
+.pa-app-title {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.pa-app-name {
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+}
+
+.pa-app-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--ss-text);
+  font-size: 15px;
+  line-height: 1.3;
+  transition: color 200ms ease;
+}
+
+.pa-app-status[data-waiting] {
+  color: var(--ss-accent);
+}
+
+.pa-app-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ss-success);
+  transition: background-color 200ms ease;
+}
+
+.pa-app-status[data-waiting] .pa-app-dot {
+  background: var(--ss-accent);
+}
+
+.pa-app-thread {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px 18px 0;
+}
+
+.pa-bubble {
+  align-self: flex-end;
+  width: fit-content;
+  margin-left: auto;
+  will-change: transform;
+  max-width: 78%;
+  padding: 11px 15px;
+  border-radius: 20px 20px 6px 20px;
+  background: var(--ss-accent);
+  color: #fff;
+  font-size: 16px;
+  line-height: 1.35;
+}
+
+.pa-claude {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 4px 2px;
+}
+
+.pa-tool {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  align-self: flex-start;
+  padding: 7px 12px;
+  border-radius: 10px;
+  background: var(--ss-surface);
+  box-shadow: 0 0 0 1px var(--ss-line);
+  color: var(--ss-text-strong);
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1.3;
+}
+
+.pa-tool-icon {
+  display: inline-flex;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  color: var(--ss-success);
+}
+
+.pa-tool-file {
+  color: var(--ss-text);
+  font-family: var(--ss-mono);
+  font-size: 15px;
+  font-weight: 400;
+}
+
+.pa-ask {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 2px;
+  padding: 16px;
+  border-radius: 20px;
+  background: var(--ss-surface);
+  box-shadow:
+    0 0 0 1.5px color-mix(in srgb, var(--ss-accent) 45%, transparent),
+    0 10px 24px -14px rgba(30, 20, 10, 0.35);
+  transition: box-shadow 260ms ease;
+}
+
+.pa-ask[data-allowed] {
+  box-shadow:
+    0 0 0 1px var(--ss-line),
+    0 10px 24px -14px rgba(30, 20, 10, 0.2);
+}
+
+.pa-ask-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.pa-ask-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  background: var(--ss-accent-soft);
+  color: var(--ss-accent);
+}
+
+.pa-ask-title {
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.pa-ask-code {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--ss-canvas);
+  color: var(--ss-text-strong);
+  font-family: var(--ss-mono);
+  font-size: 15px;
+  line-height: 1.35;
+}
+
+.pa-ask-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.pa-app .pa-btn {
+  --ss-button-height: 46px;
+  --ss-button-pad: 16px;
+  --ss-button-pad-icon: 14px;
+  --ss-button-icon: 18px;
+  justify-content: center;
+  border-radius: 13px;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.pa-app .pa-btn--allow[data-pressed] {
+  filter: brightness(0.94);
+}
+
+.pa-reply {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.pa-reply-text {
+  font-size: 16px;
+  line-height: 1.4;
+}
+
+.pa-bubble--old {
+  padding: 15px 16px;
+}
+
+.pa-bubble-bar {
+  background: rgba(255, 255, 255, 0.55);
+}
+
+/* The chat in the hero: the thread sits on the composer and grows upward */
+.pa-app--chat {
+  display: flex;
+  flex-direction: column;
+}
+
+.pa-app--chat .pa-app-thread {
+  flex: 1;
+  justify-content: flex-end;
+  min-height: 0;
+  overflow: hidden;
+  padding-bottom: 16px;
+}
+
+.pa-composer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px 42px;
+  border-top: 1px solid var(--ss-line);
+  background: var(--ss-surface);
+}
+
+.pa-field {
+  flex: 1;
+  min-width: 0;
+  --ss-control: 44px;
+  --ss-radius-md: 22px;
+}
+
+.pa-field .ss-field__box {
+  padding: 0 16px;
+  background: var(--ss-canvas);
+  font-size: 16px;
+}
+
+.pa-send {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--ss-fill, var(--ss-canvas));
+  color: var(--ss-text-faint);
+  transition:
+    background-color 200ms ease,
+    color 200ms ease;
+}
+
+.pa-send[data-ready] {
+  background: var(--ss-accent);
+  color: #fff;
+}
+
+.pa-tool-mark {
+  width: 16px;
+}
+
+.pa-tool-icon--run {
+  color: var(--ss-text);
+}
+
+/* ── Feature cards ──────────────────────────────────────────────────────────────────────────── */
+
+.pa-feat .ss-stage {
+  overflow: hidden;
+  /* A shade under the page's cream, so the well reads warm like the rest of the page */
+  background: #f1ece4;
+  border-radius: 20px;
+}
+
+/* Connect: a terminal a gutter in from the top, left and bottom, off the right */
+.pa-feat--connect .pa-term {
+  position: absolute;
+  top: 32px;
+  bottom: 32px;
+  left: 32px;
+  right: -60px;
+  box-shadow: var(--ss-shadow-hero);
+  --ss-term-ok: #6ee7a8;
+}
+
+.pa-feat--connect .pa-term .ss-term {
+  padding: 10px 18px 16px;
+  font-size: 13px;
+  line-height: 1.75;
+  line-height: 1.6;
+}
+
+.pa-feat--connect .ss-term__path {
+  color: var(--ss-accent);
+}
+
+/* A phone pinned from the top, off the bottom */
+.pa-feat--phone .pa-phone {
+  position: absolute;
+  top: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  box-shadow: var(--ss-shadow-ground);
+}
+
+.pa-feat--steer .pa-app-thread {
+  padding-top: 22px;
+}
+
+/* Connect, animated: output lines grow in under their command; a step's mark turns from a
+   spinner into a tick in one cell, so its words never move */
+.pa-feat--connect .ss-collapse .ss-term__prompt {
+  margin-top: 8px;
+}
+
+.pa-feat--connect .pa-step {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: pre;
+}
+
+.pa-feat--connect .pa-step-mark {
+  width: 12px;
+}
+
+.pa-feat--connect .pa-spin {
+  display: inline-flex;
+  width: 12px;
+  height: 12px;
+  color: #c9a46a;
+}
+
+/* Steer, animated: the phone a gutter off the card's foot, cropped at the top inside the thread,
+   so its composer shows */
+.pa-feat--chat .pa-phone {
+  position: absolute;
+  bottom: 20px;
+  left: 20px;
+  box-shadow: var(--ss-shadow-ground);
+}
+
+/* Notify, animated: each notification brings its own gap, so a closed one takes none */
+.pa-notif-card {
+  margin: 0 18px;
+  padding-bottom: 12px;
+  border-radius: 23px;
+  background: rgba(252, 252, 253, 0.76);
+  backdrop-filter: blur(30px) saturate(1.25);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
+}
+
+.pa-notif-card .ss-notification {
+  margin: 0;
+  background: none;
+  backdrop-filter: none;
+  box-shadow: none;
+}
+
+.pa-notif-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  padding: 0 12px;
+}
+
+.pa-notif-action {
+  display: grid;
+  place-items: center;
+  height: 40px;
+  border-radius: 14px;
+  background: rgba(0, 0, 0, 0.06);
+  color: #1d1b1a;
+  font-family: var(--ss-font);
+  font-size: 15px;
+  font-weight: 600;
+  transition:
+    background-color 200ms ease,
+    color 200ms ease;
+}
+
+.pa-notif-action--allow {
+  color: var(--ss-accent);
+}
+
+.pa-notif-action--allow[data-on] {
+  background: var(--ss-accent);
+  color: #fff;
+}
+
+.pa-feat--connect .pa-term .ss-term {
+  transition: opacity 360ms ease;
+}
+
+.pa-feat--connect .pa-term[data-hidden] .ss-term {
+  opacity: 0;
+}
+
+.pa-composer {
+  will-change: transform;
+}
+
+/* The terminal fills from its foot, as one that has scrolled: older lines leave over the top */
+.pa-feat--connect .pa-term .ss-term {
+  height: 100%;
+  justify-content: flex-end;
+}
+
+/* Lines scrolling off the top fade under the title bar instead of being sliced by it */
+.pa-feat--connect .pa-term .ss-term {
+  mask-image: linear-gradient(to bottom, transparent 0, #000 28px);
+}
+
+/* ── The Android widget ────────────────────────────────────────────────────────────────────────── */
+
+/* A phone pinned a gutter from the top, its foot off the card: the widget is what shows */
+.pa-feat--widget .pa-phone {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  translate: -50% 0;
+  box-shadow: var(--ss-shadow-ground);
+}
+
+/* The whole phone, standing on the page itself: no well behind it */
+.pa-feat--widget .ss-stage {
+  overflow: visible;
+  background: transparent;
+  border-radius: 0;
+}
+
+.pa-home {
+  padding: 18px 20px 0;
+  font-family: var(--ss-font);
+}
+
+.pa-glance {
+  padding: 8px 6px 22px;
+  color: #fff;
+}
+
+.pa-glance-day {
+  font-size: 30px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+
+.pa-glance-sub {
+  margin-top: 4px;
+  font-size: 16px;
+  opacity: 0.85;
+}
+
+/* The widget, in the app's own palette (usage-widget.tsx LIGHT and DARK) */
+.pa-w {
+  --w-bg: #ffffff;
+  --w-fg: #151619;
+  --w-muted: #616369;
+  --w-track: #e6e7ea;
+  --w-primary: #c64200;
+  --w-warning: #da950b;
+  --w-danger: #d02b31;
+  padding: 16px 20px 18px;
+  border-radius: 28px;
+  background: var(--w-bg);
+  color: var(--w-fg);
+}
+
+.pa-w[data-dark] {
+  --w-bg: #202020;
+  --w-fg: #f2f2f2;
+  --w-muted: #a6a6a6;
+  --w-track: #3a3a3a;
+  --w-primary: #f67f2f;
+  --w-warning: #edb345;
+  --w-danger: #ed5350;
+}
+
+.pa-w-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 32px;
+}
+
+.pa-w-title {
+  color: var(--w-primary);
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.pa-w-plan {
+  color: var(--w-muted);
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.pa-w-refresh {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  color: var(--w-fg);
+  transition: background-color 200ms ease;
+}
+
+.pa-w-refresh[data-spinning] {
+  background: var(--w-track);
+  color: var(--w-muted);
+}
+
+.pa-w-refresh[data-spinning] svg {
+  animation: pa-w-spin 700ms linear infinite;
+}
+
+@keyframes pa-w-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.pa-w-meter {
+  margin-top: 14px;
+}
+
+.pa-w-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.pa-w-label {
+  font-size: 17px;
+  font-weight: 500;
+}
+
+.pa-w-value {
+  font-size: 18px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.pa-w-track {
+  height: 8px;
+  margin-top: 7px;
+  border-radius: 4px;
+  background: var(--w-track);
+  overflow: hidden;
+}
+
+.pa-w-fill {
+  height: 100%;
+  border-radius: 4px;
+  background: var(--w-primary);
+  transform-origin: left;
+  transition:
+    transform 900ms cubic-bezier(0.25, 0.8, 0.25, 1),
+    background-color 300ms ease;
+}
+
+.pa-w-fill[data-tone='warning'] {
+  background: var(--w-warning);
+}
+
+.pa-w-fill[data-tone='danger'] {
+  background: var(--w-danger);
+}
+
+.pa-w-reset {
+  margin-top: 4px;
+  color: var(--w-muted);
+  font-size: 14px;
+}
+
+.pa-w-foot {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 16px;
+  color: var(--w-muted);
+  font-size: 14px;
+}
+
+/* "Updated 1h ago" and "Updated just now" share one slot and crossfade */
+.pa-w-updated {
+  display: grid;
+  justify-items: end;
+}
+
+.pa-w-upd {
+  grid-area: 1 / 1;
+  transition: opacity 260ms ease;
+}
+
+.pa-w-upd--new,
+.pa-w-updated[data-fresh] .pa-w-upd--old {
+  opacity: 0;
+}
+
+.pa-w-updated[data-fresh] .pa-w-upd--new {
+  opacity: 1;
+}
+
+/* The big headings, in the condensed display face (set on the page as --font-display) */
+.display {
+  font-family: var(--font-display), var(--font-geist-sans), sans-serif;
+  font-weight: 400;
+  letter-spacing: -0.005em;
+}
+
+/* The link between the PC and the phone: a quiet dashed line, its ends pinned to each device,
+   and the message of the moment travelling along it (to the PC, or back to the phone) */
+.pa-link {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.pa-link path {
+  fill: none;
+  stroke: color-mix(in srgb, var(--ss-accent) 45%, transparent);
+  stroke-width: 2;
+  stroke-dasharray: 2 7;
+  stroke-linecap: round;
+  animation: pa-link-flow 1.2s linear infinite;
+}
+
+.pa-link circle {
+  fill: var(--ss-surface);
+  stroke: var(--ss-accent);
+  stroke-width: 2;
+}
+
+@keyframes pa-link-flow {
+  to {
+    stroke-dashoffset: -18;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pa-link path {
+    animation: none;
+  }
+}
+
+/* Pocket Agent on the link: the relay every message passes through */
+.pa-hub {
+  position: absolute;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: var(--ss-surface);
+  box-shadow:
+    0 0 0 5px color-mix(in srgb, var(--ss-accent) 14%, transparent),
+    0 8px 18px -8px rgba(30, 20, 10, 0.45);
+  translate: -50% -50%;
+}
+
+.pa-hub img {
+  border-radius: 8px;
+}
+
+/* A spot to fly to or from: where the next line lands on a screen */
+.pa-anchor {
+  height: 0;
+  margin: 0;
+  flex: none;
+}
+
+/* ── Setting up the widget ─────────────────────────────────────────────────────────────────────── */
+
+.pa-feat--widget .pa-home {
+  position: relative;
+  height: 100%;
+  transition: filter 300ms ease;
+}
+
+.pa-feat--widget .pa-home[data-dim] {
+  filter: brightness(0.6);
+}
+
+/* Where the widget sits: empty until it is added */
+
+/* A long-press menu: a Material card that grows from where the finger held */
+.pa-hmenu {
+  position: absolute;
+  top: 300px;
+  left: 96px;
+  width: 230px;
+  padding: 8px 0;
+  border-radius: 22px;
+  background: #fbf7f4;
+  color: #1d1b1a;
+  box-shadow: 0 10px 30px -8px rgba(0, 0, 0, 0.45);
+  opacity: 0;
+  scale: 0.85;
+  transform-origin: 50% 0;
+  pointer-events: none;
+  transition:
+    opacity 180ms ease,
+    scale 240ms cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+.pa-hmenu[data-open] {
+  opacity: 1;
+  scale: 1;
+}
+
+.pa-hmenu--widget {
+  top: 230px;
+  left: 110px;
+  width: 190px;
+}
+
+.pa-hmenu-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  height: 50px;
+  padding: 0 20px;
+  font-size: 16px;
+  font-weight: 500;
+}
+
+/* The widget picker: a bottom sheet rising over the dimmed home screen */
+.pa-sheet {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 2;
+  height: 700px;
+  padding: 10px 18px 0;
+  border-radius: 28px 28px 0 0;
+  background: #f7f2ee;
+  color: #1d1b1a;
+  font-family: var(--ss-font);
+  translate: 0 100%;
+  transition: translate 460ms cubic-bezier(0.3, 0.75, 0.1, 1);
+}
+
+.pa-sheet[data-open] {
+  translate: 0 0;
+}
+
+.pa-sheet-handle {
+  display: block;
+  width: 36px;
+  height: 4px;
+  margin: 0 auto 14px;
+  border-radius: 2px;
+  background: #c9c2bd;
+}
+
+.pa-sheet-title {
+  font-size: 22px;
+  font-weight: 500;
+  text-align: center;
+}
+
+.pa-sheet-search {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 48px;
+  margin-top: 12px;
+  padding: 0 18px;
+  border-radius: 24px;
+  background: #ebe4df;
+  color: #534b46;
+  font-size: 16px;
+}
+
+.pa-sheet-query {
+  color: #1d1b1a;
+}
+
+.pa-sheet-placeholder {
+  color: #847a74;
+}
+
+.pa-sheet-app {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 14px;
+  padding: 0 4px;
+}
+
+.pa-sheet-icon {
+  border-radius: 12px;
+}
+
+.pa-sheet-name {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.pa-sheet-sub {
+  margin-top: 2px;
+  color: #6f6660;
+  font-size: 14px;
+}
+
+.pa-sheet-preview {
+  margin-top: 12px;
+  padding: 14px;
+  border-radius: 24px;
+  background: #fff;
+}
+
+/* The widget's own drawing, small, as the picker previews it */
+.pa-sheet-mini {
+  height: 152px;
+  overflow: hidden;
+}
+
+.pa-sheet-mini .pa-w {
+  width: 200%;
+  scale: 0.5;
+  transform-origin: 0 0;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.08);
+}
+
+.pa-sheet-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 12px;
+}
+
+.pa-sheet-add {
+  display: grid;
+  place-items: center;
+  height: 40px;
+  padding: 0 22px;
+  border-radius: 20px;
+  background: var(--ss-accent);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+/* The finger held down: a ring that spreads while it holds */
+.pa-press {
+  position: absolute;
+  z-index: 5;
+  width: 64px;
+  height: 64px;
+  margin: -32px 0 0 -32px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.35);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.6);
+  opacity: 0;
+  scale: 0.3;
+  pointer-events: none;
+  transition:
+    opacity 160ms ease,
+    scale 520ms cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+.pa-press[data-on] {
+  opacity: 1;
+  scale: 1;
+}
+
+/* Pocket Agent's icon on the home screen */
+
+.pa-appicon img {
+  border-radius: 18px;
+  box-shadow: 0 4px 10px -4px rgba(0, 0, 0, 0.4);
+}
+
+.pa-appicon[data-held] {
+  scale: 1.06;
+}
+
+/* The widget's spot, and the widget once it lands there */
+.pa-spot {
+  position: absolute;
+  width: 372px;
+  height: 330px;
+}
+
+.pa-spot-widget {
+  opacity: 0;
+  scale: 0.9;
+  transition:
+    opacity 200ms ease,
+    scale 200ms ease;
+}
+
+/* Added: it lands with a small bounce, pressing in a touch and settling */
+.pa-spot-widget[data-placed] {
+  opacity: 1;
+  scale: 1;
+  animation: pa-land 560ms cubic-bezier(0.3, 0.75, 0.1, 1) both;
+}
+
+@keyframes pa-land {
+  0% {
+    opacity: 0;
+    scale: 0.86;
+    translate: 0 18px;
+  }
+  45% {
+    opacity: 1;
+    scale: 1.03;
+    translate: 0 -3px;
+  }
+  72% {
+    scale: 0.985;
+    translate: 0 0;
+  }
+  100% {
+    scale: 1;
+  }
+}
+
+.pa-shortcuts[data-dropped] .pa-drawer-mini .pa-w {
+  width: 372px;
+}
+
+/* A message in flight: a pill that leaves its screen, travels (only ever forward) and, as it
+   reaches the other screen, melts into the element opening there (see .pa-morph-in) */
+.pa-packet {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 2;
+  offset-rotate: 0deg;
+  animation-name: pa-packet-travel, pa-packet-handover;
+  animation-timing-function: linear;
+  animation-fill-mode: both;
+}
+
+.pa-packet__face {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 11px 0 9px;
+  border-radius: 14px;
+  background: var(--ss-accent);
+  color: #fff;
+  font-family: var(--ss-font);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  box-shadow:
+    0 0 0 5px color-mix(in srgb, var(--ss-accent) 22%, transparent),
+    0 6px 14px -4px rgba(30, 20, 10, 0.4);
+}
+
+@keyframes pa-packet-travel {
+  0% {
+    offset-distance: 0%;
+    animation-timing-function: cubic-bezier(0.45, 0, 0.1, 1);
+  }
+  70%,
+  100% {
+    offset-distance: 100%;
+  }
+}
+
+/* It holds where it landed while the element opens out of it, then melts away into it */
+@keyframes pa-packet-handover {
+  0%,
+  70% {
+    opacity: 1;
+  }
+  84%,
+  100% {
+    opacity: 0;
+  }
+}
+
+/* Room for what a message becomes: the height opens and the content is there from the first
+   frame. From the bottom (the phone's thread), the content is pinned to the foot so it rises out
+   of where the message landed; from the top (the terminal), it opens downward. */
+.pa-grow {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 560ms cubic-bezier(0.45, 0, 0.1, 1);
+}
+
+.pa-grow[data-open] {
+  grid-template-rows: 1fr;
+}
+
+.pa-grow__inner {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  transition: opacity 200ms ease;
+}
+
+.pa-grow[data-from='bottom'] .pa-grow__inner {
+  justify-content: flex-end;
+}
+
+.pa-grow:not([data-open]) .pa-grow__inner {
+  opacity: 0;
+}
+
+/* The element itself grows out of the message pill: at first just the pill's shape (and colour)
+   where the pill landed, then its own shape, the orange melting into its own surface. Runs each
+   time its room opens, in step with the room. */
+.pa-morph-in {
+  position: relative;
+  flex: none;
+}
+
+.pa-grow[data-open] .pa-morph-in {
+  animation: pa-morph-card 560ms cubic-bezier(0.45, 0, 0.1, 1) both;
+}
+
+.pa-grow[data-open] .pa-morph-in::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--ss-accent);
+  pointer-events: none;
+  animation: pa-morph-tint 560ms ease-out both;
+}
+
+/* The Allow card: from the pill at the foot of the thread, centred, up to the whole card */
+@keyframes pa-morph-card {
+  from {
+    clip-path: inset(calc(100% - 40px) calc(50% - 90px) 0 calc(50% - 90px) round 20px);
+  }
+  to {
+    clip-path: inset(0 round 20px);
+  }
+}
+
+/* The reply: from the pill at its start, out to its full text */
+.pa-grow[data-open] .pa-morph-in[data-morph='text'] {
+  animation-name: pa-morph-text;
+}
+
+@keyframes pa-morph-text {
+  from {
+    clip-path: inset(calc(100% - 40px) calc(100% - 170px) 0 0 round 20px);
+  }
+  to {
+    clip-path: inset(0 round 4px);
+  }
+}
+
+/* The prompt line: from the pill at its start, out along the line */
+.pa-grow[data-open] .pa-morph-in[data-morph='line'] {
+  animation-name: pa-morph-line;
+}
+
+@keyframes pa-morph-line {
+  from {
+    clip-path: inset(0 calc(100% - 200px) 0 0 round 14px);
+  }
+  to {
+    clip-path: inset(0 round 6px);
+  }
+}
+
+@keyframes pa-morph-tint {
+  0%,
+  20% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pa-grow,
+  .pa-grow__inner {
+    transition: none;
+  }
+
+  .pa-grow[data-open] .pa-morph-in,
+  .pa-grow[data-open] .pa-morph-in::after {
+    animation: none;
+  }
+
+  .pa-morph-in::after {
+    display: none;
+  }
+}
+
+/* Pocket Agent's icon, top right of the home screen */
+.pa-appicon {
+  position: absolute;
+  top: 16px;
+  right: 22px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: 84px;
+  color: #fff;
+  font-size: 13px;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+  transition: scale 240ms cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+.pa-appicon img {
+  border-radius: 18px;
+  box-shadow: 0 4px 10px -4px rgba(0, 0, 0, 0.4);
+}
+
+.pa-appicon[data-held] {
+  scale: 1.06;
+}
+
+/* The icon's shortcuts: a small card just under the icon, grown from its corner */
+.pa-shortcuts {
+  position: absolute;
+  top: 112px;
+  right: 22px;
+  z-index: 2;
+  width: 220px;
+  padding: 8px 0;
+  border-radius: 22px;
+  background: #fbf7f4;
+  color: #1d1b1a;
+  box-shadow: 0 12px 32px -10px rgba(0, 0, 0, 0.5);
+  opacity: 0;
+  scale: 0.85;
+  transform-origin: 85% 0;
+  transition:
+    opacity 180ms ease,
+    scale 240ms cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+.pa-shortcuts[data-open] {
+  opacity: 1;
+  scale: 1;
+}
+
+/* The app's widget drawer: a bottom sheet with the widget to tap */
+.pa-drawer {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 2;
+  height: 340px;
+  padding: 10px 20px 0;
+  border-radius: 28px 28px 0 0;
+  background: #f7f2ee;
+  color: #1d1b1a;
+  box-shadow: 0 -10px 30px -12px rgba(0, 0, 0, 0.4);
+  translate: 0 100%;
+  transition: translate 460ms cubic-bezier(0.3, 0.75, 0.1, 1);
+}
+
+.pa-drawer[data-open] {
+  translate: 0 0;
+}
+
+.pa-drawer-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 40px;
+  margin: 10px 0 4px;
+}
+
+.pa-drawer-slot {
+  height: 182px;
+}
+
+.pa-drawer-mini {
+  scale: 0.55;
+  transform-origin: 0 0;
+}
+
+/* ── Allowing a folder: the PC's terminal and the phone's New chat sheet ───────────────────── */
+
+.pa-folders .ss-stage {
+  overflow: visible;
+  background: transparent;
+}
+
+.pa-f-stage {
+  position: absolute;
+  inset: 0;
+  transition: opacity 380ms ease;
+}
+
+.pa-f-stage[data-hidden] {
+  opacity: 0;
+}
+
+.pa-f-term {
+  position: absolute;
+  top: 80px;
+  left: 0;
+  width: 420px;
+  height: 230px;
+  box-shadow: var(--ss-shadow-hero);
+  --ss-term-ok: #6ee7a8;
+}
+
+.pa-f-term .ss-term {
+  padding: 10px 18px 16px;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.pa-f-term .ss-term__path {
+  color: var(--ss-accent);
+}
+
+.pa-f-phone {
+  position: absolute;
+  top: 18px;
+  right: 0;
+  box-shadow: var(--ss-shadow-ground);
+}
+
+.pa-f-stage[data-layout='compact'] .pa-f-term {
+  top: 0;
+  right: 0;
+  width: auto;
+  height: 172px;
+}
+
+.pa-f-stage[data-layout='compact'] .pa-f-term .ss-term {
+  padding: 8px 12px 12px;
+  font-size: 10.5px;
+}
+
+.pa-f-stage[data-layout='compact'] .pa-f-phone {
+  top: 168px;
+  right: auto;
+  left: 50%;
+  translate: -50% 0;
+}
+
+/* The phone's screen, in points */
+.pa-f-screen {
+  position: relative;
+  height: 100%;
+  background: #f4efea;
+  color: #1d1b1a;
+  font-family: var(--ss-font);
+}
+
+.pa-f-behind {
+  padding: 18px 24px;
+}
+
+.pa-f-behind-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 18px;
+}
+
+.pa-f-newchat {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 14px 0 12px;
+  border-radius: 12px;
+  background: var(--ss-accent);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.pa-f-behind-title {
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.pa-f-behind-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  height: 64px;
+}
+
+.pa-f-behind-dot {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: #ddd3ca;
+}
+
+.pa-f-screen::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: rgba(20, 14, 10, 0.32);
+  opacity: 0;
+  transition: opacity 360ms ease;
+  pointer-events: none;
+}
+
+.pa-f-screen[data-sheet]::before {
+  opacity: 1;
+}
+
+.pa-f-sheet {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 2;
+  height: 500px;
+  padding: 10px 24px 0;
+  border-radius: 30px 30px 0 0;
+  background: #fffdfb;
+  box-shadow: 0 -10px 30px -12px rgba(0, 0, 0, 0.35);
+  translate: 0 105%;
+  transition: translate 460ms cubic-bezier(0.3, 0.75, 0.1, 1);
+}
+
+.pa-f-screen[data-sheet] .pa-f-sheet {
+  translate: 0 0;
+}
+
+.pa-f-handle {
+  display: block;
+  width: 44px;
+  height: 5px;
+  margin: 0 auto 18px;
+  border-radius: 3px;
+  background: #d9d0c8;
+}
+
+.pa-f-views {
+  display: grid;
+  width: 100%;
+}
+
+.pa-f-view {
+  display: flex;
+  flex-direction: column;
+  width: 364px;
+}
+
+.pa-f-title {
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+}
+
+.pa-f-desc {
+  margin-top: 6px;
+  color: #77706a;
+  font-size: 15px;
+  line-height: 1.45;
+}
+
+.pa-f-desc b {
+  color: #1d1b1a;
+  font-weight: 600;
+}
+
+.pa-f-over {
+  margin: 22px 0 6px;
+  color: #8a827b;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.pa-f-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 4px;
+}
+
+.pa-f-folder {
+  flex: none;
+  color: #e3a008;
+  fill: #f5b82e;
+}
+
+.pa-f-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.pa-f-name {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.pa-f-path {
+  margin-top: 2px;
+  overflow: hidden;
+  color: #8a827b;
+  font-family: var(--ss-mono);
+  font-size: 12.5px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.pa-f-chev {
+  flex: none;
+  color: #a69d95;
+}
+
+/* The folder just allowed: a moment of the accent as it arrives */
+.pa-f-new {
+  border-radius: 14px;
+  animation: pa-f-new 1600ms ease-out both;
+}
+
+@keyframes pa-f-new {
+  0%,
+  30% {
+    background: color-mix(in srgb, var(--ss-accent) 14%, transparent);
+  }
+  100% {
+    background: transparent;
+  }
+}
+
+.pa-f-cmd {
+  margin-top: 18px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: #1c1a19;
+  color: #f2ede8;
+  font-family: var(--ss-mono);
+  font-size: 13.5px;
+  white-space: nowrap;
+}
+
+.pa-f-muted {
+  color: #77706a;
+}
+
+/* Two devices, one place to look: the one that is not acting steps back (and behind, where they
+   overlap, so the one in focus is whole) */
+.pa-dimmable {
+  z-index: 1;
+  scale: 1;
+  filter: blur(0) saturate(1);
+  /* Coming back into focus: a pop, the scale overshoots a touch and settles; the blur clears a
+     beat quicker so it is sharp by the time it lands */
+  transition:
+    scale 560ms cubic-bezier(0.34, 1.56, 0.64, 1),
+    opacity 320ms ease-out,
+    filter 320ms ease-out;
+}
+
+.pa-dimmable[data-dim] {
+  z-index: 0;
+  opacity: 0.5;
+  scale: 0.93;
+  filter: blur(2.5px) saturate(0.6);
+  /* Stepping back: eases away, no bounce */
+  transition:
+    scale 520ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 520ms ease,
+    filter 520ms ease;
+}
+
+/* The command that allows a folder, and the folder it allowed: the accent */
+.pa-f-term .pa-f-the-cmd .ss-term__cmd,
+.pa-f-allowed {
+  color: var(--ss-accent);
+  font-weight: 600;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pa-dimmable,
+  .pa-dimmable[data-dim] {
+    transition: none;
+  }
+}
+
+/* The folder demo's Add a workspace, as the app draws it */
+.pa-f-addbtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 48px;
+  margin-top: 8px;
+  border: 1.5px dashed rgba(32, 34, 37, 0.28);
+  border-radius: 14px;
+  background: #eaebee;
+  color: #202225;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.pa-f-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.pa-f-runon {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 18px;
+  color: #77706a;
+  font-size: 15px;
+}
+
+.pa-f-runon b {
+  color: #1d1b1a;
+  font-weight: 600;
+}
+
+.pa-f-view .pa-f-cmd {
+  margin-top: 16px;
+  padding: 16px;
+  white-space: normal;
+  line-height: 1.55;
+}
+
+.pa-f-accent {
+  color: var(--ss-accent);
+}
+
+.pa-f-primary {
+  display: grid;
+  place-items: center;
+  height: 52px;
+  margin-top: 16px;
+  border-radius: 16px;
+  background: var(--ss-accent);
+  color: #fff;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.pa-f-btnlabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pa-f-status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 16px;
+  font-size: 15px;
+}
+
+.pa-f-status b {
+  font-weight: 600;
+}
+
+.pa-f-status-mark {
+  color: #16a34a;
+}
+
+.pa-f-dot {
+  display: block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ss-accent);
+  animation: pa-f-breathe 1.6s ease-in-out infinite;
+}
+
+@keyframes pa-f-breathe {
+  50% {
+    opacity: 0.3;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pa-f-dot {
+    animation: none;
+  }
+}

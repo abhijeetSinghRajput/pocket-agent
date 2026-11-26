@@ -28,6 +28,8 @@
   --success: oklch(0.6 0.14 155);
   --warning: oklch(0.72 0.15 75);
   --sidebar: oklch(0.985 0.002 270);
+  --shell-fg-muted: #333333;
+  --shell-fg-faint: #6d6d6d;
 }
 
 .dark {
@@ -52,6 +54,8 @@
   --success: oklch(0.72 0.15 155);
   --warning: oklch(0.8 0.14 80);
   --sidebar: hsl(240 5% 12%);
+  --shell-fg-muted: #d4d4d4;
+  --shell-fg-faint: #8e8e8e;
 }
 
 /* Outgoing chat bubble colours (solid, brand-tinted). */
@@ -128,6 +132,8 @@
   --color-success: var(--success);
   --color-warning: var(--warning);
   --color-sidebar: var(--sidebar);
+  --color-shell-fg-muted: var(--shell-fg-muted);
+  --color-shell-fg-faint: var(--shell-fg-faint);
 }
 
 @layer components {
@@ -549,6 +555,162 @@
     ::view-transition-old(root),
     ::view-transition-new(root) {
       animation: none;
+    }
+  }
+}
+.sound-slash {
+  stroke-dasharray: 1 2;
+  stroke-dashoffset: 1.02;
+  --slash-ms: 200ms;
+  transition: stroke-dashoffset var(--slash-ms) var(--ease-out);
+}
+[data-muted='true'] .sound-slash {
+  stroke-dashoffset: 0;
+  --slash-ms: 260ms;
+}
+.sound-wave {
+  transform-box: view-box;
+  transform-origin: 11px 12px;
+  transition:
+    opacity 130ms var(--ease-out) var(--wave-delay),
+    transform 130ms var(--ease-out) var(--wave-delay),
+    filter 130ms var(--ease-out) var(--wave-delay);
+}
+[data-muted='true'] .sound-wave {
+  opacity: 0;
+  transform: scale(0.25);
+  filter: blur(1px);
+}
+.sound-wave-inner {
+  --wave-delay: 45ms;
+}
+.sound-wave-outer {
+  --wave-delay: 20ms;
+}
+[data-muted='true'] .sound-wave-inner {
+  --wave-delay: 50ms;
+}
+[data-muted='true'] .sound-wave-outer {
+  --wave-delay: 75ms;
+}
+.sound-speaker {
+  --speaker-ms: 220ms;
+  --speaker-delay: 0ms;
+  transition: transform var(--speaker-ms) var(--ease-out) var(--speaker-delay);
+}
+[data-muted='true'] .sound-speaker {
+  transform: translateX(5.5px);
+  --speaker-ms: 260ms;
+  --speaker-delay: 80ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sound-slash,
+  .sound-wave,
+  .sound-speaker {
+    transition: none;
+  }
+}
+
+/*
+ * Raised buttons (see components/ui/button.tsx). The surface is the ::before layer: a top-lit
+ * gradient, an inked edge, a light lip along the top, a little shade along the bottom and a short
+ * drop shadow. A press squeezes the surface (not the label) and lowers the shadow.
+ */
+@layer components {
+  .raise::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border: 1px solid var(--raise-edge, transparent);
+    border-radius: inherit;
+    background: var(--raise-bg, transparent);
+    box-shadow: var(--raise-shadow, none);
+    transition:
+      scale 150ms var(--ease-out),
+      box-shadow 150ms var(--ease-out),
+      filter 150ms var(--ease-out);
+    pointer-events: none;
+  }
+
+  .raise:hover::before {
+    filter: brightness(1.04);
+  }
+
+  .raise:active::before,
+  .raise[data-pressed]::before {
+    scale: 0.985;
+    box-shadow: var(--raise-shadow-pressed, var(--raise-shadow, none));
+  }
+
+  .raise:active:is(.w-full, [class*='w-full'])::before {
+    scale: 0.997 0.985;
+  }
+
+  .raise-primary {
+    --raise-bg: linear-gradient(
+      to bottom,
+      color-mix(in oklab, var(--primary) 86%, white),
+      var(--primary) 55%,
+      color-mix(in oklab, var(--primary) 90%, black)
+    );
+    --raise-edge: color-mix(in oklab, var(--primary) 82%, black);
+    --raise-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.32), inset 0 -1px 0 rgb(0 0 0 / 0.14), 0 1px 1px rgb(0 0 0 / 0.14),
+      0 3px 8px -3px color-mix(in oklab, var(--primary) 60%, transparent);
+    --raise-shadow-pressed: inset 0 1px 0 rgb(255 255 255 / 0.2), inset 0 1px 3px rgb(0 0 0 / 0.18);
+  }
+
+  .raise-danger {
+    --raise-bg: linear-gradient(
+      to bottom,
+      color-mix(in oklab, var(--destructive) 86%, white),
+      var(--destructive) 55%,
+      color-mix(in oklab, var(--destructive) 90%, black)
+    );
+    --raise-edge: color-mix(in oklab, var(--destructive) 82%, black);
+    --raise-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.28), inset 0 -1px 0 rgb(0 0 0 / 0.14), 0 1px 1px rgb(0 0 0 / 0.14),
+      0 3px 8px -3px color-mix(in oklab, var(--destructive) 55%, transparent);
+    --raise-shadow-pressed: inset 0 1px 3px rgb(0 0 0 / 0.2);
+  }
+
+  .raise-neutral {
+    --raise-bg: linear-gradient(to bottom, var(--card), color-mix(in oklab, var(--card) 94%, black));
+    --raise-edge: color-mix(in oklab, var(--foreground) 14%, transparent);
+    --raise-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.7), inset 0 -1px 0 rgb(0 0 0 / 0.05), 0 1px 2px rgb(0 0 0 / 0.08),
+      0 2px 6px -3px rgb(0 0 0 / 0.12);
+    --raise-shadow-pressed: inset 0 1px 2px rgb(0 0 0 / 0.08);
+  }
+
+  .dark .raise-neutral {
+    --raise-bg: linear-gradient(to bottom, color-mix(in oklab, var(--card) 88%, white), var(--card));
+    --raise-edge: rgb(0 0 0 / 0.6);
+    --raise-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.08), 0 1px 1px rgb(0 0 0 / 0.4), 0 3px 8px -3px rgb(0 0 0 / 0.5);
+    --raise-shadow-pressed: inset 0 1px 3px rgb(0 0 0 / 0.4);
+  }
+
+  /* Ink: the near-black raised button, for the one call to action on a light ground */
+  .raise.raise-ink {
+    --raise-bg: linear-gradient(to bottom, #3a3a3d, #232325 55%, #1a1a1b);
+    --raise-edge: #000;
+    --raise-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.16), inset 0 -1px 0 rgb(0 0 0 / 0.4), 0 1px 1px rgb(0 0 0 / 0.25),
+      0 4px 10px -4px rgb(0 0 0 / 0.45);
+    --raise-shadow-pressed: inset 0 1px 3px rgb(0 0 0 / 0.5);
+  }
+
+  /* Ghost: no surface until hovered, then a quiet one */
+  .raise-ghost:hover {
+    --raise-bg: var(--accent);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .raise::before {
+      transition: none;
     }
   }
 }

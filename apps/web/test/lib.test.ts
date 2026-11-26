@@ -4,9 +4,9 @@ import { isActive, isChatsRoute, NAV_ITEMS } from '@/lib/nav';
 
 describe('isActive', () => {
   it('treats the chat list and every open chat as Chats (home)', () => {
-    expect(isActive('/', '/')).toBe(true);
-    expect(isActive('/agents/abc', '/')).toBe(true);
-    expect(isActive('/approvals', '/')).toBe(false);
+    expect(isActive('/chat', '/chat')).toBe(true);
+    expect(isActive('/agents/abc', '/chat')).toBe(true);
+    expect(isActive('/approvals', '/chat')).toBe(false);
     expect(isChatsRoute('/settings')).toBe(false);
   });
   it('matches nested routes', () => {

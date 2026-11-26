@@ -12,6 +12,10 @@ const config: NextConfig = {
   poweredByHeader: false,
   // The floating dev-tools button sat on top of the chat's Send button.
   devIndicators: false,
+  // The homepage used to live at /home; it is at / now.
+  async redirects() {
+    return [{ source: '/home', destination: '/', permanent: true }];
+  },
   async rewrites() {
     return apiProxyTarget ? [{ source: '/api/:path*', destination: `${apiProxyTarget}/:path*` }] : [];
   },

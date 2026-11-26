@@ -14,7 +14,7 @@ test('a new notification shows up live in the bell, the history, and can be mark
   page,
 }) => {
   await freshUser(page);
-  await page.goto('/');
+  await page.goto('/chat');
   const bell = page.getByTestId('notification-bell').filter({ visible: true });
   await expect(bell).toHaveAccessibleName(/^(Notifications|Alerts)$/); // sidebar / phone bottom bar
 

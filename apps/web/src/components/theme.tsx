@@ -1,15 +1,26 @@
 'use client';
 
 import { Monitor, Moon, Sun } from 'lucide-react';
+import { usePathname } from 'next/navigation';
 import { ThemeProvider as NextThemes, useTheme } from 'next-themes';
 import { useCallback, useEffect, useSyncExternalStore, type ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { Segmented } from '@/components/ui/segmented';
 
+/** Pages that are always light, whatever the app's theme: the landing page. */
+const LIGHT_ONLY = new Set(['/']);
+
 export function ThemeProvider({ children }: { children: ReactNode }) {
+  const pathname = usePathname();
+  const lightOnly = LIGHT_ONLY.has(pathname);
   return (
-    <NextThemes attribute="class" defaultTheme="system" enableSystem>
-      <ThemeHotkey />
+    <NextThemes
+      attribute="class"
+      defaultTheme="system"
+      enableSystem
+      forcedTheme={lightOnly ? 'light' : undefined}
+    >
+      {!lightOnly && <ThemeHotkey />}
       {children}
     </NextThemes>
   );

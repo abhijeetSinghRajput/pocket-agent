@@ -32,7 +32,7 @@ test('register through the UI, then sign out', async ({ page }) => {
   await expect(page).toHaveURL(/\/login$/);
 
   // The session is gone server-side: protected pages bounce back to sign-in.
-  await page.goto('/');
+  await page.goto('/chat');
   await expect(page).toHaveURL(/\/login$/);
 });
 

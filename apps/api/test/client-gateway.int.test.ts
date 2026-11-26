@@ -1,3 +1,4 @@
+import { createEvent } from '@pocket-agent/protocol';
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
@@ -71,6 +72,25 @@ describe('/ws/client', () => {
     expect(bobTab.inbox).toEqual([]); // nothing about Alice leaks to Bob
     aliceTab.ws.close();
     bobTab.ws.close();
+  });
+
+  it('passes a folder the PC points at on to the owner (not stored)', async () => {
+    const u = await newUser();
+    const tab = wsClient(clientUrl, browser(u.cookie));
+    await tab.opened;
+    const d = await pairDevice(t, u.cookie);
+    const agent = await connectAgent(t, d);
+    await agent.send(
+      createEvent('device.settings', {
+        projects: [{ name: 'work', path: '/home/me/work' }],
+        observedInstructions: false,
+        focus: { path: '/home/me/work/app' },
+      }),
+    );
+    const focus = await tab.next((m) => m['eventType'] === 'device.workspace.focus');
+    expect(focus).toMatchObject({ deviceId: d.deviceId, payload: { path: '/home/me/work/app' } });
+    agent.ws.close();
+    tab.ws.close();
   });
 
   it('closes the live socket when that login session signs out', async () => {

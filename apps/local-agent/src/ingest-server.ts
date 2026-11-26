@@ -8,7 +8,7 @@ const MAX_BODY = 1024 * 1024;
 export interface IngestHandlers {
   /** Returns hook output for Claude Code (only ever for Stop), or undefined to stay silent. */
   hook(payload: Record<string, unknown>): object | undefined | Promise<object | undefined>;
-  reloadPolicy(): Promise<void>;
+  reloadPolicy(focus?: string): Promise<void>;
   listSessions(): unknown;
   startSession(body: {
     projectPath: string;
@@ -102,7 +102,9 @@ export class IngestServer {
         return output ? send(200, output) : send(204);
       }
       if (req.method === 'POST' && url.pathname === '/policy/reload') {
-        await this.handlers.reloadPolicy();
+        const body = await readJson(req).catch(() => ({}) as Record<string, unknown>);
+        const focus = typeof body['focus'] === 'string' ? body['focus'].slice(0, 1024) : undefined;
+        await this.handlers.reloadPolicy(focus);
         return send(204);
       }
       if (req.method === 'GET' && url.pathname === '/status') {

@@ -257,6 +257,16 @@ export async function agentGateway(app: FastifyInstance, ctx: GatewayServices): 
             },
           });
           void deviceChanged(device.id);
+          if (msg.payload.focus)
+            await notifyUser(
+              ctx.bus,
+              device.userId,
+              createEvent(
+                'device.workspace.focus',
+                { path: msg.payload.focus.path },
+                { deviceId: device.id },
+              ),
+            );
           return ack(msg.eventId);
         }
 

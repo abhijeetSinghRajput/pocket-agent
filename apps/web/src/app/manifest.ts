@@ -5,7 +5,7 @@ export default function manifest(): MetadataRoute.Manifest {
     name: 'Pocket Agent',
     short_name: 'Pocket Agent',
     description: 'Your agents. Your machines. Your control.',
-    start_url: '/',
+    start_url: '/chat',
     scope: '/',
     display: 'standalone',
     background_color: '#ee6a1b',

@@ -122,7 +122,7 @@ test('without the PC owner’s consent, sessions they started cannot be instruct
   expect(hook(env, h['Stop']!)).toBe('');
 
   // New session: no project allowed on the PC yet → the dialog explains how to allow one.
-  await page.goto('/');
+  await page.goto('/chat');
   await page.getByRole('button', { name: 'New chat' }).click();
   await expect(page.getByTestId('no-projects')).toContainText('pocket-agent projects add');
 

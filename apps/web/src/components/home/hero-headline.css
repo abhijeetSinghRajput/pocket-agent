@@ -1,0 +1,142 @@
+/* The hero's headline: three lines, the first in full ink and the rest a step quieter, with
+   marker-highlighted words you can tap to swap. */
+
+.hh-title {
+  margin: 0 auto;
+  max-width: 980px;
+  font-size: clamp(34px, 6.2vw, 68px);
+  font-weight: 650;
+  letter-spacing: -0.035em;
+  line-height: 1.12;
+  text-wrap: balance;
+}
+
+.hh-line {
+  display: block;
+}
+
+/* Wide enough: each line stays one line whatever its words are swapped to */
+@media (min-width: 900px) {
+  .hh-line {
+    white-space: nowrap;
+  }
+}
+
+.hh-line--muted {
+  color: color-mix(in oklab, var(--foreground) 52%, var(--background));
+}
+
+/* The marker: a warm highlighter stroke behind the word, slightly uneven like a real one */
+.hh-swap {
+  position: relative;
+  display: inline-flex;
+  box-sizing: content-box;
+  height: 1.12em;
+  margin: 0 0.04em;
+  padding: 0 0.16em;
+  overflow: hidden;
+  border: 0;
+  border-radius: 0.32em 0.22em 0.36em 0.24em / 0.42em 0.3em 0.46em 0.34em;
+  background: color-mix(in oklab, var(--primary) 26%, #ffd27a);
+  color: var(--foreground);
+  font: inherit;
+  letter-spacing: inherit;
+  vertical-align: -0.1em;
+  cursor: pointer;
+  transition:
+    width 420ms var(--ease-move),
+    scale 160ms var(--ease-out);
+}
+
+:where(.dark) .hh-swap {
+  background: color-mix(in oklab, var(--primary) 55%, #000);
+}
+
+.hh-swap:hover {
+  scale: 1.03;
+}
+
+.hh-swap:active {
+  scale: 0.97;
+}
+
+.hh-swap:focus-visible {
+  outline: 3px solid var(--primary);
+  outline-offset: 3px;
+}
+
+.hh-swap__inner {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.14em;
+  white-space: nowrap;
+  animation: hh-rise 440ms var(--ease-out) both;
+}
+
+.hh-swap__icon {
+  width: 0.72em;
+  height: 0.72em;
+  flex: none;
+}
+
+/* The changed verb rolls in the same way, so the line reads as one sentence changing */
+.hh-verb {
+  display: inline-block;
+  animation: hh-rise 440ms var(--ease-out) both;
+}
+
+@keyframes hh-rise {
+  from {
+    opacity: 0;
+    translate: 0 0.6em;
+    filter: blur(3px);
+  }
+  to {
+    opacity: 1;
+    translate: 0 0;
+    filter: blur(0);
+  }
+}
+
+.hh-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 18px;
+  color: var(--muted-foreground);
+  font-size: 13px;
+}
+
+.hh-hint__arrow {
+  color: var(--primary);
+}
+
+/* The install pill: the command to copy and the way in, as one control */
+.hh-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 5px 5px 5px 18px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--card);
+  box-shadow: 0 1px 2px rgba(20, 15, 10, 0.05);
+}
+
+.hh-pill code {
+  overflow: hidden;
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hh-swap,
+  .hh-swap__inner,
+  .hh-verb {
+    transition: none;
+    animation: none;
+  }
+}

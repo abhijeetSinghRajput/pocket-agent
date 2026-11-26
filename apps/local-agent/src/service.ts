@@ -162,7 +162,7 @@ export class AgentService {
         })),
       startSession: async (b) => ({ externalSessionId: await this.managed.start(b) }),
       stopSession: (id) => this.managed.stop(id),
-      reloadPolicy: () => this.reloadPolicy(),
+      reloadPolicy: (focus) => this.reloadPolicy(focus),
       status: () => ({ connected: this.link.isOpen, version: opts.agentVersion }),
     });
 
@@ -266,11 +266,15 @@ export class AgentService {
   }
 
   /** Re-reads policy.json (after `pocket-agent projects …` / `instructions …`) and tells the backend. */
-  async reloadPolicy(): Promise<void> {
+  async reloadPolicy(focus?: string): Promise<void> {
     this.policy = await loadPolicy(this.opts.home);
     this.hooks.refreshCapabilities();
     this.managed.refreshCapabilities();
-    this.link.send(this.settingsEvent());
+    const settings = this.settingsEvent();
+    // The folder just added on the PC (or already allowed): the phone goes to it. Only once.
+    this.link.send(
+      focus ? { ...settings, payload: { ...settings.payload, focus: { path: focus } } } : settings,
+    );
   }
 
   async start(): Promise<void> {

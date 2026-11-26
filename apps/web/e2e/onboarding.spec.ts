@@ -6,7 +6,7 @@ test.use({ storageState: { cookies: [], origins: [] } });
 
 test('an account without a PC only sees the setup screen, with one command to run', async ({ page }) => {
   await registerViaApi(page.request, 'Onboarding E2E');
-  for (const path of ['/', '/devices', '/approvals']) {
+  for (const path of ['/chat', '/devices', '/approvals']) {
     await page.goto(path);
     await expect(page.getByRole('heading', { level: 1 })).toContainText('Let’s connect your PC.');
   }

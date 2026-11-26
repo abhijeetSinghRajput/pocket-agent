@@ -4,7 +4,7 @@ test.describe('mobile navigation', () => {
   test.skip(({ isMobile }) => !isMobile, 'mobile only');
 
   test('bottom nav reaches every section; the avatar opens the profile', async ({ page }) => {
-    await page.goto('/');
+    await page.goto('/chat');
     const nav = page.getByTestId('bottom-nav');
     await expect(nav).toBeVisible();
 
@@ -20,7 +20,7 @@ test.describe('mobile navigation', () => {
   });
 
   test('touch targets in the bottom nav are at least 44px tall', async ({ page }) => {
-    await page.goto('/');
+    await page.goto('/chat');
     await expect(page.getByTestId('bottom-nav')).toBeVisible(); // shell renders after the session check
     const heights = await page
       .getByTestId('bottom-nav')
@@ -48,7 +48,7 @@ test.describe('mobile navigation', () => {
 
 test('desktop shows the sidebar instead of the bottom nav', async ({ page, isMobile }) => {
   test.skip(isMobile, 'desktop only');
-  await page.goto('/');
+  await page.goto('/chat');
   await expect(page.getByTestId('bottom-nav')).toBeHidden();
   await expect(page.getByRole('navigation', { name: 'Main' }).filter({ visible: true })).toHaveCount(1);
 });

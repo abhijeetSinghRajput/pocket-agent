@@ -18,7 +18,7 @@ describe('safeNextPath (open-redirect guard)', () => {
       '/login',
       '/register?x',
     ]) {
-      expect(safeNextPath(bad)).toBe('/');
+      expect(safeNextPath(bad)).toBe('/chat');
     }
   });
 });

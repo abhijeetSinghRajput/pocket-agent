@@ -1,0 +1,152 @@
+/* The FAQ as a conversation. Motion: the question settles into a sent bubble (its width eases to
+   its words where the browser can animate to fit-content, its tail corner squares off, its edge
+   turns orange) while the answer's room opens and the reply rises in from its avatar's corner. */
+
+.faq-chat {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  interpolate-size: allow-keywords;
+}
+
+.faq-chat__q-wrap {
+  margin: 0;
+  font: inherit;
+}
+
+.faq-chat__q {
+  display: block;
+  width: 100%;
+  padding: 18px 28px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--primary) 9%, var(--card));
+  color: var(--foreground);
+  font-size: 17px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  line-height: 1.35;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    width 520ms var(--ease-move),
+    border-radius 420ms var(--ease-move),
+    border-color 240ms ease,
+    background-color 240ms ease;
+}
+
+.faq-chat__q:hover {
+  background: color-mix(in oklab, var(--primary) 15%, var(--card));
+}
+
+.faq-chat__q:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 3px;
+}
+
+.faq-chat__item[data-open] .faq-chat__q {
+  width: fit-content;
+  max-width: 100%;
+  border-color: var(--primary);
+  border-radius: 32px 32px 32px 6px;
+}
+
+/* The answer's room opens with its height, so the questions below move with it */
+.faq-chat__fold {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 520ms var(--ease-move);
+}
+
+.faq-chat__item[data-open] .faq-chat__fold {
+  grid-template-rows: 1fr;
+}
+
+.faq-chat__fold-inner {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.faq-chat__reply {
+  position: relative;
+  display: flex;
+  justify-content: flex-end;
+  padding: 12px 64px 4px 12%;
+  opacity: 0;
+  transform: translateY(14px) scale(0.96);
+  transform-origin: bottom right;
+  transition:
+    opacity 260ms ease,
+    transform 420ms var(--ease-out);
+}
+
+.faq-chat__item[data-open] .faq-chat__reply {
+  opacity: 1;
+  transform: none;
+  transition-delay: 140ms;
+}
+
+.faq-chat__a {
+  margin: 0;
+  padding: 22px 28px;
+  border: 1px solid var(--border);
+  border-radius: 32px 32px 6px 32px;
+  background: var(--card);
+  color: var(--muted-foreground);
+  font-size: 16px;
+  line-height: 1.55;
+  text-wrap: pretty;
+}
+
+.faq-chat__avatar {
+  position: absolute;
+  right: 0;
+  bottom: 4px;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  transform: scale(0.4);
+  opacity: 0;
+  transition:
+    transform 460ms cubic-bezier(0.34, 1.56, 0.64, 1),
+    opacity 200ms ease;
+}
+
+.faq-chat__item[data-open] .faq-chat__avatar {
+  transform: scale(1);
+  opacity: 1;
+  transition-delay: 260ms;
+}
+
+@media (max-width: 640px) {
+  .faq-chat__q {
+    padding: 15px 20px;
+    font-size: 15.5px;
+  }
+
+  .faq-chat__reply {
+    padding: 10px 52px 4px 6%;
+  }
+
+  .faq-chat__a {
+    padding: 16px 20px;
+    font-size: 15px;
+  }
+
+  .faq-chat__avatar {
+    width: 40px;
+    height: 40px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .faq-chat__q,
+  .faq-chat__fold,
+  .faq-chat__reply,
+  .faq-chat__avatar {
+    transition: none;
+  }
+}

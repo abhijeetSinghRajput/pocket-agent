@@ -16,13 +16,16 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
 
-  // Signed out from inside the app: plain sign-in page. Arriving signed out: come back here afterwards.
+  // Signed out from inside the app, or at the chats home: plain sign-in page. Arriving signed out
+  // anywhere else: sign in, then come back here.
   const wasSignedIn = useRef(false);
   useEffect(() => {
     if (state.status === 'authenticated') wasSignedIn.current = true;
     if (state.status === 'unauthenticated') {
       router.replace(
-        pathname === '/' || wasSignedIn.current ? '/login' : `/login?next=${encodeURIComponent(pathname)}`,
+        pathname === '/chat' || wasSignedIn.current
+          ? '/login'
+          : `/login?next=${encodeURIComponent(pathname)}`,
       );
     }
   }, [state.status, pathname, router]);

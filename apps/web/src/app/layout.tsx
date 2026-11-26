@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
 import type { ReactNode } from 'react';
 import { ThemeProvider } from '@/components/theme';
+import { SoundEffects } from '@/components/ui/sound';
 import { AuthProvider } from '@/lib/auth';
 import './globals.css';
 
@@ -41,7 +42,10 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <html lang="en" suppressHydrationWarning className={`${sans.variable} ${mono.variable}`}>
       <body>
         <ThemeProvider>
-          <AuthProvider>{children}</AuthProvider>
+          {/* Every press answers with a short sound (Kobra); muted from the speaker button */}
+          <SoundEffects>
+            <AuthProvider>{children}</AuthProvider>
+          </SoundEffects>
         </ThemeProvider>
       </body>
     </html>

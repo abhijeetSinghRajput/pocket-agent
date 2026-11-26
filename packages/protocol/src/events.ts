@@ -211,6 +211,11 @@ export const DeviceSettings = defineEvent(
     usage: ClaudeUsage.nullable().optional(),
     /** The PC's own setup checks, for the app's health check (PCs from 2.0.0). */
     health: DeviceHealth.optional(),
+    /**
+     * A folder the owner just added (or that was already allowed) with `pocket-agent projects add`:
+     * an open "Add a workspace" on the phone goes to it. Sent once, with that change (PCs 2.4.2+).
+     */
+    focus: z.object({ path: z.string().max(1024) }).optional(),
   }),
 );
 /** The PC's answer to `folder.list`: the folders directly inside the one asked about. */
@@ -429,6 +434,8 @@ export const ApprovalUpdated = defineEvent(
   'approval.updated',
   z.object({ approvalId: z.uuid(), status: ApprovalStatus }),
 );
+/** A folder on a PC the phone should show (see `device.settings` `focus`). Not stored. */
+export const WorkspaceFocus = defineEvent('device.workspace.focus', z.object({ path: z.string().max(1024) }));
 export const NotificationCreated = defineEvent(
   'notification.created',
   z.object({ notificationId: z.uuid() }),
@@ -442,5 +449,6 @@ export const BackendToWeb = z.discriminatedUnion('eventType', [
   ApprovalCreated,
   ApprovalUpdated,
   NotificationCreated,
+  WorkspaceFocus,
 ]);
 export type BackendToWeb = z.infer<typeof BackendToWeb>;

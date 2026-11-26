@@ -1008,9 +1008,9 @@ export function buildCli(): Command {
 
   // ── What remote users may do on this PC (enforced here) ─────────────────────
   /** Tells a running agent to pick up policy changes; fine if it isn't running. */
-  const reloadAgent = async () => {
+  const reloadAgent = async (focus?: string) => {
     try {
-      await callLocalAgent(agentHome(), 'POST', '/policy/reload');
+      await callLocalAgent(agentHome(), 'POST', '/policy/reload', focus ? { focus } : undefined);
       console.log('The running agent picked up the change.');
     } catch {
       console.log('Takes effect the next time the agent starts.');
@@ -1031,12 +1031,17 @@ export function buildCli(): Command {
       if (!st?.isDirectory()) fail(`Not a folder: ${full}`);
       const home = agentHome();
       const policy = await loadPolicy(home);
-      if (isAllowedProject(policy, full)) return console.log(`Already allowed: ${full}`);
+      if (isAllowedProject(policy, full)) {
+        console.log(`Already allowed: ${full}`);
+        // An open "Add a workspace" on the phone goes to it.
+        await callLocalAgent(home, 'POST', '/policy/reload', { focus: full }).catch(() => undefined);
+        return;
+      }
       if (policy.projects.length >= 50) fail('At most 50 projects.');
       policy.projects.push({ name: (opts.name ?? path.basename(full)).slice(0, 200), path: full });
       await savePolicy(home, policy);
       console.log(`Allowed: ${full}`);
-      await reloadAgent();
+      await reloadAgent(full);
     });
 
   projects

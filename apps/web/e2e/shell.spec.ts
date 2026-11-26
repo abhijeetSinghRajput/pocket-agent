@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
 const ROUTES = [
-  { path: '/', heading: 'Chats' },
+  { path: '/chat', heading: 'Chats' },
   { path: '/agents', heading: 'Chats' }, // old link: redirects home
   { path: '/approvals', heading: 'Approvals' },
   { path: '/devices', heading: 'Devices' },
@@ -47,7 +47,7 @@ test('the profile shows real backend health', async ({ page }) => {
 
 test('theme toggle switches between light and dark and persists', async ({ page }) => {
   await page.emulateMedia({ colorScheme: 'light' });
-  await page.goto('/');
+  await page.goto('/chat');
   const html = page.locator('html');
   await expect(html).not.toHaveClass(/dark/);
   await page.getByTestId('theme-toggle').filter({ visible: true }).click();
@@ -58,7 +58,7 @@ test('theme toggle switches between light and dark and persists', async ({ page 
 
 test('pressing D toggles the theme, but not while typing', async ({ page }) => {
   await page.emulateMedia({ colorScheme: 'light' });
-  await page.goto('/');
+  await page.goto('/chat');
   const html = page.locator('html');
   await expect(page.getByRole('heading', { level: 1, name: 'Chats' })).toBeVisible();
   await expect(html).not.toHaveClass(/dark/);

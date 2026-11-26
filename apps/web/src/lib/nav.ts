@@ -9,7 +9,7 @@ export interface NavItem {
 
 /** Chats is home. Settings, notifications and sign-out live in the profile menu. */
 export const NAV_ITEMS: readonly NavItem[] = [
-  { href: '/', label: 'Chats', icon: ChatIcon },
+  { href: '/chat', label: 'Chats', icon: ChatIcon },
   { href: '/approvals', label: 'Approvals', icon: ShieldCheckIcon },
   { href: '/devices', label: 'Devices', icon: LaptopIcon },
 ];
@@ -21,10 +21,10 @@ export function openChatId(pathname: string): string | null {
 
 /** The chat list (`/`) or an open chat (`/agents/<id>`). */
 export function isChatsRoute(pathname: string): boolean {
-  return pathname === '/' || pathname === '/agents' || pathname.startsWith('/agents/');
+  return pathname === '/chat' || pathname === '/agents' || pathname.startsWith('/agents/');
 }
 
 export function isActive(pathname: string, href: string): boolean {
-  if (href === '/') return isChatsRoute(pathname);
+  if (href === '/chat') return isChatsRoute(pathname);
   return pathname === href || pathname.startsWith(`${href}/`);
 }

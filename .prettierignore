@@ -17,3 +17,4 @@ apps/mobile/ios/
 apps/mobile/.expo/
 apps/mobile/modules/*/android/build/
 apps/mobile/expo-env.d.ts
+apps/web/src/components/home/kit/

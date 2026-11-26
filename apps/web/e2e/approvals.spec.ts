@@ -171,7 +171,7 @@ test('in Away mode, Claude’s question in a session started in the editor is an
     tool_input: { questions },
   });
 
-  await page.goto('/');
+  await page.goto('/chat');
   // On any other screen the question pops up as a dialog; "Open chat" goes to the conversation.
   await page.getByRole('link', { name: 'Open chat' }).click();
   const sheet = page.getByTestId('question-sheet');

@@ -3,16 +3,21 @@ import { Slot } from 'radix-ui';
 import type { ComponentProps } from 'react';
 import { cn } from '@/lib/utils';
 
+/**
+ * Raised, tactile buttons: the surface is drawn on `::before` (a soft top-lit gradient, an inked
+ * edge, a highlight on the top lip and a short drop shadow), so a press squeezes only the surface
+ * while the label stays crisp. The look lives in globals.css (`.raise`, `.raise-*`).
+ */
 export const buttonVariants = cva(
-  'inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-[color,background-color,box-shadow,transform] outline-none select-none focus-visible:ring-[3px] focus-visible:ring-ring/50 active:scale-[0.97] disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0',
+  'raise relative isolate inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-lg text-sm font-medium outline-none select-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0',
   {
     variants: {
       variant: {
-        default: 'bg-primary text-primary-foreground shadow-xs hover:bg-primary/90',
-        secondary: 'bg-secondary text-secondary-foreground hover:bg-secondary/80',
-        outline: 'border bg-background shadow-xs hover:bg-accent hover:text-accent-foreground',
-        ghost: 'hover:bg-accent hover:text-accent-foreground',
-        destructive: 'bg-destructive text-white shadow-xs hover:bg-destructive/90',
+        default: 'raise-primary text-primary-foreground',
+        secondary: 'raise-neutral text-secondary-foreground',
+        outline: 'raise-neutral text-foreground',
+        ghost: 'raise-ghost hover:text-accent-foreground',
+        destructive: 'raise-danger text-white',
       },
       size: {
         default: 'h-10 px-4 sm:h-9',
@@ -33,5 +38,12 @@ export function Button({
   ...props
 }: ComponentProps<'button'> & VariantProps<typeof buttonVariants> & { asChild?: boolean }) {
   const Comp = asChild ? Slot.Root : 'button';
-  return <Comp data-slot="button" className={cn(buttonVariants({ variant, size, className }))} {...props} />;
+  return (
+    <Comp
+      data-slot="button"
+      data-variant={variant ?? 'default'}
+      className={cn(buttonVariants({ variant, size, className }))}
+      {...props}
+    />
+  );
 }

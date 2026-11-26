@@ -106,5 +106,5 @@ self.addEventListener('notificationclick', (event) => {
     );
     return;
   }
-  event.waitUntil(Promise.all([read, openApp(data.link || '/')]));
+  event.waitUntil(Promise.all([read, openApp(data.link || '/chat')]));
 });

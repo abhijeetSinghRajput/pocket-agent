@@ -8,6 +8,7 @@ import {
   isBusy,
   modelLock,
   QUICK_REPLIES,
+  type QuickReply,
   resumeBlocker,
 } from '@pocket-agent/core';
 import {
@@ -236,8 +237,11 @@ export function Composer({
   submit,
   onSent,
   onInfo,
+  replies,
 }: {
   session: AgentSessionDto;
+  /** One-tap replies that fit the conversation (the usual ones when not given). */
+  replies?: QuickReply[];
   /** A message is on its way: the chat goes to its newest message, where it will show up. */
   onSending?: () => void;
   /** Sends a message through the chat's outbox (shown at once, kept to retry if it fails). */
@@ -439,12 +443,12 @@ export function Composer({
             contentContainerStyle={{ gap: 8 }}
             testID="quick-replies"
           >
-            {QUICK_REPLIES.map((r) => (
+            {(replies?.length ? replies : QUICK_REPLIES.map((r) => ({ label: r, message: r }))).map((r) => (
               <Press
-                key={r}
+                key={r.label}
                 accessibilityRole="button"
-                accessibilityLabel={`Send: ${r}`}
-                onPress={() => send(r)}
+                accessibilityLabel={`Send: ${r.message}`}
+                onPress={() => send(r.message)}
                 scale={0.96}
                 style={{
                   borderRadius: radius.full,
@@ -456,7 +460,7 @@ export function Composer({
                 }}
               >
                 <T variant="smallMedium" tone="primary">
-                  {r}
+                  {r.label}
                 </T>
               </Press>
             ))}

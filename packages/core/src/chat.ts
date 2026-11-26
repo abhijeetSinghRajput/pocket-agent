@@ -459,8 +459,8 @@ export function readAnswer(
 }
 
 /**
- * One-tap replies offered when Claude has finished and waits for you (the phone shows them above
- * an empty message box). Each is sent as it reads.
+ * The usual one-tap replies, when there is nothing in the conversation to suggest better ones (see
+ * `quickReplies`). Each is sent as it reads.
  */
 export const QUICK_REPLIES = [
   'Continue',
@@ -468,6 +468,106 @@ export const QUICK_REPLIES = [
   'Commit this',
   'Explain what you changed',
 ] as const;
+
+/** A one-tap reply: what the chip says, and the message it sends. */
+export type QuickReply = { label: string; message: string };
+
+const MAX_REPLIES = 4;
+const MAX_LABEL = 30;
+
+// Words that show a reply is written in Hinglish (Hindi in Latin letters), so the chips answer in kind.
+const HINGLISH =
+  /\b(hai|hain|kar|karo|karke|kardo|kar do|dun|du|dunga|bolo|batao|chaho|chahiye|nahi|abhi|aur|kya|ke|ki|ko|mein|tum|tumhare|ho|gaya|raha|rahe)\b/gi;
+
+// Claude offering to do something next.
+const OFFER_EN =
+  /\b(?:should i|shall i|do you want me to|would you like me to|want me to|i can also|i could also|i can|let me know if you(?:'d| would)? (?:like|want) me to)\s+([^?.!\n]{3,80})/i;
+const OFFER_HI =
+  /\b(?:bolo|batao|chaho|chahiye|kaho)\s+to\b|\b(?:kar|bhej|chala|bana|laga|hata|daal|de)\s+(?:dun|du|doon|dunga|dein|den)\b/i;
+
+const clip = (s: string, n = MAX_LABEL) => (s.length > n ? `${s.slice(0, n - 1).trimEnd()}…` : s);
+const capital = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
+/** The end of a reply, where the offer or the question is: its last paragraph or two. */
+function tailOf(text: string): string {
+  const parts = text
+    .trim()
+    .split(/\n\s*\n/)
+    .map((p) => p.trim())
+    .filter(Boolean);
+  const last = parts.at(-1) ?? '';
+  return last.length < 120 && parts.length > 1 ? `${parts.at(-2)}\n${last}` : last;
+}
+
+/** Numbered choices near the end ("1. …", "2) …"): one chip each. */
+function choices(text: string): QuickReply[] {
+  const lines = text.trim().split('\n').slice(-14);
+  const found: { n: string; text: string }[] = [];
+  for (const line of lines) {
+    const m = /^\s*(?:\*\*)?(\d{1,2})[.)](?:\*\*)?\s+(.+)$/.exec(line);
+    if (m) found.push({ n: m[1]!, text: m[2]!.replace(/[*_`]/g, '').trim() });
+  }
+  if (found.length < 2 || found.length > 5) return [];
+  return found.map(({ n, text }) => ({
+    label: clip(`${n}. ${text.split(/[:—–(]| - /)[0]!.trim()}`),
+    message: `Option ${n}: ${text}`,
+  }));
+}
+
+/**
+ * The replies to offer when Claude has finished and waits for you, from what it just said and did:
+ * an answer to its offer ("Want me to commit?" → "Yes, commit"), its numbered choices, then next
+ * steps that fit the turn (it changed files: test, commit; a step failed: fix it). With nothing to
+ * go on, the usual four.
+ */
+export function quickReplies(items: readonly ChatItem[]): QuickReply[] {
+  let reply = '';
+  let summary: Extract<ChatItem, { kind: 'summary' }> | undefined;
+  for (let i = items.length - 1; i >= 0; i--) {
+    const it = items[i]!;
+    if (it.kind === 'user') break;
+    if (it.kind === 'summary' && !summary) summary = it;
+    if (it.kind === 'assistant' && !reply) reply = it.text;
+  }
+
+  const out: QuickReply[] = [];
+  const add = (label: string, message = label) => {
+    if (out.length >= MAX_REPLIES) return;
+    if (out.some((r) => r.label.toLowerCase() === label.toLowerCase())) return;
+    out.push({ label, message });
+  };
+
+  if (reply) {
+    const tail = tailOf(reply);
+    const hinglish = (tail.match(HINGLISH)?.length ?? 0) >= 3;
+    const offer = OFFER_EN.exec(tail);
+    const asks = /\?\s*$/m.test(tail) || !!offer || OFFER_HI.test(tail);
+    const options = choices(reply);
+    if (options.length) for (const o of options) add(o.label, o.message);
+    else if (asks) {
+      if (hinglish) {
+        add('Haan, kar do');
+        add('Nahi, rehne do');
+      } else {
+        const action = offer?.[1]?.replace(/\s+(?:for you|now|too|as well)$/i, '').trim();
+        add(action ? clip(`Yes, ${action}`) : 'Yes, go ahead', 'Yes, go ahead');
+        add('No, thanks');
+      }
+    }
+  }
+
+  if (summary?.failed) add('Fix the failures', 'Fix what failed.');
+  if (summary?.files.length) {
+    add('Run the tests');
+    add('Commit this');
+    add('Explain what you changed');
+  } else if (reply) {
+    add('Continue');
+    add('Explain more', 'Explain that in more detail.');
+  }
+  if (!out.length) for (const r of QUICK_REPLIES) add(r);
+  return out.map((r) => ({ ...r, label: capital(r.label) }));
+}
 
 /** A finished turn in a few words: "2m 14s · 3 files changed · 5 commands · 1 failed". */
 export function summaryParts(s: Extract<ChatItem, { kind: 'summary' }>): string[] {

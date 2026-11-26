@@ -1,4 +1,4 @@
-import { buildChat, chatMatches, isBusy, pendingQuestion, timeAgo } from '@pocket-agent/core';
+import { buildChat, chatMatches, isBusy, pendingQuestion, quickReplies, timeAgo } from '@pocket-agent/core';
 import { CommandResponse, type AgentSessionDto, type NotificationPage } from '@pocket-agent/protocol';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
@@ -284,6 +284,8 @@ export function ChatScreen({ id }: { id: string }) {
     items.some((i) => (i.kind === 'assistant' || i.kind === 'tool') && Date.parse(i.at) >= sentAt)
   )
     setSentAt(null);
+  // One-tap replies that fit what Claude just said and did.
+  const replies = useMemo(() => quickReplies(items), [items]);
 
   /**
    * Edit a message Claude hasn't started on: it is taken back (it leaves the chat) and its text
@@ -542,6 +544,7 @@ export function ChatScreen({ id }: { id: string }) {
                 submit={outbox.send}
                 onSent={changed}
                 onInfo={() => setInfoOpen(true)}
+                replies={replies}
               />
             </Animated.View>
           </View>

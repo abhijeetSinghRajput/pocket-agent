@@ -96,8 +96,12 @@ export const PROVIDERS_AGENT_VERSION = '2.5.0';
  */
 export const ANTIGRAVITY_AGENT_VERSION = '2.8.0';
 
+/** First Local Agent version that knows OpenCode (its chats, approvals, continuing them). */
+export const OPENCODE_AGENT_VERSION = '2.11.0';
+
 /** First Local Agent version that can start a chat with this agent (Claude Code: any). */
 export function providerAgentVersion(provider: string): string {
+  if (provider === 'opencode') return OPENCODE_AGENT_VERSION;
   return provider === 'antigravity'
     ? ANTIGRAVITY_AGENT_VERSION
     : provider === 'codex'
@@ -113,6 +117,7 @@ export const ANTIGRAVITY_RESUME_AGENT_VERSION = '2.9.0';
 
 /** First Local Agent version that continues an ended chat of this agent. */
 export function resumeAgentVersion(provider: string): string {
+  if (provider === 'opencode') return OPENCODE_AGENT_VERSION;
   return provider === 'antigravity'
     ? ANTIGRAVITY_RESUME_AGENT_VERSION
     : provider === 'codex'

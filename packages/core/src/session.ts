@@ -56,7 +56,7 @@ export function deliveryHint(s: AgentSessionDto): string {
 export function resumeBlocker(s: AgentSessionDto, device: DeviceDto | undefined): string | null {
   const ended = 'This session has ended.';
   if (!device || device.status === 'Revoked') return ended;
-  if (s.provider === 'codex' || s.provider === 'antigravity') {
+  if (s.provider === 'codex' || s.provider === 'antigravity' || s.provider === 'opencode') {
     // Continued by the PC's own agent (a PC agent that knows how), still there and signed in.
     const name = agentProduct(s.provider);
     if (versionBelow(device.agentVersion, resumeAgentVersion(s.provider)))
@@ -64,7 +64,7 @@ export function resumeBlocker(s: AgentSessionDto, device: DeviceDto | undefined)
     const agent = device.agents.find((a) => a.provider === s.provider);
     if (!agent) return `${ended} ${name} isn’t installed on this PC any more.`;
     if (!agent.signedIn)
-      return `${ended} To continue it, sign in to ${name} on the PC (\`${s.provider === 'codex' ? 'codex login' : 'agy'}\`).`;
+      return `${ended} To continue it, sign in to ${name} on the PC (\`${signInCommand(s.provider)}\`).`;
     return null;
   }
   if (s.provider !== 'claude-code') return ended;
@@ -103,11 +103,22 @@ export const CODEX_MODES: readonly { id: TurnMode; name: string; description: st
   { id: 'plan', name: MODE_NAME.plan, description: 'Reads and plans, asks before any change' },
 ];
 
-/** The modes an agent offers: Claude Code's, or Codex's own. */
+/** OpenCode's two agents: Build (its default, as its permission settings allow) and Plan. */
+export const OPENCODE_MODES: readonly { id: TurnMode; name: string; description: string }[] = [
+  { id: 'auto', name: 'Build', description: 'Works as its permission settings allow' },
+  { id: 'plan', name: MODE_NAME.plan, description: 'Plans, changes nothing' },
+];
+
+/** What signs in to an agent on the PC. */
+export function signInCommand(provider: string): string {
+  return provider === 'codex' ? 'codex login' : provider === 'opencode' ? 'opencode auth login' : 'agy';
+}
+
+/** The modes an agent offers: Claude Code's, or Codex's and OpenCode's own. */
 export function modesFor(
   provider: string | null | undefined,
 ): readonly { id: TurnMode; name: string; description: string }[] {
-  return provider === 'codex' ? CODEX_MODES : MODES;
+  return provider === 'codex' ? CODEX_MODES : provider === 'opencode' ? OPENCODE_MODES : MODES;
 }
 
 /** How much Claude thinks before answering. */

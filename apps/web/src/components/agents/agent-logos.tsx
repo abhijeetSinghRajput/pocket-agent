@@ -8,7 +8,13 @@ import { cn } from '@/lib/utils';
  */
 export const AGENT_LOGOS: Record<
   ProviderId,
-  { title: string; hex: string; path: string; /** top, middle, bottom */ gradient?: [string, string, string] }
+  {
+    title: string;
+    hex: string;
+    path: string;
+    /** top, middle, bottom */ gradient?: [string, string, string];
+    /** Cut-outs (drawn even-odd). */ evenOdd?: boolean;
+  }
 > = {
   'claude-code': {
     title: 'Claude',
@@ -32,6 +38,14 @@ export const AGENT_LOGOS: Record<
     gradient: ['#FBBC04', '#00B95C', '#3186FF'],
     path: 'M21.751 22.607c1.34 1.005 3.35.335 1.508-1.508C17.73 15.74 18.904 1 12.037 1 5.17 1 6.342 15.74.815 21.1c-2.01 2.009.167 2.511 1.507 1.506 5.192-3.517 4.857-9.714 9.715-9.714 4.857 0 4.522 6.197 9.714 9.715z',
   },
+  // OpenCode's own mark (same shapes as apps/web/public/logos/agents/opencode.svg, SVGL), one
+  // colour: the frame, and the block in its lower half.
+  opencode: {
+    title: 'OpenCode',
+    hex: '#64748B',
+    path: 'M18 19.5H6V4.5H18V19.5ZM15 7.5H9V16.5H15V7.5ZM15 10.5V16.5H9V10.5H15Z',
+    evenOdd: true,
+  },
 };
 
 export function AgentLogo({ provider, className }: { provider: ProviderId; className?: string }) {
@@ -51,7 +65,7 @@ export function AgentLogo({ provider, className }: { provider: ProviderId; class
       <path
         d={logo.path}
         fill={logo.gradient ? `url(#${id})` : logo.hex}
-        fillRule={logo.gradient ? 'evenodd' : 'nonzero'}
+        fillRule={logo.gradient || logo.evenOdd ? 'evenodd' : 'nonzero'}
       />
     </svg>
   );

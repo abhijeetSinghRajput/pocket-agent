@@ -485,6 +485,35 @@ describe('chats with another coding agent (Codex)', () => {
     s.agent.ws.close();
   });
 
+  it('an OpenCode chat reaches only PCs that know it (2.11.0), with its "::" model ids', async () => {
+    const OC = {
+      provider: 'opencode' as const,
+      version: '1.19.6',
+      signedIn: true,
+      models: [{ id: 'opencode::big-pickle', name: 'Big Pickle (OpenCode)', description: '' }],
+    };
+    const s = await codexPc('2.10.0');
+    await t.ctx.prisma.device.update({ where: { id: s.deviceId }, data: { agents: [OC] } });
+    const start = () =>
+      post(`/devices/${s.deviceId}/sessions`, s.cookie, {
+        provider: 'opencode',
+        projectPath: String.raw`C:\work\api`,
+        text: 'Hi',
+        model: 'opencode::big-pickle',
+        idempotencyKey: randomUUID(),
+      });
+    expect((await start()).json().error).toBe('agent_outdated');
+    await t.ctx.prisma.device.update({ where: { id: s.deviceId }, data: { agentVersion: '2.11.0' } });
+    expect((await start()).statusCode).toBe(201);
+    const frame = await s.agent.next(
+      (m) =>
+        m['eventType'] === 'command.execute' &&
+        (m['payload'] as { commandType: string }).commandType === 'session.start',
+    );
+    expect(frame['payload']).toMatchObject({ provider: 'opencode', model: 'opencode::big-pickle' });
+    s.agent.ws.close();
+  });
+
   it('a Claude Code chat says nothing about the agent (older PCs read it as always)', async () => {
     const s = await codexPc('2.5.0');
     const res = await post(`/devices/${s.deviceId}/sessions`, s.cookie, {

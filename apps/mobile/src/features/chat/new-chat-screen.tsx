@@ -5,6 +5,7 @@ import {
   commandError,
   NEW_CHAT_MODE,
   modesFor,
+  signInCommand,
   newChatModel,
   waitForSession,
 } from '@pocket-agent/core';
@@ -98,7 +99,7 @@ export function NewChatScreen({ deviceId, path, name }: { deviceId: string; path
   const isCodex = agent === 'codex';
   // Codex takes a mode on PCs from 2.7.0; Antigravity always (its PC agent is newer).
   const modesOk = !isCodex || !versionBelow(device?.agentVersion ?? '0', CODEX_MODES_AGENT_VERSION);
-  const signIn = isCodex ? 'codex login' : 'agy';
+  const signIn = signInCommand(agent);
   // The first message once sent: shown as sent while the PC starts Claude.
   const [command, setCommand] = useState<CommandDto | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -299,7 +300,7 @@ export function NewChatScreen({ deviceId, path, name }: { deviceId: string; path
                 {agentProduct(agent)} starts on {device?.name ?? 'your PC'} when you send your first message.{' '}
                 {agent === 'claude-code'
                   ? 'Anything that needs permission asks you here.'
-                  : agent === 'antigravity'
+                  : agent !== 'codex'
                     ? device?.remoteApprovalEnabled
                       ? 'It keeps its own permission settings; anything it asks before doing comes to you here.'
                       : 'It keeps its own permission settings; anything it asks before doing is declined, because remote approval is off on this PC.'

@@ -76,7 +76,32 @@ interface Chat {
   mode?: TurnMode;
 }
 
-export class AntigravitySessions implements ManagedRuntime {
+/** What differs between the coding agents spoken to over ACP (Antigravity, OpenCode). */
+export interface AcpProfile {
+  provider: 'antigravity' | 'opencode';
+  /** In a sentence: "Antigravity asked…". */
+  name: string;
+  /** The request that switches a session's mode (null: this mode isn't offered). */
+  mode: (sessionId: string, mode: TurnMode) => { method: string; params: Json } | null;
+  /** The app's model id → the agent's own, and back (ids the protocol can't carry are encoded). */
+  toAgentModel?: (id: string) => string;
+  toAppModel?: (id: string) => string;
+}
+
+export const ANTIGRAVITY_PROFILE: AcpProfile = {
+  provider: 'antigravity',
+  name: 'Antigravity',
+  mode: (sessionId, mode) => ({
+    method: 'session/set_mode',
+    params: { sessionId, modeId: ANTIGRAVITY_MODE[mode] },
+  }),
+};
+
+/**
+ * Chats with an agent over ACP (one process for all its chats). Antigravity's are the first;
+ * OpenCode's use the same, with its own profile.
+ */
+export class AcpSessions implements ManagedRuntime {
   private readonly chats = new Map<string, Chat>();
   private client: Promise<AppServerClient> | null = null;
 
@@ -88,6 +113,7 @@ export class AntigravitySessions implements ManagedRuntime {
     private readonly ack: CommandAck = () => undefined,
     private readonly now: () => number = Date.now,
     private readonly approvals?: ManagedApprovalOptions,
+    private readonly profile: AcpProfile = ANTIGRAVITY_PROFILE,
   ) {}
 
   /** Remote approval only when the PC owner turned it on. */
@@ -130,7 +156,7 @@ export class AntigravitySessions implements ManagedRuntime {
       },
     );
     const id = created.sessionId ?? input.resumeSessionId;
-    if (!id) throw new Error('Antigravity did not start a session');
+    if (!id) throw new Error(`${this.profile.name} did not start a session`);
     const c: Chat = {
       id,
       inbox: [],
@@ -144,11 +170,12 @@ export class AntigravitySessions implements ManagedRuntime {
     };
     this.chats.set(id, c);
     this.ours.add(id);
-    const model = input.model ?? created.models?.currentModelId;
+    const current = created.models?.currentModelId;
+    const model = input.model ?? (current ? (this.profile.toAppModel?.(current) ?? current) : undefined);
     this.registry.announce(
       {
         externalSessionId: id,
-        provider: 'antigravity',
+        provider: this.profile.provider,
         mode: 'managed',
         projectPath,
         status: 'Starting',
@@ -198,7 +225,7 @@ export class AntigravitySessions implements ManagedRuntime {
       await this.apply(c, change.model, change.permissionMode);
       return true;
     } catch (err) {
-      this.log('warn', `antigravity configure ${id}: ${(err as Error).message}`);
+      this.log('warn', `${this.profile.provider} configure ${id}: ${(err as Error).message}`);
       return false;
     }
   }
@@ -282,12 +309,16 @@ export class AntigravitySessions implements ManagedRuntime {
   private async apply(c: Chat, model: string | undefined, mode: TurnMode | undefined): Promise<void> {
     const client = await this.ensureClient();
     if (model && model !== c.model) {
-      await client.request('session/set_model', { sessionId: c.id, modelId: model });
+      await client.request('session/set_model', {
+        sessionId: c.id,
+        modelId: this.profile.toAgentModel?.(model) ?? model,
+      });
       c.model = model;
       this.registry.setMetadata(c.id, { model });
     }
     if (mode && mode !== c.mode) {
-      await client.request('session/set_mode', { sessionId: c.id, modeId: ANTIGRAVITY_MODE[mode] });
+      const change = this.profile.mode(c.id, mode);
+      if (change) await client.request(change.method, change.params);
       c.mode = mode;
     }
   }
@@ -406,6 +437,8 @@ export class AntigravitySessions implements ManagedRuntime {
     if (!id) return;
     const status = String(u['status'] ?? '');
     let shown = c.tools.get(id);
+    // Announced before its details (OpenCode first says only "bash"): shown once it runs.
+    if (!shown && status === 'pending') return;
     if (!shown) {
       this.flushText(c);
       shown = describeTool(u);
@@ -463,7 +496,7 @@ export class AntigravitySessions implements ManagedRuntime {
       this.registry.event(c.id, 'agent.permission.resolved', { requestId, outcome: 'auto_denied' });
       this.registry.event(c.id, 'agent.output', {
         role: 'system',
-        text: `Antigravity asked before it would use ${what.toolName} (${truncate(target, 300)}). It was declined: remote approval is turned off on this PC.`,
+        text: `${this.profile.name} asked before it would use ${what.toolName} (${truncate(target, 300)}). It was declined: remote approval is turned off on this PC.`,
       });
       return antigravityAnswer(options, null);
     }
@@ -477,7 +510,7 @@ export class AntigravitySessions implements ManagedRuntime {
       if (outcome === 'timeout')
         this.registry.event(c.id, 'agent.output', {
           role: 'system',
-          text: `Antigravity asked before it would use ${what.toolName} (${truncate(target, 300)}). Nobody decided in time, so it was declined.`,
+          text: `${this.profile.name} asked before it would use ${what.toolName} (${truncate(target, 300)}). Nobody decided in time, so it was declined.`,
         });
     } else {
       this.registry.event(c.id, 'agent.permission.resolved', { requestId, outcome: 'remote' });
@@ -528,8 +561,9 @@ export function describeTool(u: Json): { toolName: string; input: string } {
   const raw = ((u['rawInput'] ?? u['args'] ?? {}) as Json) || {};
   const locations = Array.isArray(u['locations']) ? (u['locations'] as Json[]) : [];
   const file =
-    cleanPath(locations[0]?.['path']) ?? cleanPath(raw['Path'] ?? raw['AbsolutePath'] ?? raw['TargetFile']);
-  const name = String(u['name'] ?? '');
+    cleanPath(locations[0]?.['path']) ??
+    cleanPath(raw['Path'] ?? raw['AbsolutePath'] ?? raw['TargetFile'] ?? raw['filePath']);
+  const name = String(u['name'] ?? u['title'] ?? '');
   switch (u['kind']) {
     case 'execute':
       return {
@@ -537,7 +571,7 @@ export function describeTool(u: Json): { toolName: string; input: string } {
         input: summarizeToolInput('Bash', { command: raw['CommandLine'] ?? raw['command'] ?? u['title'] }),
       };
     case 'edit': {
-      const toolName = name === 'write_file' ? 'Write' : 'Edit';
+      const toolName = name === 'write_file' || name === 'write' ? 'Write' : 'Edit';
       return { toolName, input: summarizeToolInput(toolName, { file_path: file }) };
     }
     case 'read':
@@ -557,6 +591,8 @@ export function describeTool(u: Json): { toolName: string; input: string } {
 /** What a finished tool said (its output, or why it failed). */
 function toolOutput(u: Json): string {
   if (typeof u['rawOutput'] === 'string') return u['rawOutput'];
+  const out = (u['rawOutput'] as Json | undefined)?.['output'];
+  if (typeof out === 'string') return out;
   const content = Array.isArray(u['content']) ? (u['content'] as Json[]) : [];
   return content
     .map((x) => ((x['content'] ?? {}) as Json)['text'])
@@ -579,3 +615,6 @@ export async function antigravityPrompt(text: string, files: LocalFile[] | undef
   }
   return [...images, { type: 'text', text: text + filesNote(others) }];
 }
+
+/** Antigravity CLI's chats (`agy acp`). */
+export class AntigravitySessions extends AcpSessions {}

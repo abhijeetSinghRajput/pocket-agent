@@ -29,6 +29,8 @@ import type { ClaudeUsage, ModelOption, OtherAgent } from '@pocket-agent/protoco
 import { detectCodex } from './providers/codex/detect.js';
 import { detectAntigravity } from './providers/antigravity/detect.js';
 import { AntigravitySessions, spawnAcp } from './providers/antigravity/sessions.js';
+import { detectOpencode } from './providers/opencode/detect.js';
+import { OPENCODE_PROFILE, OpencodeSessions, spawnOpencodeAcp } from './providers/opencode/sessions.js';
 import {
   antigravityConversations,
   AntigravityWatcher,
@@ -63,6 +65,8 @@ export interface ServiceOptions {
   acp?: () => Transport;
   /** false: don't look for Antigravity CLI (tests). */
   antigravity?: false;
+  /** `opencode acp` stand-in (tests); false: don't look for OpenCode. */
+  opencode?: (() => Transport) | false;
 }
 
 /**
@@ -76,6 +80,7 @@ export class AgentService {
   /** Chats with Codex run from the app. */
   readonly codex: CodexSessions;
   readonly antigravity: AntigravitySessions;
+  readonly opencode: OpencodeSessions;
   readonly observed: ObservedInstructions;
   readonly wake: IdleWake;
   readonly link: AgentLink;
@@ -138,6 +143,16 @@ export class AgentService {
       Date.now,
       { broker: this.approvals, enabled: () => this.policy.remoteApproval },
     );
+    this.opencode = new OpencodeSessions(
+      this.registry,
+      typeof opts.opencode === 'function' ? opts.opencode : spawnOpencodeAcp,
+      opts.agentVersion,
+      opts.log,
+      ack,
+      Date.now,
+      { broker: this.approvals, enabled: () => this.policy.remoteApproval },
+      OPENCODE_PROFILE,
+    );
     this.observed = new ObservedInstructions(this.registry, ack);
     this.wake = new IdleWake(this.registry, opts.query, ack, opts.log, Date.now, {
       broker: this.approvals,
@@ -198,7 +213,7 @@ export class AgentService {
       wake: this.wake,
       models: () => this.models,
       // Codex runs only where it is installed and signed in (else: provider_not_available).
-      others: { codex: this.codex, antigravity: this.antigravity },
+      others: { codex: this.codex, antigravity: this.antigravity, opencode: this.opencode },
       attachments,
       policy: () => this.policy,
       ack,
@@ -247,6 +262,7 @@ export class AgentService {
           this.managed.withdraw(commandId) ||
           this.codex.withdraw(commandId) ||
           this.antigravity.withdraw(commandId) ||
+          this.opencode.withdraw(commandId) ||
           this.observed.withdraw(commandId) ||
           this.wake.withdraw(commandId);
         this.link.send(createEvent('command.withdrawn', { requestId, withdrawn }));
@@ -302,7 +318,9 @@ export class AgentService {
           ? this.codex.capabilities()
           : chat.provider === 'antigravity'
             ? this.antigravity.capabilities()
-            : this.managed.capabilities();
+            : chat.provider === 'opencode'
+              ? this.opencode.capabilities()
+              : this.managed.capabilities();
       this.registry.announce(
         {
           externalSessionId: chat.id,
@@ -348,11 +366,12 @@ export class AgentService {
 
   /** Are Codex and Antigravity here and signed in, with which models; tells the backend when that changed. */
   private async loadAgents(): Promise<void> {
-    const [codex, antigravity] = await Promise.all([
+    const [codex, antigravity, opencode] = await Promise.all([
       detectCodex(this.opts.codex ?? spawnAppServer, this.opts.agentVersion, this.opts.log),
       this.opts.antigravity === false ? null : detectAntigravity().catch(() => null),
+      this.opts.opencode === false ? null : detectOpencode().catch(() => null),
     ]);
-    const agents = [codex, antigravity].filter((a) => a !== null);
+    const agents = [codex, antigravity, opencode].filter((a) => a !== null);
     if (JSON.stringify(agents) === JSON.stringify(this.agents)) return;
     this.agents = agents;
     this.link.send(this.settingsEvent());
@@ -438,6 +457,7 @@ export class AgentService {
     await this.managed.stopAll();
     await this.codex.stopAll().catch(() => undefined);
     await this.antigravity.stopAll().catch(() => undefined);
+    await this.opencode.stopAll().catch(() => undefined);
     const deadline = Date.now() + 2000;
     while (this.outbox.size && this.link.isOpen && Date.now() < deadline)
       await new Promise((r) => setTimeout(r, 50));

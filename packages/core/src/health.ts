@@ -6,6 +6,7 @@ import {
 } from '@pocket-agent/protocol';
 import { timeAgo } from './format.js';
 import { agentProduct } from './providers.js';
+import { signInCommand } from './session.js';
 
 /** One line of a PC's health check: how it is, and what fixes it when it isn't right. */
 export interface HealthCheck {
@@ -85,7 +86,7 @@ export function pcHealth(d: DeviceDto, now = Date.now()): HealthCheck[] {
             state: 'warn',
             detail: `Sign in to ${name} on the PC to chat with it from here.`,
             // Antigravity signs in when it starts (with your Google account).
-            command: a.provider === 'codex' ? 'codex login' : 'agy',
+            command: signInCommand(a.provider),
           };
     }),
     d.remoteApprovalEnabled

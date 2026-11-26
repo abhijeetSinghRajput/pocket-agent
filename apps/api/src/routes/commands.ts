@@ -1,3 +1,4 @@
+import { agentProduct } from '@pocket-agent/core';
 import {
   attachmentLimit,
   CONFIGURE_AGENT_VERSION,
@@ -12,6 +13,7 @@ import {
   SessionControlRequest,
   StartSessionRequest,
   PROVIDERS_AGENT_VERSION,
+  OtherAgent,
   versionBelow,
   type AttachmentRef,
   type CommandKind,
@@ -273,8 +275,20 @@ export async function commandRoutes(app: FastifyInstance, ctx: Services): Promis
     const other = body.provider && body.provider !== 'claude-code' ? body.provider : undefined;
     if (other && outdated(reply, device.agentVersion, PROVIDERS_AGENT_VERSION, 'Chatting with Codex', 409))
       return;
-    // The model list is Claude Code's: another agent checks its own models on the PC.
-    if (!other && unknownModel(reply, device, body.model)) return;
+    if (other) {
+      // Only an agent the PC reported installed and signed in, with one of its own models.
+      const agent = z
+        .array(OtherAgent)
+        .catch([])
+        .parse(device.agents ?? [])
+        .find((a) => a.provider === other);
+      const name = agentProduct(other);
+      if (!agent) return bad(reply, 'provider_not_available', `${name} isn’t installed on this PC.`, 400);
+      if (!agent.signedIn)
+        return bad(reply, 'provider_signed_out', `Sign in to ${name} on this PC first.`, 400);
+      if (body.model && agent.models.length && !agent.models.some((m) => m.id === body.model))
+        return bad(reply, 'model_not_available', 'That model is not available on this PC.', 400);
+    } else if (unknownModel(reply, device, body.model)) return;
     const attachments = await sentFiles(req, reply, device.agentVersion, body.attachmentIds, {
       version: RESUME_FILES_AGENT_VERSION,
       what: 'Sending files when starting a chat',

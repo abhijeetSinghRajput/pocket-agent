@@ -178,6 +178,9 @@ model Device {
   observedInstructions  Boolean      @default(false)
   /// The PC's own setup checks ({hooks}), reported by PCs from 2.0.0 (the app's health check).
   health                Json?
+  /// Other coding agents on the PC ([{provider, version, signedIn, models}]), reported by PCs from
+  /// 2.5.0. Display and checks only; the PC decides what runs.
+  agents                Json?
   lastHeartbeatAt       DateTime?
   revokedAt             DateTime?
   createdAt             DateTime     @default(now())

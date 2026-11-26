@@ -193,6 +193,20 @@ export const DeviceHealth = z.object({ hooks: z.boolean() });
 export type DeviceHealth = z.infer<typeof DeviceHealth>;
 
 /**
+ * A coding agent besides Claude Code found on the PC (Codex): whether chats can be started with it
+ * (installed and signed in) and the models it offers. Claude Code itself is reported by `models`.
+ */
+export const OtherAgent = z.object({
+  provider: ProviderId.exclude(['claude-code']),
+  /** The agent's own version, e.g. "0.172.0". */
+  version: z.string().max(40),
+  /** Signed in on this PC (its own sign-in; Pocket Agent never sees it). */
+  signedIn: z.boolean(),
+  models: z.array(ModelOption).max(40).default([]),
+});
+export type OtherAgent = z.infer<typeof OtherAgent>;
+
+/**
  * PC-side policy, sent after every connect and whenever it changes. The PC enforces it; the
  * backend uses it only to show what is possible.
  */
@@ -211,6 +225,8 @@ export const DeviceSettings = defineEvent(
     usage: ClaudeUsage.nullable().optional(),
     /** The PC's own setup checks, for the app's health check (PCs from 2.0.0). */
     health: DeviceHealth.optional(),
+    /** Other coding agents found on the PC (PCs from 2.5.0; older ones leave it out). */
+    agents: z.array(OtherAgent).max(8).optional(),
     /**
      * A folder the owner just added (or that was already allowed) with `pocket-agent projects add`:
      * an open "Add a workspace" on the phone goes to it. Sent once, with that change (PCs 2.4.2+).

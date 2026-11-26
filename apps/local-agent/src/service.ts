@@ -23,7 +23,10 @@ import { IdleWake } from './providers/claude-code/wake.js';
 import { listModels } from './providers/claude-code/models.js';
 import { AttachmentClient, safeFileName } from './attachments.js';
 import { readSubagents } from './providers/claude-code/subagents.js';
-import type { ClaudeUsage, ModelOption } from '@pocket-agent/protocol';
+import type { ClaudeUsage, ModelOption, OtherAgent } from '@pocket-agent/protocol';
+import { detectCodex } from './providers/codex/detect.js';
+import { spawnAppServer, type Transport } from './providers/codex/rpc.js';
+import { CodexSessions } from './providers/codex/sessions.js';
 import { readUsage } from './providers/claude-code/usage.js';
 import os from 'node:os';
 import { SessionRegistry, type SessionEventOut } from './sessions/registry.js';
@@ -43,6 +46,8 @@ export interface ServiceOptions {
   heartbeatMs?: number;
   /** Read Claude Code's model list after start (default true; tests turn it off). */
   loadModels?: boolean;
+  /** How Codex's app-server is started (tests pass a fake). */
+  codex?: () => Transport;
 }
 
 /**
@@ -53,6 +58,8 @@ export class AgentService {
   readonly outbox = new Outbox<SessionEventOut>();
   readonly registry: SessionRegistry;
   readonly managed: ManagedSessions;
+  /** Chats with Codex run from the app. */
+  readonly codex: CodexSessions;
   readonly observed: ObservedInstructions;
   readonly wake: IdleWake;
   readonly link: AgentLink;
@@ -76,6 +83,9 @@ export class AgentService {
   private usageTimer: NodeJS.Timeout | null = null;
   /** Claude plan usage of the account on this PC (null = not available). */
   private usage: ClaudeUsage | null = null;
+  /** Other coding agents found on this PC (Codex), re-checked every few minutes. */
+  private agents: OtherAgent[] = [];
+  private agentsTimer: NodeJS.Timeout | null = null;
 
   constructor(private readonly opts: ServiceOptions) {
     this.registry = new SessionRegistry((e) => this.enqueue(e));
@@ -87,6 +97,13 @@ export class AgentService {
       enabled: () => this.policy.remoteApproval,
     });
     this.managed.filesRoot = path.join(opts.home, 'attachments');
+    this.codex = new CodexSessions(
+      this.registry,
+      opts.codex ?? spawnAppServer,
+      opts.agentVersion,
+      opts.log,
+      ack,
+    );
     this.observed = new ObservedInstructions(this.registry, ack);
     this.wake = new IdleWake(this.registry, opts.query, ack, opts.log, Date.now, {
       broker: this.approvals,
@@ -136,6 +153,8 @@ export class AgentService {
       observed: this.observed,
       wake: this.wake,
       models: () => this.models,
+      // Codex runs only where it is installed and signed in (else: provider_not_available).
+      others: { codex: this.codex },
       attachments,
       policy: () => this.policy,
       ack,
@@ -182,6 +201,7 @@ export class AgentService {
         const { requestId, commandId } = msg.payload;
         const withdrawn =
           this.managed.withdraw(commandId) ||
+          this.codex.withdraw(commandId) ||
           this.observed.withdraw(commandId) ||
           this.wake.withdraw(commandId);
         this.link.send(createEvent('command.withdrawn', { requestId, withdrawn }));
@@ -238,6 +258,7 @@ export class AgentService {
       usage: this.usage,
       // For the app's health check: is Claude Code linked to this PC.
       health: { hooks: this.hooksInstalled },
+      agents: this.agents,
     });
   }
 
@@ -248,6 +269,15 @@ export class AgentService {
       JSON.stringify({ ...usage, updatedAt: 0 }) === JSON.stringify({ ...this.usage, updatedAt: 0 });
     this.usage = usage;
     if (!same) this.link.send(this.settingsEvent());
+  }
+
+  /** Is Codex here and signed in, with which models; tells the backend when that changed. */
+  private async loadAgents(): Promise<void> {
+    const codex = await detectCodex(this.opts.codex ?? spawnAppServer, this.opts.agentVersion, this.opts.log);
+    const agents = codex ? [codex] : [];
+    if (JSON.stringify(agents) === JSON.stringify(this.agents)) return;
+    this.agents = agents;
+    this.link.send(this.settingsEvent());
   }
 
   /** Asks Claude Code which models it offers, then tells the backend (the app's model picker). */
@@ -299,6 +329,9 @@ export class AgentService {
     if (this.opts.loadModels !== false) {
       void this.loadModels().then(() => this.loadUsage());
       this.usageTimer = setInterval(() => void this.loadUsage(), 5 * 60_000);
+      // Codex installed or signed in later shows up within a few minutes.
+      void this.loadAgents();
+      this.agentsTimer = setInterval(() => void this.loadAgents(), 5 * 60_000);
     }
   }
 
@@ -315,9 +348,11 @@ export class AgentService {
     this.discovery.stop();
     if (this.expiryTimer) clearInterval(this.expiryTimer);
     if (this.usageTimer) clearInterval(this.usageTimer);
+    if (this.agentsTimer) clearInterval(this.agentsTimer);
     this.approvals.cancelAll();
     this.wake.stopAll();
     await this.managed.stopAll();
+    await this.codex.stopAll().catch(() => undefined);
     const deadline = Date.now() + 2000;
     while (this.outbox.size && this.link.isOpen && Date.now() < deadline)
       await new Promise((r) => setTimeout(r, 50));

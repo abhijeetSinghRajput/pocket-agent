@@ -368,12 +368,19 @@ describe('starting managed sessions remotely', () => {
 });
 
 describe('chats with another coding agent (Codex)', () => {
-  async function codexPc(agentVersion: string) {
+  const CODEX = {
+    provider: 'codex' as const,
+    version: '0.172.0',
+    signedIn: true,
+    models: [{ id: 'gpt-5.5-codex', name: 'GPT-5.5-Codex', description: '' }],
+  };
+  async function codexPc(agentVersion: string, codex: typeof CODEX | null = CODEX) {
     const s = await setup();
     await s.agent.send(
       createEvent('device.settings', {
         projects: [{ name: 'api', path: String.raw`C:\work\api` }],
         observedInstructions: false,
+        ...(codex ? { agents: [codex] } : {}),
       }),
     );
     await waitFor(async () => {
@@ -435,6 +442,24 @@ describe('chats with another coding agent (Codex)', () => {
       idempotencyKey: randomUUID(),
     });
     expect(sent.statusCode).toBe(201);
+    s.agent.ws.close();
+  });
+
+  it('only where the PC reported Codex installed and signed in, with one of its models', async () => {
+    const missing = await codexPc('2.5.0', null);
+    expect((await startCodex(missing)).json().error).toBe('provider_not_available');
+    missing.agent.ws.close();
+
+    const out = await codexPc('2.5.0', { ...CODEX, signedIn: false });
+    expect((await startCodex(out)).json().error).toBe('provider_signed_out');
+    out.agent.ws.close();
+
+    const s = await codexPc('2.5.0');
+    expect((await startCodex(s, 'claude-opus-5-5')).json().error).toBe('model_not_available');
+    const devices = (
+      await t.app.inject({ method: 'GET', url: '/devices', headers: { cookie: s.cookie } })
+    ).json();
+    expect(devices.devices[0].agents).toEqual([CODEX]);
     s.agent.ws.close();
   });
 

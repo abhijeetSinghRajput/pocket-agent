@@ -355,7 +355,10 @@ export function Composer({
           'Messages can’t be sent to this session.');
   const showStop = !session.endedAt && isBusy(session);
   const canInterrupt = showStop && session.capabilities.interrupt;
-  const models = device?.models ?? [];
+  // Codex keeps its approval settings for now (no Mode), and has its own models.
+  const isCodex = session.provider === 'codex';
+  const models =
+    (isCodex ? device?.agents.find((a) => a.provider === 'codex')?.models : device?.models) ?? [];
   const [model, setModel] = useChosenModel(session.id, models);
   const [mode, setMode] = useStoredChoice(`pocket-agent:mode:${session.id}`);
   const [effort, setEffort] = useStoredChoice(`pocket-agent:effort:${session.id}`);
@@ -449,7 +452,7 @@ export function Composer({
     try {
       const choices = {
         ...(model && !modelLocked ? { model } : {}),
-        ...(mode && !modelLocked ? { permissionMode: mode } : {}),
+        ...(mode && !modelLocked && !isCodex ? { permissionMode: mode } : {}),
         ...(effort && !modelLocked ? { effort } : {}),
       };
       const { command } = resuming
@@ -624,7 +627,7 @@ export function Composer({
             )}
             {!locked && (
               <>
-                <ModePicker value={mode} onChange={chooseMode} locked={modelLocked} />
+                {!isCodex && <ModePicker value={mode} onChange={chooseMode} locked={modelLocked} />}
                 <ModelPicker
                   models={models}
                   value={model}

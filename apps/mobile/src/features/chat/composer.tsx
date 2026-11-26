@@ -323,7 +323,10 @@ export function Composer({
   }, [canAttach]);
   const showStop = !session.endedAt && isBusy(session);
   const canInterrupt = showStop && session.capabilities.interrupt;
-  const models = device?.models ?? [];
+  // Codex keeps its approval settings for now (no Mode), and has its own models.
+  const isCodex = session.provider === 'codex';
+  const models =
+    (isCodex ? device?.agents.find((a) => a.provider === 'codex')?.models : device?.models) ?? [];
   const [model, setModel] = useChosenModel(session.id, models);
   const [mode, setMode] = useStored(`pocket-agent:mode:${session.id}`);
   const [effort, setEffort] = useStored(`pocket-agent:effort:${session.id}`);
@@ -386,7 +389,7 @@ export function Composer({
     onSending?.();
     const choices = {
       ...(model && !modelLocked ? { model } : {}),
-      ...(mode && !modelLocked ? { permissionMode: mode } : {}),
+      ...(mode && !modelLocked && !isCodex ? { permissionMode: mode } : {}),
       ...(effort && !modelLocked ? { effort } : {}),
     };
     submit({
@@ -569,7 +572,7 @@ export function Composer({
           {canAttach && <AttachButton disabled={files.room <= 0} onPress={() => setAttachOpen(true)} />}
           {!locked && (
             <>
-              <ModePicker value={mode} onChange={chooseMode} locked={modelLocked} live={live} />
+              {!isCodex && <ModePicker value={mode} onChange={chooseMode} locked={modelLocked} live={live} />}
               <ModelPicker
                 models={models}
                 value={model}

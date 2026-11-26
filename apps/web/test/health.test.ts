@@ -18,6 +18,7 @@ const pc = (over: Partial<DeviceDto>): DeviceDto => ({
   usage: null,
   awayMode: true,
   health: { hooks: true },
+  agents: [],
   ...over,
 });
 

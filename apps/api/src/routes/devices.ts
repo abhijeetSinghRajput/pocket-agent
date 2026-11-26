@@ -7,6 +7,7 @@ import {
   ClaudeUsage,
   DeviceHealth,
   ModelOption,
+  OtherAgent,
   PairDeviceRequest,
   type DeviceDto,
   type PairingCodeResponse,
@@ -62,6 +63,10 @@ export function toDeviceDto(d: Device): DeviceDto {
     health: DeviceHealth.nullable()
       .catch(null)
       .parse(d.health ?? null),
+    agents: z
+      .array(OtherAgent)
+      .catch([])
+      .parse(d.agents ?? []),
   };
 }
 

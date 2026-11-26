@@ -252,6 +252,8 @@ export async function agentGateway(app: FastifyInstance, ctx: GatewayServices): 
               // Only sent by PCs that can read it; an older agent leaves the stored value alone.
               ...(msg.payload.usage !== undefined ? { usage: msg.payload.usage ?? Prisma.DbNull } : {}),
               ...(msg.payload.health ? { health: msg.payload.health } : {}),
+              // Only PCs from 2.5.0 report other agents; an older one leaves the stored value alone.
+              ...(msg.payload.agents ? { agents: msg.payload.agents } : {}),
               observedInstructions: msg.payload.observedInstructions,
               remoteApprovalEnabled: msg.payload.remoteApproval,
             },

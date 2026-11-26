@@ -195,7 +195,8 @@ export class ManagedSessions {
   /** Re-announces managed sessions after the PC's policy changed. */
   refreshCapabilities(): void {
     for (const t of this.registry.live()) {
-      if (t.mode === 'managed')
+      // Claude Code's own chats only (another agent's chats keep theirs).
+      if (t.mode === 'managed' && t.provider === 'claude-code')
         this.registry.announce({ ...t, capabilities: this.capabilities() }, 'managed');
     }
   }

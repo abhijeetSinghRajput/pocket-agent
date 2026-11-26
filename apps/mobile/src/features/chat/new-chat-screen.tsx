@@ -1,10 +1,20 @@
-import { buildChat, commandError, NEW_CHAT_MODE, newChatModel, waitForSession } from '@pocket-agent/core';
+import {
+  agentName,
+  agentProduct,
+  buildChat,
+  commandError,
+  NEW_CHAT_MODE,
+  newChatModel,
+  waitForSession,
+} from '@pocket-agent/core';
 import {
   attachmentLimit,
   CommandResponse,
+  PROVIDERS_AGENT_VERSION,
   RESUME_FILES_AGENT_VERSION,
   versionBelow,
   type CommandDto,
+  type ProviderId,
   type TurnEffort,
   type TurnMode,
 } from '@pocket-agent/protocol';
@@ -35,10 +45,11 @@ import { dur, ease, enter, exit, layout } from '@/lib/motion';
 import { alpha, fonts, radius, useTheme } from '@/lib/theme';
 import { buzz, IconButton, T, thud } from '@/ui/core';
 import { Notice, Roll } from '@/ui/feedback';
+import { Segmented } from '@/ui/form';
 
 const fetchCommand = (id: string) => apiRequest(`/commands/${id}`, CommandResponse).then((r) => r.command);
 
-function ClaudeAvatar({ size }: { size: number }) {
+function AgentAvatar({ size, provider }: { size: number; provider: ProviderId }) {
   return (
     <View
       accessibilityElementsHidden
@@ -47,19 +58,20 @@ function ClaudeAvatar({ size }: { size: number }) {
         width: size,
         height: size,
         borderRadius: size / 2,
-        backgroundColor: alpha(AGENT_LOGOS['claude-code'].hex, 0.14),
+        backgroundColor: alpha(AGENT_LOGOS[provider].hex, 0.14),
         alignItems: 'center',
         justifyContent: 'center',
       }}
     >
-      <AgentLogo provider="claude-code" size={Math.round(size * 0.55)} />
+      <AgentLogo provider={provider} size={Math.round(size * 0.55)} />
     </View>
   );
 }
 
 /**
  * A chat that has not started yet, in a folder picked from New chat. Sending the first message
- * starts Claude Code there on the PC; the chat then opens as the real session.
+ * starts the chosen agent (Claude Code, or Codex when the PC has it) there on the PC; the chat
+ * then opens as the real session.
  */
 export function NewChatScreen({ deviceId, path, name }: { deviceId: string; path: string; name: string }) {
   const { c } = useTheme();
@@ -73,6 +85,12 @@ export function NewChatScreen({ deviceId, path, name }: { deviceId: string; path
   const [model, setModel] = useState<string | null>(null);
   const [mode, setMode] = useState<string>(NEW_CHAT_MODE);
   const [effort, setEffort] = useState('');
+  // Which agent: Claude Code, or Codex when the PC reports it (and its agent can start it).
+  const [provider, setProvider] = useState<ProviderId>('claude-code');
+  const codex = device?.agents.find((a) => a.provider === 'codex');
+  const codexUsable = !!codex && !versionBelow(device?.agentVersion ?? '0', PROVIDERS_AGENT_VERSION);
+  const isCodex = provider === 'codex' && codexUsable;
+  const agent = isCodex ? 'codex' : 'claude-code';
   // The first message once sent: shown as sent while the PC starts Claude.
   const [command, setCommand] = useState<CommandDto | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -87,16 +105,22 @@ export function NewChatScreen({ deviceId, path, name }: { deviceId: string; path
     };
   }, []);
 
-  const models = device?.models ?? [];
-  // A model the PC no longer offers is never sent.
+  const models = (isCodex ? codex?.models : device?.models) ?? [];
+  // A model the PC no longer offers is never sent. Codex starts on its own default.
   const chosenModel =
-    model !== null && (model === '' || models.some((m) => m.id === model)) ? model : newChatModel(models);
+    model !== null && (model === '' || models.some((m) => m.id === model))
+      ? model
+      : isCodex
+        ? ''
+        : newChatModel(models);
   const starting = command !== null;
   const locked = !device
     ? 'This PC is no longer paired.'
     : device.status !== 'Online'
       ? 'Your PC is offline. Start Pocket Agent on it to begin.'
-      : null;
+      : isCodex && !codex?.signedIn
+        ? 'Sign in to Codex on your PC first (run `codex login` there).'
+        : null;
   const items = useMemo(() => (command ? buildChat([], [command]) : []), [command]);
 
   // Photos and files go with the first message (PC agents from 0.1.6 take them).
@@ -128,11 +152,13 @@ export function NewChatScreen({ deviceId, path, name }: { deviceId: string; path
       let { command: sent } = await apiRequest(`/devices/${deviceId}/sessions`, CommandResponse, {
         method: 'POST',
         body: {
+          ...(isCodex ? { provider: 'codex' as const } : {}),
           projectPath: path,
           text: value,
           idempotencyKey: key.current,
           ...(chosenModel ? { model: chosenModel } : {}),
-          ...(mode ? { permissionMode: mode as TurnMode } : {}),
+          // Codex's approval settings come with approvals from the phone; it keeps its own for now.
+          ...(mode && !isCodex ? { permissionMode: mode as TurnMode } : {}),
           ...(effort ? { effort: effort as TurnEffort } : {}),
           ...(files.ready.length ? { attachmentIds: files.ids } : {}),
         },
@@ -190,7 +216,7 @@ export function NewChatScreen({ deviceId, path, name }: { deviceId: string; path
           disabled={starting}
           onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))}
         />
-        <ClaudeAvatar size={36} />
+        <AgentAvatar size={36} provider={agent} />
         <View style={{ flex: 1, minWidth: 0, marginLeft: 4 }}>
           <T variant="subheading" numberOfLines={1} accessibilityRole="header">
             {name}
@@ -233,16 +259,37 @@ export function NewChatScreen({ deviceId, path, name }: { deviceId: string; path
                 gap: 8,
               }}
             >
-              <ClaudeAvatar size={64} />
+              <AgentAvatar size={64} provider={agent} />
+              {codexUsable && (
+                <View style={{ alignSelf: 'stretch', marginTop: 4 }}>
+                  <Segmented
+                    label="Agent"
+                    testID="agent-choice"
+                    options={[
+                      { value: 'claude-code', label: 'Claude' },
+                      { value: 'codex', label: 'Codex' },
+                    ]}
+                    value={agent}
+                    onChange={(next) => {
+                      setProvider(next);
+                      // Each agent has its own models.
+                      setModel(null);
+                      setEffort('');
+                    }}
+                  />
+                </View>
+              )}
               <T variant="subheading" center style={{ marginTop: 8 }}>
-                What should Claude do in {name}?
+                What should {agentName(agent)} do in {name}?
               </T>
               <T variant="caption" tone="muted" center style={{ fontFamily: fonts.mono }}>
                 {path}
               </T>
               <T variant="small" tone="muted" center style={{ marginTop: 4 }}>
-                Claude Code starts on {device?.name ?? 'your PC'} when you send your first message. Anything
-                that needs permission asks you here.
+                {agentProduct(agent)} starts on {device?.name ?? 'your PC'} when you send your first message.{' '}
+                {isCodex
+                  ? 'It works in its sandbox: it can change files in this folder; anything more is declined for now.'
+                  : 'Anything that needs permission asks you here.'}
               </T>
             </Animated.View>
           )}
@@ -290,7 +337,7 @@ export function NewChatScreen({ deviceId, path, name }: { deviceId: string; path
                 editable={!locked && !starting}
                 accessibilityLabel="First message"
                 testID="ns-text"
-                placeholder={locked ?? (starting ? 'Starting on your PC…' : 'Message Claude…')}
+                placeholder={locked ?? (starting ? 'Starting on your PC…' : `Message ${agentName(agent)}…`)}
                 placeholderTextColor={c.mutedForeground}
                 selectionColor={c.primary}
                 onFocus={() => focus.set(withTiming(1, { duration: dur.quick, easing: ease.out }))}
@@ -320,7 +367,7 @@ export function NewChatScreen({ deviceId, path, name }: { deviceId: string; path
                 {canAttach && <AttachButton disabled={files.room <= 0} onPress={() => setAttachOpen(true)} />}
                 {!locked && (
                   <>
-                    <ModePicker value={mode} onChange={setMode} locked={null} />
+                    {!isCodex && <ModePicker value={mode} onChange={setMode} locked={null} />}
                     <ModelPicker
                       models={models}
                       value={chosenModel}

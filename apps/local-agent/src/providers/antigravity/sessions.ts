@@ -1,9 +1,12 @@
 import {
+  APPROVAL_WAIT_MS,
   isPreviewable,
   type SessionCapabilities,
   type TurnEffort,
   type TurnMode,
 } from '@pocket-agent/protocol';
+import type { RemoteDecision } from '../../approvals.js';
+import type { ManagedApprovalOptions } from '../claude-code/managed.js';
 import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { filesNote, type LocalFile } from '../../attachments.js';
@@ -20,11 +23,12 @@ import { antigravityCommand } from './detect.js';
  * is one chat; its id is the chat's id. Messages wait in the chat's queue and run one turn at a
  * time, like Claude Code's and Codex's.
  *
- * Antigravity keeps its own permission settings. When it asks before an action, the request is
- * declined for now and the chat says so (approving it from the phone comes next).
+ * Antigravity keeps its own permission settings. When it asks before an action, the request goes
+ * to the phone if the PC owner turned remote approval on (like Claude Code's and Codex's);
+ * otherwise, or when nobody decides in time, it is declined and the chat says so.
  */
 
-/** What an Antigravity chat can do from the phone (approvals from the phone: not yet). */
+/** What an Antigravity chat can do from the phone (remote approval: when the PC owner turned it on). */
 export const ANTIGRAVITY_CAPABILITIES: SessionCapabilities = {
   monitor: true,
   remoteApproval: false,
@@ -65,6 +69,8 @@ interface Chat {
   text: string;
   /** Tool calls started, with what the chat showed for them. */
   tools: Map<string, { toolName: string; input: string }>;
+  /** Permission requests waiting for the phone. */
+  waiting: Set<string>;
   /** Model and mode in use (only sent again when they change). */
   model?: string;
   mode?: TurnMode;
@@ -81,7 +87,18 @@ export class AntigravitySessions implements ManagedRuntime {
     private readonly log: (level: 'info' | 'warn' | 'error', msg: string) => void = () => undefined,
     private readonly ack: CommandAck = () => undefined,
     private readonly now: () => number = Date.now,
+    private readonly approvals?: ManagedApprovalOptions,
   ) {}
+
+  /** Remote approval only when the PC owner turned it on. */
+  private capabilities(): SessionCapabilities {
+    return { ...ANTIGRAVITY_CAPABILITIES, remoteApproval: this.approvals?.enabled() ?? false };
+  }
+
+  /** Stops waiting for the phone on this chat's requests (they are declined). */
+  private cancelWaiting(c: Chat): void {
+    for (const requestId of [...c.waiting]) this.approvals?.broker.cancel(requestId);
+  }
 
   isManaged = (id: string) => this.chats.has(id);
 
@@ -114,6 +131,7 @@ export class AntigravitySessions implements ManagedRuntime {
       closed: false,
       text: '',
       tools: new Map(),
+      waiting: new Set(),
     };
     this.chats.set(id, c);
     const model = input.model ?? created.models?.currentModelId;
@@ -124,7 +142,7 @@ export class AntigravitySessions implements ManagedRuntime {
         mode: 'managed',
         projectPath,
         status: 'Starting',
-        capabilities: ANTIGRAVITY_CAPABILITIES,
+        capabilities: this.capabilities(),
         metadata: { entrypoint: 'pocket-agent', ...(model ? { model } : {}) },
       },
       'managed',
@@ -180,6 +198,7 @@ export class AntigravitySessions implements ManagedRuntime {
     if (!c || c.closed) return false;
     if (!c.busy) return true; // idle: nothing to stop
     c.interrupted = true;
+    this.cancelWaiting(c);
     const client = await this.client?.catch(() => null);
     client?.notify('session/cancel', { sessionId: id });
     return true;
@@ -326,6 +345,7 @@ export class AntigravitySessions implements ManagedRuntime {
     c.current = null;
     c.busy = false;
     c.tools.clear();
+    this.cancelWaiting(c);
     void this.pump(c);
   }
 
@@ -336,6 +356,7 @@ export class AntigravitySessions implements ManagedRuntime {
     for (const item of c.inbox)
       if (item.commandId) this.ack(item.commandId, 'Failed', { error: `session_${reason}` });
     c.inbox = [];
+    this.cancelWaiting(c);
     this.chats.delete(c.id);
     this.registry.end(c.id, reason);
   }
@@ -396,36 +417,91 @@ export class AntigravitySessions implements ManagedRuntime {
   }
 
   /**
-   * Requests from Antigravity. Asking before an action is declined for now (approving it from the
-   * phone comes next) and the chat says so; anything else is not supported.
+   * Requests from Antigravity. Asking before an action goes to the phone when the PC owner turned
+   * remote approval on, and is declined otherwise (or when nobody decides in time); the chat says
+   * so. Anything else Antigravity asks is not supported.
    */
   private async onRequest(method: string, params: Json): Promise<unknown> {
     const c = this.chats.get(String(params['sessionId'] ?? ''));
-    if (method !== 'session/request_permission' || !c)
+    if (method !== 'session/request_permission' || !c || c.closed)
       throw new Error(`${method} is not supported by Pocket Agent`);
     const options = Array.isArray(params['options']) ? (params['options'] as Json[]) : [];
-    const reject =
-      options.find((o) => o['kind'] === 'reject_once') ??
-      options.find((o) => String(o['kind']).startsWith('reject'));
     const call = (params['toolCall'] ?? {}) as Json;
     const what = describeTool(call);
-    const target = (() => {
-      try {
-        const i = JSON.parse(what.input) as Json;
-        return String(i['command'] ?? i['file_path'] ?? i['url'] ?? call['title'] ?? what.toolName);
-      } catch {
-        return what.toolName;
-      }
-    })();
+    const toolCallId = String(call['toolCallId'] ?? '');
+    // Unique on this PC: the chat's id, then the tool call's.
+    const requestId = truncate(`${c.id}:${toolCallId || this.now()}`, 200);
+    const remembers = options.some((o) => o['kind'] === 'allow_always');
+    const remote = !!this.approvals?.enabled();
+    const waitMs = this.approvals?.waitMs ?? APPROVAL_WAIT_MS.managed;
     this.flushText(c);
-    this.registry.event(c.id, 'agent.output', {
-      role: 'system',
-      text: `Antigravity asked before it would use ${what.toolName} (${truncate(target, 300)}). It was declined: approving Antigravity from the phone isn't available yet.`,
+    this.registry.event(c.id, 'agent.permission.requested', {
+      toolUseId: toolCallId || requestId,
+      toolName: what.toolName,
+      input: what.input,
+      requestId,
+      ...(remote
+        ? {
+            awaitingRemote: true,
+            expiresAt: new Date(this.now() + waitMs).toISOString(),
+            ...(remembers ? { remember: 'This action, for the rest of this chat' } : {}),
+          }
+        : {}),
     });
-    return reject
-      ? { outcome: { outcome: 'selected', optionId: reject['optionId'] } }
-      : { outcome: { outcome: 'cancelled' } };
+    const target = requestTarget(what);
+    if (!remote) {
+      this.registry.event(c.id, 'agent.permission.resolved', { requestId, outcome: 'auto_denied' });
+      this.registry.event(c.id, 'agent.output', {
+        role: 'system',
+        text: `Antigravity asked before it would use ${what.toolName} (${truncate(target, 300)}). It was declined: remote approval is turned off on this PC.`,
+      });
+      return antigravityAnswer(options, null);
+    }
+    this.registry.setStatus(c.id, 'WaitingForPermission');
+    c.waiting.add(requestId);
+    const decision = await this.approvals!.broker.wait(requestId, waitMs);
+    c.waiting.delete(requestId);
+    if (!decision) {
+      const outcome = c.interrupted || c.closed ? 'cancelled' : 'timeout';
+      this.registry.event(c.id, 'agent.permission.resolved', { requestId, outcome });
+      if (outcome === 'timeout')
+        this.registry.event(c.id, 'agent.output', {
+          role: 'system',
+          text: `Antigravity asked before it would use ${what.toolName} (${truncate(target, 300)}). Nobody decided in time, so it was declined.`,
+        });
+    } else {
+      this.registry.event(c.id, 'agent.permission.resolved', { requestId, outcome: 'remote' });
+    }
+    if (!c.closed && c.busy && !c.waiting.size) this.registry.setStatus(c.id, 'Running');
+    return antigravityAnswer(options, decision);
   }
+}
+
+/** What a request is about, in a few words for the chat (the command, file or page). */
+function requestTarget(what: { toolName: string; input: string }): string {
+  try {
+    const i = JSON.parse(what.input) as Json;
+    return String(i['command'] ?? i['file_path'] ?? i['url'] ?? i['pattern'] ?? what.toolName);
+  } catch {
+    return what.toolName;
+  }
+}
+
+/**
+ * The phone's decision as one of the options Antigravity offered: allow once (or always, for
+ * "Allow for this chat", when offered), else reject. Nothing offered: cancelled.
+ */
+export function antigravityAnswer(options: Json[], decision: RemoteDecision | null): Json {
+  const pick = (...kinds: string[]) => kinds.map((k) => options.find((o) => o['kind'] === k)).find(Boolean);
+  const allow = decision?.behavior === 'allow';
+  const option = allow
+    ? decision.remember
+      ? pick('allow_always', 'allow_once')
+      : pick('allow_once')
+    : pick('reject_once', 'reject_always');
+  return option
+    ? { outcome: { outcome: 'selected', optionId: option['optionId'] } }
+    : { outcome: { outcome: 'cancelled' } };
 }
 
 /** Starts `agy acp` (the real program, not a shim: no shell). */

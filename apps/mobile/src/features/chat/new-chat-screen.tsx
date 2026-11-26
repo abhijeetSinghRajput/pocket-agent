@@ -300,7 +300,9 @@ export function NewChatScreen({ deviceId, path, name }: { deviceId: string; path
                 {agent === 'claude-code'
                   ? 'Anything that needs permission asks you here.'
                   : agent === 'antigravity'
-                    ? 'It keeps its own permission settings; when it asks before an action, that is declined for now.'
+                    ? device?.remoteApprovalEnabled
+                      ? 'It keeps its own permission settings; anything it asks before doing comes to you here.'
+                      : 'It keeps its own permission settings; anything it asks before doing is declined, because remote approval is off on this PC.'
                     : device?.remoteApprovalEnabled
                       ? 'It works in its sandbox: it changes files in this folder and asks you here for anything more.'
                       : 'It works in its sandbox: it changes files in this folder. Anything more is declined, because remote approval is off on this PC.'}

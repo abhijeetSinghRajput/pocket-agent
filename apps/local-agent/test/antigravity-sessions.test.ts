@@ -2,6 +2,7 @@ import { mkdtempSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { ApprovalBroker } from '../src/approvals.js';
 import { AntigravitySessions, describeTool } from '../src/providers/antigravity/sessions.js';
 import type { Transport } from '../src/providers/codex/rpc.js';
 import { SessionRegistry } from '../src/sessions/registry.js';
@@ -45,23 +46,28 @@ function fakeAcp() {
   return { transport, emit, sent, requests, update, finish, prompts, answers };
 }
 
-function harness() {
+function harness(opts: { remote?: boolean; waitMs?: number } = {}) {
   const project = mkdtempSync(path.join(os.tmpdir(), 'pocket-agent-agy-'));
   const events: Json[] = [];
   const registry = new SessionRegistry((e) => events.push(e as unknown as Json));
   const acks: Array<{ id: string; status: string }> = [];
   const server = fakeAcp();
+  const broker = new ApprovalBroker();
   const agy = new AntigravitySessions(
     registry,
     () => server.transport,
     '2.8.0',
     () => undefined,
     ((id: string, status: string) => acks.push({ id, status })) as never,
+    Date.now,
+    opts.remote === undefined
+      ? undefined
+      : { broker, enabled: () => opts.remote!, waitMs: opts.waitMs ?? 5000 },
   );
   const tick = () => new Promise((r) => setTimeout(r, 10));
   const of = (type: string) => events.filter((e) => e['eventType'] === type).map((e) => e['payload'] as Json);
   const statuses = (id: string) => acks.filter((a) => a.id === id).map((a) => a.status);
-  return { project, registry, server, agy, tick, of, statuses };
+  return { project, registry, server, agy, tick, of, statuses, broker };
 }
 
 describe('Antigravity chats', () => {
@@ -226,5 +232,83 @@ describe('Antigravity chats', () => {
     expect(describeTool({ kind: 'fetch', rawInput: { Url: 'https://example.com' } }).toolName).toBe(
       'WebFetch',
     );
+  });
+});
+
+describe('Antigravity approvals from the phone', () => {
+  const OPTIONS = [
+    { optionId: 'allow', name: 'Allow', kind: 'allow_once' },
+    { optionId: 'always', name: 'Always allow', kind: 'allow_always' },
+    { optionId: 'deny', name: 'Deny', kind: 'reject_once' },
+  ];
+  async function running(opts: { remote?: boolean; waitMs?: number }) {
+    const h = harness(opts);
+    await h.agy.start({ projectPath: h.project, prompt: 'go', commandId: 'c1' });
+    await h.tick();
+    const ask = (id: string, toolCallId: string, command: string, options = OPTIONS) =>
+      h.server.emit({
+        id,
+        method: 'session/request_permission',
+        params: {
+          sessionId: 's-1',
+          toolCall: { toolCallId, name: 'run_command', kind: 'execute', rawInput: { CommandLine: command } },
+          options,
+        },
+      });
+    const answer = (id: string) => h.server.answers.find((a) => a['id'] === id)?.['result'];
+    return { ...h, ask, answer };
+  }
+
+  it('a chat offers remote approval only when the PC owner turned it on', async () => {
+    expect((await running({ remote: true })).registry.get('s-1')?.capabilities.remoteApproval).toBe(true);
+    expect((await running({ remote: false })).registry.get('s-1')?.capabilities.remoteApproval).toBe(false);
+  });
+
+  it('a request waits for the phone; Allow for this chat picks Antigravity’s own "always" option', async () => {
+    const h = await running({ remote: true });
+    h.ask('1', 't1', 'npm install');
+    await h.tick();
+    expect(h.of('agent.permission.requested')[0]).toMatchObject({
+      requestId: 's-1:t1',
+      toolName: 'Bash',
+      awaitingRemote: true,
+      remember: 'This action, for the rest of this chat',
+    });
+    expect(h.registry.get('s-1')?.status).toBe('WaitingForPermission');
+    expect(h.answer('1')).toBeUndefined();
+    h.broker.decide('s-1:t1', { behavior: 'allow', remember: true });
+    await h.tick();
+    expect(h.answer('1')).toEqual({ outcome: { outcome: 'selected', optionId: 'always' } });
+    expect(h.registry.get('s-1')?.status).toBe('Running');
+  });
+
+  it('Allow once and Deny pick the matching options; "always" is never offered when Antigravity has none', async () => {
+    const h = await running({ remote: true });
+    const once = OPTIONS.filter((o) => o.kind !== 'allow_always');
+    h.ask('2', 't2', 'dir', once);
+    h.ask('3', 't3', 'del x', once);
+    await h.tick();
+    expect(h.of('agent.permission.requested')[0]!['remember']).toBeUndefined();
+    h.broker.decide('s-1:t2', { behavior: 'allow' });
+    h.broker.decide('s-1:t3', { behavior: 'deny', message: 'no' });
+    await h.tick();
+    expect(h.answer('2')).toEqual({ outcome: { outcome: 'selected', optionId: 'allow' } });
+    expect(h.answer('3')).toEqual({ outcome: { outcome: 'selected', optionId: 'deny' } });
+  });
+
+  it('nobody decides in time, or the turn is stopped: declined', async () => {
+    const h = await running({ remote: true, waitMs: 20 });
+    h.ask('4', 't4', 'rm -rf build');
+    await new Promise((r) => setTimeout(r, 60));
+    expect(h.answer('4')).toEqual({ outcome: { outcome: 'selected', optionId: 'deny' } });
+    expect(JSON.stringify(h.of('agent.output'))).toContain('Nobody decided in time');
+
+    const g = await running({ remote: true });
+    g.ask('5', 't5', 'deploy');
+    await g.tick();
+    await g.agy.interrupt('s-1');
+    await g.tick();
+    expect(g.answer('5')).toEqual({ outcome: { outcome: 'selected', optionId: 'deny' } });
+    expect(g.of('agent.permission.resolved')).toEqual([{ requestId: 's-1:t5', outcome: 'cancelled' }]);
   });
 });

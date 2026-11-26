@@ -124,6 +124,8 @@ export class AgentService {
       opts.agentVersion,
       opts.log,
       ack,
+      Date.now,
+      { broker: this.approvals, enabled: () => this.policy.remoteApproval },
     );
     this.observed = new ObservedInstructions(this.registry, ack);
     this.wake = new IdleWake(this.registry, opts.query, ack, opts.log, Date.now, {

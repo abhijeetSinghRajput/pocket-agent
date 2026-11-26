@@ -6,7 +6,7 @@ import {
   type AgentToBackend,
   type BackendToWeb,
 } from '@pocket-agent/protocol';
-import { closeApprovalFromPc, openApproval } from '../approvals/service.js';
+import { closeApprovalFromPc, closeApprovalsOfEndedSession, openApproval } from '../approvals/service.js';
 import type { AppContext } from '../context.js';
 import type { AgentSession, Prisma } from '../generated/prisma/client.js';
 
@@ -184,6 +184,17 @@ export async function ingestSessionEvent(
         );
       }
     }
+    if (msg.eventType === 'agent.session.ended') {
+      for (const closed of await closeApprovalsOfEndedSession(tx, session.id)) {
+        out.push(
+          createEvent(
+            'approval.updated',
+            { approvalId: closed.id, status: closed.status },
+            { deviceId: device.id, sessionId: session.id },
+          ),
+        );
+      }
+    }
     if (msg.eventType === 'agent.permission.resolved') {
       const closed = await closeApprovalFromPc(tx, session.id, msg.payload.requestId, msg.payload.outcome);
       if (closed) {
@@ -219,6 +230,15 @@ async function applySnapshot(
           data: { status: 'Stopped', endedAt: now },
         });
         out.push(statusChanged(ended, 'Stopped', s.status));
+        for (const closed of await closeApprovalsOfEndedSession(tx, s.id)) {
+          out.push(
+            createEvent(
+              'approval.updated',
+              { approvalId: closed.id, status: closed.status },
+              { deviceId: device.id, sessionId: s.id },
+            ),
+          );
+        }
       } else if (status !== s.status) {
         const updated = await tx.agentSession.update({ where: { id: s.id }, data: { status } });
         out.push(statusChanged(updated, status, s.status));

@@ -123,6 +123,25 @@ export async function closeApprovalFromPc(
   return { ...a, status };
 }
 
+/**
+ * The session ended (its PC stopped it, or it crashed) with requests still open: nothing can
+ * answer them any more, so they are cancelled now instead of waiting to expire.
+ */
+export async function closeApprovalsOfEndedSession(tx: Db, sessionId: string): Promise<Approval[]> {
+  const open = await tx.approval.findMany({ where: { sessionId, status: 'Pending' } });
+  const closed: Approval[] = [];
+  for (const a of open) {
+    const r = await tx.approval.updateMany({
+      where: { id: a.id, status: 'Pending' },
+      data: { status: 'Cancelled' },
+    });
+    if (!r.count) continue;
+    await markApprovalNotificationRead(tx, a, new Date());
+    closed.push({ ...a, status: 'Cancelled' });
+  }
+  return closed;
+}
+
 export class DecisionError extends Error {
   constructor(
     readonly code:

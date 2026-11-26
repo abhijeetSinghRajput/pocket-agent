@@ -234,6 +234,27 @@ describe('remote approvals', () => {
     s.agent.ws.close();
   });
 
+  it('a session that ends (or that the PC no longer knows) cancels its open requests', async () => {
+    const s = await setup();
+    const { approval } = await request(s);
+    await s.agent.send(
+      createEvent(
+        'agent.session.ended',
+        { externalSessionId: s.ext, reason: 'stopped' },
+        { sessionId: s.ext },
+      ),
+    );
+    expect((await dbApproval(approval!.id)).status).toBe('Cancelled');
+
+    // The PC restarted: its list no longer has the session.
+    const ext = `sess-${randomUUID()}`;
+    await s.agent.send(sessionStarted(ext, { mode: 'managed', projectName: 'checkout' }));
+    const again = await request({ ...s, ext });
+    await s.agent.send(createEvent('agent.sessions.snapshot', { sessions: [] }));
+    await waitFor(async () => (await dbApproval(again.approval!.id)).status === 'Cancelled');
+    s.agent.ws.close();
+  });
+
   it('does not consume the decision when the PC is offline', async () => {
     const s = await setup();
     const { approval } = await request(s);

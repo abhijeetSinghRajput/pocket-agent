@@ -352,6 +352,8 @@ export function buildChat(events: AgentEventDto[], commands: CommandDto[] = []):
         break;
       case 'agent.session.ended':
         ended = true;
+        // A request still open when the session ended can't be answered any more.
+        for (const req of permissions.values()) req.outcome ??= 'Not answered: the session ended';
         items.push({
           kind: 'notice',
           key: e.id,

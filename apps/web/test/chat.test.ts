@@ -84,6 +84,19 @@ describe('buildChat', () => {
     expect(delivered[1]).toMatchObject({ kind: 'user', command: { status: 'Executing' } });
   });
 
+  it('a request still open when the session ended says it can’t be answered any more', () => {
+    const items = buildChat([
+      ev(1, 'agent.permission.requested', {
+        requestId: 'r1',
+        toolName: 'Bash',
+        input: bash,
+        awaitingRemote: true,
+      }),
+      ev(2, 'agent.session.ended', { reason: 'stopped' }),
+    ]);
+    expect(items[0]).toMatchObject({ kind: 'permission', outcome: 'Not answered: the session ended' });
+  });
+
   it('a sent message keeps its key when the PC echoes it (its bubble isn’t drawn anew)', () => {
     const c = cmd(5, { text: 'Fix the bug' });
     const before = buildChat([], [c]);

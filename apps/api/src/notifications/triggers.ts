@@ -164,6 +164,16 @@ export async function notifyFromEvents(ctx: NotifyServices, events: BackendToWeb
         // When you're at the PC, a finished turn in your own VS Code session isn't news.
         (s.mode === 'managed' || s.device.awayMode)
       ) {
+        // More messages wait in the chat's queue: the agent goes straight on to the next one, so
+        // "done, waiting for you" would be wrong. It is said once the queue is empty.
+        const queued = await ctx.prisma.command.count({
+          where: {
+            sessionId: s.id,
+            commandType: 'instruction',
+            status: { in: ['Pending', 'Delivered', 'Accepted'] },
+          },
+        });
+        if (queued) continue;
         await notify(ctx, {
           ...base,
           category: 'task_completed',

@@ -113,6 +113,45 @@ function useMarkChatRead(sessionId: string) {
   });
 }
 
+/** Colour of the weekly limit: green below 75 %, a warning above 75 %, red above 90 %. */
+function weeklyTone(percent: number): 'success' | 'warning' | 'danger' {
+  return percent > 90 ? 'danger' : percent > 75 ? 'warning' : 'success';
+}
+
+/**
+ * How much of the Claude plan's 7-day limit is used, from the chat's PC (the same numbers as
+ * Claude Code's /usage). Nothing when the PC doesn't report it, or for another agent's chat.
+ */
+function WeeklyLimit({ session: s }: { session: AgentSessionDto }) {
+  const { c } = useTheme();
+  const weekly = useDevices().state.data?.find((d) => d.id === s.deviceId)?.usage?.weekly;
+  if (s.provider !== 'claude-code' || !weekly) return null;
+  const percent = Math.max(0, Math.round(weekly.percent));
+  const tone = weeklyTone(percent);
+  const color = tone === 'danger' ? c.destructive : tone === 'warning' ? c.warning : c.success;
+  return (
+    <View
+      accessible
+      accessibilityLabel={`Weekly limit: ${percent}% used`}
+      testID="weekly-limit"
+      style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 5,
+        paddingHorizontal: 8,
+        paddingVertical: 3,
+        borderRadius: radius.full,
+        backgroundColor: alpha(color, 0.14),
+      }}
+    >
+      <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: color }} />
+      <T variant="captionMedium" style={{ color, fontSize: 11.5, fontVariant: ['tabular-nums'] }}>
+        Week {percent}%
+      </T>
+    </View>
+  );
+}
+
 /** The bar on top of the chat: back, who you are talking to and how it is doing (tap for details), end. */
 function Header({
   session: s,
@@ -188,6 +227,7 @@ function Header({
           </View>
         </View>
       </Press>
+      <WeeklyLimit session={s} />
       <IconButton
         icon={Search}
         label="Search in this chat"

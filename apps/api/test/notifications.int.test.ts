@@ -242,6 +242,53 @@ describe('notifications', () => {
     agent.ws.close();
   });
 
+  it('task_completed waits until no message is queued for the chat', async () => {
+    const u = await user();
+    const d = await pairDevice(t, u.cookie);
+    const agent = await connectAgent(t, d);
+    const ext = `sess-${randomUUID()}`;
+    await agent.send(sessionStarted(ext, { mode: 'managed', projectName: 'queue-proj' }));
+    await waitFor(
+      async () =>
+        !!(await t.ctx.prisma.agentSession.findFirst({
+          where: { deviceId: d.deviceId, externalSessionId: ext },
+        })),
+    );
+    const chat = await t.ctx.prisma.agentSession.findFirstOrThrow({
+      where: { deviceId: d.deviceId, externalSessionId: ext },
+    });
+    // The next message already waits on the PC while this turn ends.
+    const queued = await t.ctx.prisma.command.create({
+      data: {
+        userId: u.user.id,
+        deviceId: d.deviceId,
+        sessionId: chat.id,
+        commandType: 'instruction',
+        payload: { text: 'next' },
+        idempotencyKey: randomUUID(),
+        status: 'Accepted',
+        expiresAt: new Date(Date.now() + 60_000),
+      },
+    });
+    const done = async () =>
+      (await list(u.cookie)).notifications.filter((n) => n.category === 'task_completed').length;
+    await agent.send(status(ext, 'Running'));
+    await agent.send(status(ext, 'WaitingForInput'));
+    // Something else notifies after it, so the turn's end was handled when we look.
+    await agent.send(status(ext, 'Failed'));
+    await waitFor(async () =>
+      (await list(u.cookie)).notifications.some((n) => n.category === 'agent_failed'),
+    );
+    expect(await done()).toBe(0);
+
+    // The queue is empty when the next turn ends: now it says so.
+    await t.ctx.prisma.command.update({ where: { id: queued.id }, data: { status: 'Completed' } });
+    await agent.send(status(ext, 'Running'));
+    await agent.send(status(ext, 'WaitingForInput'));
+    await waitFor(async () => (await done()) === 1);
+    agent.ws.close();
+  });
+
   it('quiet hours hold back non-critical pushes but keep critical ones; history keeps both', async () => {
     const u = await user();
     const token = `tok-${randomUUID()}`;

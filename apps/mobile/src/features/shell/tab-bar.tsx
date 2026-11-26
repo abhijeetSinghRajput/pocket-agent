@@ -5,11 +5,11 @@ import { Pressable, View, type LayoutChangeEvent } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useUser } from '@/lib/auth';
-import { useApprovals, useNotifications } from '@/lib/data';
+import { useApprovals, useNotifications, useWorkers } from '@/lib/data';
 import { dur, ease, enter, settleSpring } from '@/lib/motion';
 import { alpha, fonts, useTheme } from '@/lib/theme';
 import { useUpdateWaiting } from '@/features/shell/app-update';
-import { Avatar, CountBubble, T, tap } from '@/ui/core';
+import { Avatar, CountBubble, Dot, T, tap } from '@/ui/core';
 import { TAB_BAR_HEIGHT } from '@/ui/screen';
 
 type TabBarProps = Parameters<NonNullable<ComponentProps<typeof Tabs>['tabBar']>>[0];
@@ -32,6 +32,8 @@ export function TabBar({ state, emitter, navigateToTab }: TabBarProps) {
   const user = useUser();
   const waiting = useApprovals('pending').state.data?.length ?? 0;
   const unread = useNotifications().state.data?.unread ?? 0;
+  // Any agent at work right now: a green dot breathes on Agents.
+  const active = (useWorkers().state.data ?? []).some((w) => w.status === 'running');
   const updateWaiting = useUpdateWaiting();
   const [width, setWidth] = useState(0);
   const count = state.routes.length;
@@ -79,7 +81,13 @@ export function TabBar({ state, emitter, navigateToTab }: TabBarProps) {
               key={route.key}
               accessibilityRole="tab"
               accessibilityState={{ selected: focused }}
-              accessibilityLabel={badge ? `${tab.label}, ${badge} waiting` : tab.label}
+              accessibilityLabel={[
+                tab.label,
+                badge ? `${badge} waiting` : null,
+                route.name === 'agents' && active ? 'agents at work' : null,
+              ]
+                .filter(Boolean)
+                .join(', ')}
               testID={`tab-${route.name}`}
               onPress={() => {
                 const event = emitter.emit({ type: 'tabPress', target: route.key, canPreventDefault: true });
@@ -123,6 +131,24 @@ export function TabBar({ state, emitter, navigateToTab }: TabBarProps) {
                       />
                     )}
                   </View>
+                )}
+                {route.name === 'agents' && active && (
+                  // On the icon's lower-right corner (the count keeps the upper one), ringed by the bar.
+                  <Animated.View
+                    entering={enter.pop}
+                    pointerEvents="none"
+                    testID="agents-active-dot"
+                    style={{
+                      position: 'absolute',
+                      bottom: 2,
+                      left: 13,
+                      padding: 2,
+                      borderRadius: 7,
+                      backgroundColor: c.bar,
+                    }}
+                  >
+                    <Dot color={c.success} size={9} pulse />
+                  </Animated.View>
                 )}
                 {badge > 0 && (
                   // On the icon's top-right corner, with a ring of the bar so it reads as sitting on it.

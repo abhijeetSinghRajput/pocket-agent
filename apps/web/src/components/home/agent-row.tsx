@@ -3,41 +3,59 @@ import { AgentLogo } from '@/components/agents/agent-logos';
 import './agent-row.css';
 
 /**
- * The agents Pocket Agent connects to: Claude Code in the middle, working today, and other coding
- * agents around it, faded, marked coming soon. Lines run from each down to Pocket Agent; Claude
- * Code and Codex are live.
+ * The agents Pocket Agent connects to, in a loose row above the headline: Claude Code in the
+ * middle with Codex, Antigravity, OpenCode and GitHub Copilot around it, all working today (dark
+ * tiles, live lines), and the ones still to come at the ends, faded. Lines run from each down to
+ * Pocket Agent.
  */
 
-type Agent = { name: string; light: string; dark?: string };
+type Tile = {
+  name: string;
+  /** Works today (a dark tile with a live line); otherwise coming soon. */
+  live: boolean;
+  /** Logo file in /logos/agents (the one that reads on the tile), and its dark-theme twin. */
+  logo?: string;
+  dark?: string;
+  /** Drawn from the app's own mark instead of a file. */
+  mark?: 'codex';
+  /** The one in the middle, larger. */
+  main?: boolean;
+};
 
-const LEFT: Agent[] = [
-  { name: 'Gemini CLI', light: 'gemini' },
-  { name: 'Cursor', light: 'cursor_light', dark: 'cursor_dark' },
-  { name: 'GitHub Copilot', light: 'copilot', dark: 'copilot_dark' },
-];
-const RIGHT: Agent[] = [
-  { name: 'OpenCode', light: 'opencode', dark: 'opencode-dark' },
-  { name: 'Qwen Code', light: 'qwen_light', dark: 'qwen_dark' },
+// Left to right. Connected agents sit on dark tiles, so they use their light-on-dark logos.
+const TILES: Tile[] = [
+  { name: 'Cursor', live: false, logo: 'cursor_light', dark: 'cursor_dark' },
+  { name: 'GitHub Copilot', live: true, logo: 'copilot_dark' },
+  { name: 'Antigravity', live: true, logo: 'antigravity' },
+  { name: 'Claude Code', live: true, logo: 'claude-code', main: true },
+  { name: 'Codex', live: true, mark: 'codex' },
+  { name: 'OpenCode', live: true, logo: 'opencode-dark' },
+  { name: 'Qwen Code', live: false, logo: 'qwen_light', dark: 'qwen_dark' },
 ];
 
 // Where each tile sits along the row (0-100), and the hub below the middle the lines meet at
 const X = [8, 22, 36, 50, 64, 78, 92];
 const HUB = { x: 50, y: 92 };
 
-function Logo({ a, size }: { a: Agent; size: number }) {
+const list = (names: string[]) =>
+  names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names.at(-1)}` : (names[0] ?? '');
+
+function Logo({ t }: { t: Tile }) {
+  if (t.mark) return <AgentLogo provider={t.mark} className="agents__mark" />;
+  const size = t.main ? 40 : t.live ? 34 : 30;
   return (
     <>
       <Image
-        src={`/logos/agents/${a.light}.svg`}
-        alt={a.name}
+        src={`/logos/agents/${t.logo}.svg`}
+        alt={t.name}
         width={size}
         height={size}
-        className={a.dark ? 'dark:hidden' : undefined}
+        className={t.dark ? 'dark:hidden' : undefined}
       />
-      {a.dark && (
+      {t.dark && (
         <Image
-          src={`/logos/agents/${a.dark}.svg`}
-          alt={a.name}
+          src={`/logos/agents/${t.dark}.svg`}
+          alt={t.name}
           width={size}
           height={size}
           className="hidden dark:block"
@@ -48,56 +66,36 @@ function Logo({ a, size }: { a: Agent; size: number }) {
 }
 
 export function AgentRow() {
-  const tiles = LEFT;
+  const live = TILES.filter((t) => t.live).map((t) => t.name);
+  const soon = TILES.filter((t) => !t.live).map((t) => t.name);
   return (
-    <figure
-      className="agents"
-      aria-label="Works with Claude Code and Codex today. Gemini CLI, Cursor, GitHub Copilot, OpenCode and Qwen Code are coming soon."
-    >
+    <figure className="agents" aria-label={`Works with ${list(live)} today. ${list(soon)} are coming soon.`}>
       <svg className="agents__lines" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden>
-        {X.map((x, i) => (
+        {TILES.map((t, i) => (
           <path
-            key={i}
-            className={i === 3 || i === 4 ? 'agents__line agents__line--live' : 'agents__line'}
-            d={`M ${x} 46 C ${x} 74, ${HUB.x} 66, ${HUB.x} ${HUB.y}`}
+            key={t.name}
+            className={t.live ? 'agents__line agents__line--live' : 'agents__line'}
+            d={`M ${X[i]} 46 C ${X[i]} 74, ${HUB.x} 66, ${HUB.x} ${HUB.y}`}
             vectorEffect="non-scaling-stroke"
           />
         ))}
       </svg>
 
       <ul className="agents__row">
-        {tiles.map((a, i) => (
+        {TILES.map((t, i) => (
           <li
-            key={a!.name}
-            className="agents__tile agents__tile--soon"
+            key={t.name}
+            className={
+              t.main
+                ? 'agents__tile agents__tile--claude'
+                : t.live
+                  ? 'agents__tile agents__tile--live'
+                  : 'agents__tile agents__tile--soon'
+            }
             style={{ left: `${X[i]}%` }}
-            title={`${a.name}: coming soon`}
+            title={`${t.name}: ${t.live ? 'works today' : 'coming soon'}`}
           >
-            <Logo a={a} size={30} />
-          </li>
-        ))}
-        <li
-          className="agents__tile agents__tile--claude"
-          style={{ left: `${X[3]}%` }}
-          title="Claude Code: works today"
-        >
-          <Image src="/logos/agents/claude-code.svg" alt="Claude Code" width={40} height={40} />
-        </li>
-        <li
-          className="agents__tile agents__tile--codex"
-          style={{ left: `${X[4]}%` }}
-          title="Codex: works today"
-        >
-          <AgentLogo provider="codex" className="agents__codex-mark" />
-        </li>
-        {RIGHT.map((a, i) => (
-          <li
-            key={a.name}
-            className="agents__tile agents__tile--soon"
-            style={{ left: `${X[5 + i]}%` }}
-            title={`${a.name}: coming soon`}
-          >
-            <Logo a={a} size={30} />
+            <Logo t={t} />
           </li>
         ))}
       </ul>

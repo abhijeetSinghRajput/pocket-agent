@@ -1,5 +1,6 @@
-/* The agents row above the hero headline: tiles in a loose row, each a little askew, Claude Code
-   lifted and marked, lines from every tile down to Pocket Agent. */
+/* The agents row above the hero headline: tiles in a loose row, each a little askew, the connected
+   ones dark with live lines (Claude Code larger, in the middle), lines from every tile down to
+   Pocket Agent. */
 
 .agents {
   position: relative;
@@ -100,7 +101,7 @@
   rotate: -7deg;
 }
 
-.agents__tile--codex {
+.agents__tile--live {
   top: 58px;
   width: 60px;
   height: 60px;
@@ -108,12 +109,19 @@
   border-radius: 17px;
   background: #1c1712;
   z-index: 1;
-  animation: agents-in 600ms var(--ease-out) both, agents-bob 3.2s ease-in-out 800ms infinite;
+  animation:
+    agents-in 600ms var(--ease-out) both,
+    agents-bob 3.2s ease-in-out 800ms infinite;
 }
 
-.agents__tile--codex svg {
+.agents__tile--live svg {
   width: 36px;
   height: 36px;
+}
+
+/* OpenCode's logo is a square of its own: rounded to sit inside the tile */
+.agents__tile--live img {
+  border-radius: 8px;
 }
 
 .agents__tile--claude {
@@ -130,7 +138,7 @@
 }
 
 :where(.dark) .agents__tile--claude,
-:where(.dark) .agents__tile--codex {
+:where(.dark) .agents__tile--live {
   border-color: color-mix(in oklab, var(--primary) 60%, #fff);
   background: #0f0c0a;
 }
@@ -340,20 +348,28 @@
 
   .agents__tile--claude {
     top: 46px;
-    width: 58px;
-    height: 58px;
+    width: 52px;
+    height: 52px;
+    border-radius: 16px;
   }
 
-  .agents__tile--codex {
+  /* Five connected tiles share a narrow row: a little smaller, so they don't crowd */
+  .agents__tile--live {
     top: 50px;
-    width: 48px;
-    height: 48px;
-    border-radius: 14px;
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+  }
+
+  .agents__tile--live img,
+  .agents__tile--live svg {
+    width: 24px;
+    height: 24px;
   }
 
   .agents__tile--claude img {
-    width: 30px;
-    height: 30px;
+    width: 28px;
+    height: 28px;
   }
 
   .agents__note {

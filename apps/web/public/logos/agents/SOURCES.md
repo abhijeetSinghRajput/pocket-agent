@@ -1,7 +1,7 @@
 # Agent logos
 
 From [SVGL](https://github.com/pheralb/svgl) (MIT), commit `995dfbe8f89b2a8c98cf4496a289698780a60663`, downloaded 2026-11-26, unchanged.
-Each logo is a trademark of its owner, used only to name the tool. Only Claude Code works with Pocket Agent today; the page marks the others as coming soon.
+Each logo is a trademark of its owner, used only to name the tool. Claude Code, Codex, Antigravity, OpenCode and GitHub Copilot work with Pocket Agent today; the page marks the others as coming soon.
 
 | File | Source |
 |---|---|
@@ -18,3 +18,4 @@ Each logo is a trademark of its owner, used only to name the tool. Only Claude C
 | `opencode-dark.svg` | https://raw.githubusercontent.com/pheralb/svgl/995dfbe8f89b2a8c98cf4496a289698780a60663/static/library/opencode-dark.svg |
 | `qwen_light.svg` | https://raw.githubusercontent.com/pheralb/svgl/995dfbe8f89b2a8c98cf4496a289698780a60663/static/library/qwen_light.svg |
 | `qwen_dark.svg` | https://raw.githubusercontent.com/pheralb/svgl/995dfbe8f89b2a8c98cf4496a289698780a60663/static/library/qwen_dark.svg |
+| `antigravity.svg` | https://raw.githubusercontent.com/pheralb/svgl/07dfbe5a82be6bfdd2b175c2aca0ad52ced9fddd/static/library/antigravity.svg (commit `07dfbe5`, downloaded 2026-11-27; `apps/mobile/assets/images/agents/antigravity.png` is this file drawn at 256 px) |

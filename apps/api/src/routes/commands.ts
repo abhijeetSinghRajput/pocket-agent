@@ -13,12 +13,14 @@ import {
   SessionControlRequest,
   StartSessionRequest,
   PROVIDERS_AGENT_VERSION,
+  CODEX_RESUME_AGENT_VERSION,
   OtherAgent,
   versionBelow,
   type AttachmentRef,
   type CommandKind,
   type TurnEffort,
   type TurnMode,
+  type ProviderId,
 } from '@pocket-agent/protocol';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
@@ -122,6 +124,30 @@ export async function commandRoutes(app: FastifyInstance, ctx: Services): Promis
     if (list.success && list.data.some((m) => m.id === model)) return false;
     bad(reply, 'model_not_available', 'That model is not available on this PC.', 400);
     return true;
+  }
+
+  /**
+   * Another agent than Claude Code: only one the PC reported installed and signed in, with one of
+   * its own models. False (and the reply sent) when it can't be used.
+   */
+  function otherAgentReady(
+    reply: FastifyReply,
+    device: { agents: unknown },
+    other: Exclude<ProviderId, 'claude-code'>,
+    model: string | undefined,
+  ): boolean {
+    const agent = z
+      .array(OtherAgent)
+      .catch([])
+      .parse(device.agents ?? [])
+      .find((a) => a.provider === other);
+    const name = agentProduct(other);
+    if (!agent) bad(reply, 'provider_not_available', `${name} isn’t installed on this PC.`, 400);
+    else if (!agent.signedIn) bad(reply, 'provider_signed_out', `Sign in to ${name} on this PC first.`, 400);
+    else if (model && agent.models.length && !agent.models.some((m) => m.id === model))
+      bad(reply, 'model_not_available', 'That model is not available on this PC.', 400);
+    else return true;
+    return false;
   }
 
   /**
@@ -276,18 +302,7 @@ export async function commandRoutes(app: FastifyInstance, ctx: Services): Promis
     if (other && outdated(reply, device.agentVersion, PROVIDERS_AGENT_VERSION, 'Chatting with Codex', 409))
       return;
     if (other) {
-      // Only an agent the PC reported installed and signed in, with one of its own models.
-      const agent = z
-        .array(OtherAgent)
-        .catch([])
-        .parse(device.agents ?? [])
-        .find((a) => a.provider === other);
-      const name = agentProduct(other);
-      if (!agent) return bad(reply, 'provider_not_available', `${name} isn’t installed on this PC.`, 400);
-      if (!agent.signedIn)
-        return bad(reply, 'provider_signed_out', `Sign in to ${name} on this PC first.`, 400);
-      if (body.model && agent.models.length && !agent.models.some((m) => m.id === body.model))
-        return bad(reply, 'model_not_available', 'That model is not available on this PC.', 400);
+      if (!otherAgentReady(reply, device, other, body.model)) return;
     } else if (unknownModel(reply, device, body.model)) return;
     const attachments = await sentFiles(req, reply, device.agentVersion, body.attachmentIds, {
       version: RESUME_FILES_AGENT_VERSION,
@@ -318,8 +333,15 @@ export async function commandRoutes(app: FastifyInstance, ctx: Services): Promis
     if (!body) return;
     if (!s.endedAt) return bad(reply, 'session_running', 'This session is still running. Send it a message.');
     if (s.device.revokedAt) return bad(reply, 'device_revoked', 'This device was revoked.');
-    if (s.provider !== 'claude-code')
-      return bad(reply, 'not_supported', 'Only Claude Code chats can be continued for now.');
+    // Codex chats continue on PCs that know how (from agent 2.6.0), with Codex still signed in.
+    const other = s.provider === 'codex' ? ('codex' as const) : undefined;
+    if (s.provider !== 'claude-code' && !other)
+      return bad(reply, 'not_supported', 'This chat can’t be continued from here.');
+    if (
+      other &&
+      outdated(reply, s.device.agentVersion, CODEX_RESUME_AGENT_VERSION, 'Continuing a Codex chat', 409)
+    )
+      return;
     if (outdated(reply, s.device.agentVersion, RESUME_MIN_AGENT_VERSION, 'Continuing a session', 409)) return;
     // From 0.1.5 the PC continues the session in the folder its conversation ran in, whatever the
     // project list says (that list is for starting new chats). Older agents still require it.
@@ -334,7 +356,9 @@ export async function commandRoutes(app: FastifyInstance, ctx: Services): Promis
         400,
       );
     }
-    if (unknownModel(reply, s.device, body.model)) return;
+    if (other) {
+      if (!otherAgentReady(reply, s.device, other, body.model)) return;
+    } else if (unknownModel(reply, s.device, body.model)) return;
     const attachments = await sentFiles(req, reply, s.device.agentVersion, body.attachmentIds, {
       version: RESUME_FILES_AGENT_VERSION,
       what: 'Sending files when continuing a session',
@@ -344,6 +368,7 @@ export async function commandRoutes(app: FastifyInstance, ctx: Services): Promis
       deviceId: s.deviceId,
       session: { id: s.id, externalSessionId: s.externalSessionId },
       kind: 'session.start',
+      ...(other ? { provider: other } : {}),
       resume: true,
       idempotencyKey: body.idempotencyKey,
       text: body.text,

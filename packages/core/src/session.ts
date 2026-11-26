@@ -4,6 +4,7 @@ import {
   LIVE_SETTINGS_METADATA,
   RESUME_ANY_FOLDER_AGENT_VERSION,
   RESUME_MIN_AGENT_VERSION,
+  CODEX_RESUME_AGENT_VERSION,
   versionBelow,
   type AgentSessionDto,
   type ApprovalDto,
@@ -51,7 +52,17 @@ export function deliveryHint(s: AgentSessionDto): string {
  */
 export function resumeBlocker(s: AgentSessionDto, device: DeviceDto | undefined): string | null {
   const ended = 'This session has ended.';
-  if (s.provider !== 'claude-code' || !device || device.status === 'Revoked') return ended;
+  if (!device || device.status === 'Revoked') return ended;
+  if (s.provider === 'codex') {
+    // Continued by the PC's Codex (agent 2.6.0 on), which must still be there and signed in.
+    if (versionBelow(device.agentVersion, CODEX_RESUME_AGENT_VERSION))
+      return `${ended} To continue it from here, update Pocket Agent on the PC: \`pocket-agent update\``;
+    const codex = device.agents.find((a) => a.provider === 'codex');
+    if (!codex) return `${ended} Codex isn’t installed on this PC any more.`;
+    if (!codex.signedIn) return `${ended} To continue it, sign in to Codex on the PC (\`codex login\`).`;
+    return null;
+  }
+  if (s.provider !== 'claude-code') return ended;
   if (versionBelow(device.agentVersion, RESUME_MIN_AGENT_VERSION))
     return `${ended} To continue it from here, update Pocket Agent on the PC: \`pocket-agent update\``;
   // Agents from 0.1.5 continue any session in its own folder; older ones need it on the list.

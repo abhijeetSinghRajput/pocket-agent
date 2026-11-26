@@ -27,7 +27,9 @@ function fakeRuntime() {
   const runtime: ManagedRuntime = {
     isManaged: (id) => running.has(id),
     start: async (input) => {
-      calls.push(`start:${input.prompt}:${input.model ?? ''}`);
+      calls.push(
+        `start:${input.prompt}:${input.model ?? ''}${input.resumeSessionId ? `:resume=${input.resumeSessionId}:${input.projectPath}` : ''}`,
+      );
       running.add('thread-1');
       return 'thread-1';
     },
@@ -118,6 +120,33 @@ describe('commands by coding agent', () => {
     expect(h.claudeStarted()).toBe(0);
   });
 
+  it('continues an ended chat in the folder it ran in (the list is for new chats); never a running one', async () => {
+    const h = harness(true);
+    const c = cmd(
+      {
+        commandType: 'session.start',
+        provider: 'codex',
+        resume: true,
+        projectPath: 'C:/elsewhere',
+        text: 'more',
+      },
+      'thread-0',
+    );
+    await h.router.handle(c);
+    expect(h.last(c.payload.commandId)).toMatchObject({ status: 'Executing' });
+    expect(h.codex.calls).toEqual(['start:more::resume=thread-0:C:/elsewhere']);
+
+    const again = cmd(
+      { commandType: 'session.start', provider: 'codex', resume: true, projectPath: h.project, text: 'x' },
+      'thread-1',
+    );
+    await h.router.handle(again);
+    expect(h.last(again.payload.commandId)).toMatchObject({
+      status: 'Failed',
+      extra: { error: 'session_running' },
+    });
+  });
+
   it('keeps the folder rule for every agent', async () => {
     const h = harness(true);
     const c = cmd({
@@ -171,24 +200,5 @@ describe('commands by coding agent', () => {
     ]);
     expect(h.last(stop.payload.commandId)?.status).toBe('Completed');
     expect(h.claudeStarted()).toBe(0);
-  });
-
-  it('doesn’t continue an ended chat of another agent yet', async () => {
-    const h = harness(true);
-    const c = cmd(
-      {
-        commandType: 'session.start',
-        provider: 'codex',
-        resume: true,
-        projectPath: h.project,
-        text: 'go on',
-      },
-      'thread-9',
-    );
-    await h.router.handle(c);
-    expect(h.last(c.payload.commandId)).toMatchObject({
-      status: 'Failed',
-      extra: { error: 'not_supported' },
-    });
   });
 });

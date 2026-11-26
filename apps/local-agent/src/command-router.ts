@@ -268,9 +268,15 @@ export class CommandRouter {
     const sid = msg.sessionId;
     switch (p.commandType) {
       case 'session.start': {
-        // Continuing an ended chat of another agent isn't supported yet.
-        if (p.resume) return fail('not_supported');
-        const allowed = isAllowedProject(this.deps.policy(), p.projectPath);
+        // Continue an ended chat: like Claude's, in the folder its conversation ran in (the agent
+        // keeps it with the conversation); the project list is for new chats.
+        const resume = p.resume ? sid : undefined;
+        if (p.resume && !resume) return fail('session_not_found');
+        if (resume && (runtime.isManaged(resume) || this.deps.registry.get(resume)))
+          return fail('session_running');
+        const allowed = resume
+          ? { path: p.projectPath }
+          : isAllowedProject(this.deps.policy(), p.projectPath);
         if (!allowed) return fail('project_not_allowed');
         let files: LocalFile[] = [];
         if (p.attachments?.length) {
@@ -286,6 +292,7 @@ export class CommandRouter {
           projectPath: allowed.path,
           prompt: p.text,
           commandId: p.commandId,
+          ...(resume ? { resumeSessionId: resume } : {}),
           ...(files.length ? { files } : {}),
           ...(model ? { model } : {}),
           ...turn,

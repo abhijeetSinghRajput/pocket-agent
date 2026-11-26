@@ -515,6 +515,29 @@ describe('continuing an ended session', () => {
     s.agent.ws.close();
   });
 
+  it('a Codex chat continues on a PC from 2.6.0 with Codex signed in, named for the PC', async () => {
+    const CODEX = { provider: 'codex' as const, version: '0.172.0', signedIn: true, models: [] };
+    const s = await ended('2.5.0');
+    await t.ctx.prisma.agentSession.update({ where: { id: s.session.id }, data: { provider: 'codex' } });
+    await t.ctx.prisma.device.update({ where: { id: s.deviceId }, data: { agents: [CODEX] } });
+    const old = await resume(s);
+    expect(old.statusCode).toBe(409);
+    expect(old.json().error).toBe('agent_outdated');
+
+    await t.ctx.prisma.device.update({
+      where: { id: s.deviceId },
+      data: { agentVersion: '2.6.0', agents: [{ ...CODEX, signedIn: false }] },
+    });
+    expect((await resume(s)).json().error).toBe('provider_signed_out');
+
+    await t.ctx.prisma.device.update({ where: { id: s.deviceId }, data: { agents: [CODEX] } });
+    expect((await resume(s)).statusCode).toBe(201);
+    const frame = await s.agent.next((m) => m['eventType'] === 'command.execute');
+    expect(frame['sessionId']).toBe(s.ext);
+    expect(frame['payload']).toMatchObject({ commandType: 'session.start', provider: 'codex', resume: true });
+    s.agent.ws.close();
+  });
+
   it('an older agent still needs the folder on the list', async () => {
     const s = await ended('0.1.4');
     const res = await resume(s);

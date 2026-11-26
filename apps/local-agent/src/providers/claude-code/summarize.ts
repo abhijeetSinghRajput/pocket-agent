@@ -83,6 +83,10 @@ export function summarizeToolInput(toolName: string, raw: unknown): string {
         ...(i['run_in_background'] === true ? { run_in_background: true } : {}),
       };
       break;
+    case 'ImageGeneration':
+      // Codex's picture: its own description of what it made.
+      out = { description: str(i['description']) };
+      break;
     case 'Workflow':
       out = { name: str(i['name'], 100), description: str(i['description']) };
       break;

@@ -14,7 +14,7 @@ type Json = Record<string, unknown>;
  * A stand-in for `codex app-server`, speaking its JSON-RPC lines: answers requests, and lets the
  * test send notifications and requests like Codex would during a turn.
  */
-function fakeAppServer(opts: { signedIn?: boolean } = {}) {
+function fakeAppServer(opts: { signedIn?: boolean; resumeCwd?: string } = {}) {
   const sent: Json[] = [];
   let lineListener: (line: string) => void = () => undefined;
   let closeListener: (reason: string) => void = () => undefined;
@@ -34,18 +34,29 @@ function fakeAppServer(opts: { signedIn?: boolean } = {}) {
           ? { userAgent: 'pocket-agent/0.172.0 (Windows 10.0.26200; x86_64)' }
           : method === 'thread/start'
             ? { thread: { id: 'th-1' }, model: 'gpt-6.2-sol' }
-            : method === 'turn/start'
-              ? { turn: { id: `tu-${++turn}` } }
-              : method === 'account/read'
-                ? { account: opts.signedIn ? { type: 'chatgpt' } : null }
-                : method === 'model/list'
-                  ? {
-                      data: [
-                        { id: 'gpt-6.2-sol', displayName: 'GPT-6.2-Sol', description: 'Fast', hidden: false },
-                        { id: 'internal', displayName: 'Hidden', description: '', hidden: true },
-                      ],
-                    }
-                  : {};
+            : method === 'thread/resume'
+              ? {
+                  thread: { id: (msg['params'] as Json)['threadId'] },
+                  model: 'gpt-6.2-sol',
+                  cwd: opts.resumeCwd ?? '',
+                }
+              : method === 'turn/start'
+                ? { turn: { id: `tu-${++turn}` } }
+                : method === 'account/read'
+                  ? { account: opts.signedIn ? { type: 'chatgpt' } : null }
+                  : method === 'model/list'
+                    ? {
+                        data: [
+                          {
+                            id: 'gpt-6.2-sol',
+                            displayName: 'GPT-6.2-Sol',
+                            description: 'Fast',
+                            hidden: false,
+                          },
+                          { id: 'internal', displayName: 'Hidden', description: '', hidden: true },
+                        ],
+                      }
+                    : {};
       queueMicrotask(() => emit({ id, result }));
     },
     onLine: (l) => void (lineListener = l),
@@ -252,6 +263,55 @@ describe('Codex chats', () => {
     expect(h.of('agent.error').at(-1)).toMatchObject({ message: 'Sign in to Codex' });
     expect(h.registry.get('th-1')?.status).toBe('Failed');
     expect(h.acks.at(-1)).toMatchObject({ id: 'c1', status: 'Failed' });
+  });
+
+  it('continues an ended chat: Codex reloads the thread, in the folder it ran in, with the same protection', async () => {
+    const h = harness();
+    const id = await h.codex.start({
+      projectPath: h.project,
+      prompt: 'and now the tests',
+      commandId: 'c9',
+      resumeSessionId: 'th-old',
+    });
+    expect(id).toBe('th-old');
+    expect(h.server.requests('thread/start')).toHaveLength(0);
+    expect(h.server.requests('thread/resume')[0]!['params']).toMatchObject({
+      threadId: 'th-old',
+      approvalPolicy: 'on-request',
+      sandbox: 'workspace-write',
+      excludeTurns: true,
+    });
+    expect(h.registry.get('th-old')).toMatchObject({ provider: 'codex', mode: 'managed' });
+    await h.tick();
+    expect(h.server.requests('turn/start')[0]!['params']).toMatchObject({
+      threadId: 'th-old',
+      input: [{ text: 'and now the tests' }],
+    });
+  });
+
+  it('pictures Codex looks at or makes show in the chat by path (the picture stays on the PC)', async () => {
+    const h = harness();
+    await h.codex.start({ projectPath: h.project, prompt: 'draw', commandId: 'c1' });
+    await h.tick();
+    const done = (item: Json) =>
+      h.server.emit({ method: 'item/completed', params: { threadId: 'th-1', item } });
+    done({ type: 'imageView', id: 'v1', path: 'C:/shots/home.png' });
+    done({
+      type: 'imageGeneration',
+      id: 'g1',
+      status: 'completed',
+      revisedPrompt: 'A robot in a pocket',
+      savedPath: 'C:/out/robot.png',
+      result: 'BASE64PIXELS',
+      failure: null,
+      generationId: null,
+    });
+    const tools = h.of('agent.tool.completed');
+    expect(tools.map((t) => t['toolName'])).toEqual(['Read', 'ImageGeneration']);
+    expect(String(tools[0]!['input'])).toContain('C:/shots/home.png');
+    expect(String(tools[1]!['input'])).toContain('A robot in a pocket');
+    expect(tools[1]!['output']).toBe('Saved to C:/out/robot.png');
+    expect(JSON.stringify(tools)).not.toContain('BASE64PIXELS');
   });
 
   it('pictures go in as images; other files are named for Codex to open', () => {

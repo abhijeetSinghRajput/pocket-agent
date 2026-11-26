@@ -108,19 +108,31 @@ export class CodexSessions implements ManagedRuntime {
     resumeSessionId?: string;
     files?: LocalFile[];
   }): Promise<string> {
-    if (input.resumeSessionId) throw new Error('not_supported');
-    const projectPath = path.resolve(input.projectPath);
-    const st = await stat(projectPath).catch(() => null);
-    if (!st?.isDirectory()) throw new Error(`Not a directory: ${projectPath}`);
     const client = await this.ensureClient();
-    const started = await client.request<{ thread: { id: string }; model?: string }>('thread/start', {
-      cwd: projectPath,
-      // Codex's own default protection: it asks before anything outside the project's sandbox.
+    // Codex's own default protection: it asks before anything outside the project's sandbox.
+    const settings = {
       approvalPolicy: 'on-request',
       sandbox: 'workspace-write',
       ...(input.model ? { model: input.model } : {}),
       developerInstructions: CODEX_APP_CONTEXT,
-    });
+    };
+    let started: { thread: { id: string }; model?: string; cwd?: string };
+    let projectPath: string;
+    if (input.resumeSessionId) {
+      // An ended chat continues: Codex reloads the thread (its whole conversation) from its own
+      // history on this PC, in the folder it ran in.
+      started = await client.request('thread/resume', {
+        threadId: input.resumeSessionId,
+        ...settings,
+        excludeTurns: true,
+      });
+      projectPath = path.resolve(started.cwd ?? input.projectPath);
+    } else {
+      projectPath = path.resolve(input.projectPath);
+      const st = await stat(projectPath).catch(() => null);
+      if (!st?.isDirectory()) throw new Error(`Not a directory: ${projectPath}`);
+      started = await client.request('thread/start', { cwd: projectPath, ...settings });
+    }
     const id = started.thread.id;
     const t: Thread = {
       id,
@@ -497,6 +509,21 @@ export function reportItem(
       return tool(itemId, `mcp__${String(item['server'] ?? 'mcp')}__${String(item['tool'] ?? 'tool')}`, {});
     case 'webSearch':
       return tool(itemId, 'WebSearch', { query: item['query'] });
+    case 'imageView':
+      // Codex looks at a picture on the PC (the path only; the picture stays there).
+      return tool(itemId, 'Read', { file_path: item['path'] });
+    case 'imageGeneration': {
+      // A picture Codex made: where it was saved, or why it failed.
+      const saved = typeof item['savedPath'] === 'string' ? item['savedPath'] : undefined;
+      const failure = (item['failure'] as Json | null | undefined)?.['message'];
+      return tool(
+        itemId,
+        'ImageGeneration',
+        { description: item['revisedPrompt'] },
+        saved ? `Saved to ${saved}` : '',
+        typeof failure === 'string' ? failure : 'The picture could not be made',
+      );
+    }
     default:
   }
 }

@@ -453,6 +453,9 @@ export function ChatScreen({ id }: { id: string }) {
   const decided = () => {
     void approvals.refresh();
     changed();
+    // Answered: back to the newest message, like after sending one (the sheet leaves, the answer
+    // and Claude's next steps arrive below).
+    setJump((j) => j + 1);
   };
   const panel = question || permissions.length > 0;
 

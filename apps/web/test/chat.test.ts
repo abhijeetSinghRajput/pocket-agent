@@ -84,6 +84,14 @@ describe('buildChat', () => {
     expect(delivered[1]).toMatchObject({ kind: 'user', command: { status: 'Executing' } });
   });
 
+  it('a sent message keeps its key when the PC echoes it (its bubble isn’t drawn anew)', () => {
+    const c = cmd(5, { text: 'Fix the bug' });
+    const before = buildChat([], [c]);
+    const after = buildChat([ev(6, 'agent.output', { role: 'user', text: 'Fix the bug' })], [c]);
+    expect(before.map((i) => i.key)).toEqual([`cmd-${c.id}`]);
+    expect(after.map((i) => i.key)).toEqual([`cmd-${c.id}`]);
+  });
+
   it('matches an echo the PC truncated', () => {
     const long = 'x'.repeat(50);
     const items = buildChat(

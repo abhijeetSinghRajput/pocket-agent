@@ -365,7 +365,7 @@ export function ChatScreen({ id }: { id: string }) {
       ...(w.files.length ? { attachments: w.files } : {}),
       local: w.error ? 'failed' : 'waiting',
     }));
-    return [...buildChat(feed.events, sent), ...held, ...outbox.items(all)];
+    return outbox.rekey([...buildChat(feed.events, sent), ...held, ...outbox.items(all)]);
     // `outbox.items` reads `outbox.outgoing`.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [feed.events, feed.hasMore, feed.oldestAt, commands.state.data, outbox.outgoing, waiting, hidden]);

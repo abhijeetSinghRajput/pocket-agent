@@ -111,5 +111,17 @@ export function useOutbox(on: {
       }));
   };
 
-  return { outgoing, send, retry, discard, items };
+  /**
+   * Keeps a sent message's key once the chat draws it from its command (`cmd-<id>`): the bubble
+   * shown while sending stays the same bubble, instead of being drawn anew (a flicker).
+   */
+  const rekey = (list: ChatItem[]): ChatItem[] => {
+    const keys = new Map(outgoing.flatMap((o) => (o.commandId ? [[o.commandId, `out-${o.key}`]] : [])));
+    if (!keys.size) return list;
+    return list.map((i) =>
+      i.kind === 'user' && i.command && keys.has(i.command.id) ? { ...i, key: keys.get(i.command.id)! } : i,
+    );
+  };
+
+  return { outgoing, send, retry, discard, items, rekey };
 }

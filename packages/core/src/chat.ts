@@ -398,6 +398,9 @@ export function buildChat(events: AgentEventDto[], commands: CommandDto[] = []):
     if (echo) {
       claimed.add(echo);
       echo.command = c;
+      // The same message keeps the same key before and after the PC echoes it (a new key would
+      // redraw its bubble: a flicker).
+      echo.key = `cmd-${c.id}`;
       if (c.attachments.length) echo.attachments = c.attachments;
     } else {
       extra.push({

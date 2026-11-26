@@ -346,16 +346,8 @@ export function OptionMark({ on, multi, size = 22 }: { on: boolean; multi: boole
   );
 }
 
-/** A thin top accent on a docked sheet (warning for permissions, primary for questions). */
-export function SheetFrame({
-  accent,
-  children,
-  testID,
-}: {
-  accent: string;
-  children: ReactNode;
-  testID?: string;
-}) {
+/** A docked sheet at the foot of the chat (a permission request or a question). */
+export function SheetFrame({ children, testID }: { children: ReactNode; testID?: string }) {
   const { c } = useTheme();
   return (
     <Animated.View
@@ -365,8 +357,6 @@ export function SheetFrame({
         backgroundColor: c.popover,
         borderTopLeftRadius: radius.xxl,
         borderTopRightRadius: radius.xxl,
-        borderTopWidth: 3,
-        borderTopColor: accent,
         overflow: 'hidden',
         shadowColor: '#000',
         shadowOpacity: 0.12,

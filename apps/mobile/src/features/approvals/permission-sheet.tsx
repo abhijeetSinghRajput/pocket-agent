@@ -4,7 +4,6 @@ import { useWindowDimensions, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { layout } from '@/lib/motion';
-import { useTheme } from '@/lib/theme';
 import { T } from '@/ui/core';
 import { Notice } from '@/ui/feedback';
 import { CodeBlock } from '@/ui/code-block';
@@ -32,7 +31,6 @@ export function PermissionSheet({
   more: number;
   onDone: () => void;
 }) {
-  const { c } = useTheme();
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
   const left = useCountdown(approval.expiresAt);
@@ -43,7 +41,7 @@ export function PermissionSheet({
   const purpose = requestPurpose(approval.input);
 
   return (
-    <SheetFrame accent={c.warning} testID="permission-sheet">
+    <SheetFrame testID="permission-sheet">
       <View style={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 8, gap: 2 }}>
         <View
           style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}

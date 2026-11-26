@@ -363,7 +363,7 @@ export function QuestionSheet({
   const autoNext = page < last ? () => setQueued(page + 1) : undefined;
 
   return (
-    <SheetFrame accent={c.primary} testID="question-sheet">
+    <SheetFrame testID="question-sheet">
       {paged && (
         <View
           accessibilityLabel={`Question ${page + 1} of ${questions.length}`}

@@ -82,3 +82,32 @@ describe('Antigravity chats started in the terminal (status only)', () => {
     expect(h.of('agent.session.ended')).toEqual([{ externalSessionId: A, reason: 'idle' }]);
   });
 });
+
+describe('a chat Pocket Agent brought back after a restart', () => {
+  it('stays the phone’s chat even while its Antigravity still writes (never "terminal")', async () => {
+    const h = harness();
+    // Restored as waiting by the new PC agent (a managed chat), its files still changing.
+    h.registry.announce(
+      {
+        externalSessionId: A,
+        provider: 'antigravity',
+        mode: 'managed',
+        projectPath: 'C:/work/api',
+        status: 'WaitingForInput',
+        capabilities: {
+          monitor: true,
+          remoteApproval: false,
+          instructAnytime: true,
+          instructBetweenTurns: true,
+          interrupt: true,
+        },
+      },
+      'managed',
+    );
+    h.later(1000);
+    h.touch(A);
+    await h.watcher.scan();
+    expect(h.registry.get(A)?.mode).toBe('managed');
+    expect(h.registry.get(A)?.metadata?.['watch']).toBeUndefined();
+  });
+});

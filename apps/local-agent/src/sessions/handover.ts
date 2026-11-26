@@ -75,6 +75,11 @@ export class Handover {
     }
   }
 
+  /** One of this PC agent's chats (running, or brought back by a restart). */
+  isOurs(id: string): boolean {
+    return this.live.has(id) || this.dormant.has(id);
+  }
+
   /** A chat from the last run, waiting for its next message. */
   dormantChat(id: string): HandedOver | undefined {
     return this.dormant.get(id);

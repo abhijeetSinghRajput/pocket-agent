@@ -160,7 +160,9 @@ export class AntigravityWatcher {
         for (const s of await this.opts.list()) this.known.set(s.sessionId, s);
       }
       for (const [id, at] of changed) {
-        if (this.opts.isOurs(id)) {
+        // Pocket Agent's own chats, including one a restart brought back as waiting (its
+        // Antigravity may still be finishing the turn the last run started): never "terminal".
+        if (this.opts.isOurs(id) || this.registry.get(id)?.mode === 'managed') {
           this.followed.delete(id);
           continue;
         }

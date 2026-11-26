@@ -192,11 +192,11 @@ export class AgentService {
     const claudeDir = opts.claudeDir ?? claudeConfigDir();
     this.codexWatch = new CodexWatcher(this.registry, {
       dir: path.join(opts.codexDir ?? codexHome(), 'sessions'),
-      isManaged: this.codex.isManaged,
+      isManaged: (id) => this.codex.isManaged(id) || this.handover.isOurs(id),
     });
     this.antigravityWatch = new AntigravityWatcher(this.registry, {
       dir: antigravityConversations(),
-      isOurs: this.antigravity.isOurs,
+      isOurs: (id) => this.antigravity.isOurs(id) || this.handover.isOurs(id),
       list: () => listAntigravitySessions(opts.acp ?? spawnAcp),
     });
     this.discovery = new ClaudeDiscovery(path.join(claudeDir, 'sessions'), this.registry, {

@@ -151,13 +151,22 @@ export function spawnAppServer(): Transport {
  * A child process spoken to in lines on stdin/stdout (fixed arguments only). `shell` only for
  * npm's .cmd shims on Windows.
  */
-export function spawnLines(command: string, args: string[], shell: boolean): Transport {
+export function spawnLines(
+  command: string,
+  args: string[],
+  shell: boolean,
+  /** Variables the agent must not inherit. */
+  dropEnv: string[] = [],
+): Transport {
+  const env: NodeJS.ProcessEnv = { ...process.env, POCKET_AGENT_MANAGED_SESSION: '1' };
+  for (const name of dropEnv) delete env[name];
   const child = spawn(command, args, {
     stdio: ['pipe', 'pipe', 'pipe'],
     shell,
     windowsHide: true,
-    // Lets Pocket Agent's own Claude hook relay ignore anything the agent starts.
-    env: { ...process.env, POCKET_AGENT_MANAGED_SESSION: '1' },
+    // POCKET_AGENT_MANAGED_SESSION lets Pocket Agent's own Claude hook relay ignore anything the
+    // agent starts.
+    env,
   });
   const lineListeners: Array<(line: string) => void> = [];
   const closeListeners: Array<(reason: string) => void> = [];

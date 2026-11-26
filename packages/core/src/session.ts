@@ -60,7 +60,8 @@ export function resumeBlocker(s: AgentSessionDto, device: DeviceDto | undefined)
     s.provider === 'codex' ||
     s.provider === 'antigravity' ||
     s.provider === 'opencode' ||
-    s.provider === 'copilot'
+    s.provider === 'copilot' ||
+    s.provider === 'cursor'
   ) {
     // Continued by the PC's own agent (a PC agent that knows how), still there and signed in.
     const name = agentProduct(s.provider);
@@ -124,9 +125,16 @@ export const COPILOT_MODES: readonly { id: TurnMode; name: string; description: 
   { id: 'plan', name: MODE_NAME.plan, description: 'Plans the work first' },
 ];
 
+/** Cursor's modes: Agent (its default, as its permission settings allow) and Plan (read-only). */
+export const CURSOR_MODES: readonly { id: TurnMode; name: string; description: string }[] = [
+  { id: 'auto', name: 'Agent', description: 'Works as its permission settings allow' },
+  { id: 'plan', name: MODE_NAME.plan, description: 'Reads and plans, changes nothing' },
+];
+
 /** What signs in to an agent on the PC. */
 export function signInCommand(provider: string): string {
   if (provider === 'copilot') return 'copilot login';
+  if (provider === 'cursor') return 'agent login';
   return provider === 'codex' ? 'codex login' : provider === 'opencode' ? 'opencode auth login' : 'agy';
 }
 
@@ -135,6 +143,7 @@ export function modesFor(
   provider: string | null | undefined,
 ): readonly { id: TurnMode; name: string; description: string }[] {
   if (provider === 'copilot') return COPILOT_MODES;
+  if (provider === 'cursor') return CURSOR_MODES;
   return provider === 'codex' ? CODEX_MODES : provider === 'opencode' ? OPENCODE_MODES : MODES;
 }
 

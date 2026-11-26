@@ -73,6 +73,8 @@ interface Chat {
   tools: Map<string, { toolName: string; input: string }>;
   /** Permission requests waiting for the phone. */
   waiting: Set<string>;
+  /** The agent's own model ids for this chat (some agents only take these). */
+  models?: string[];
   /** Model and mode in use (only sent again when they change). */
   model?: string;
   mode?: TurnMode;
@@ -80,7 +82,7 @@ interface Chat {
 
 /** What differs between the coding agents spoken to over ACP (Antigravity, OpenCode). */
 export interface AcpProfile {
-  provider: 'antigravity' | 'opencode' | 'copilot';
+  provider: 'antigravity' | 'opencode' | 'copilot' | 'cursor';
   /** In a sentence: "Antigravity asked…". */
   name: string;
   /** The requests that switch a session to a mode (none: this mode isn't offered). */
@@ -91,7 +93,7 @@ export interface AcpProfile {
    */
   resume?: 'load';
   /** The app's model id → the agent's own, and back (ids the protocol can't carry are encoded). */
-  toAgentModel?: (id: string) => string;
+  toAgentModel?: (id: string, available?: string[]) => string;
   toAppModel?: (id: string) => string;
 }
 
@@ -153,7 +155,10 @@ export class AcpSessions implements ManagedRuntime {
     const client = await this.ensureClient();
     // An ended chat continues: Antigravity reopens the session (its whole conversation) from its
     // own history on this PC, without sending it again.
-    const created = await client.request<{ sessionId?: string; models?: { currentModelId?: string } }>(
+    const created = await client.request<{
+      sessionId?: string;
+      models?: { currentModelId?: string; availableModels?: Array<{ modelId?: unknown }> };
+    }>(
       !input.resumeSessionId
         ? 'session/new'
         : this.profile.resume === 'load'
@@ -179,6 +184,9 @@ export class AcpSessions implements ManagedRuntime {
       calls: new Map(),
       tools: new Map(),
       waiting: new Set(),
+      models: (created.models?.availableModels ?? [])
+        .map((m) => m.modelId)
+        .filter((m): m is string => typeof m === 'string'),
     };
     this.chats.set(id, c);
     this.ours.add(id);
@@ -323,7 +331,7 @@ export class AcpSessions implements ManagedRuntime {
     if (model && model !== c.model) {
       await client.request('session/set_model', {
         sessionId: c.id,
-        modelId: this.profile.toAgentModel?.(model) ?? model,
+        modelId: this.profile.toAgentModel?.(model, c.models) ?? model,
       });
       c.model = model;
       this.registry.setMetadata(c.id, { model });

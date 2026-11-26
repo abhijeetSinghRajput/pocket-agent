@@ -7,6 +7,7 @@ const PROVIDERS: Record<ProviderId, { name: string; product: string }> = {
   antigravity: { name: 'Antigravity', product: 'Antigravity CLI' },
   opencode: { name: 'OpenCode', product: 'OpenCode' },
   copilot: { name: 'Copilot', product: 'GitHub Copilot CLI' },
+  cursor: { name: 'Cursor', product: 'Cursor CLI' },
 };
 
 /** The agent's name in a sentence: "Claude is done", "Codex needs your OK". Unknown: Claude. */

@@ -4,9 +4,9 @@ import './agent-row.css';
 
 /**
  * The agents Pocket Agent connects to, in a loose row above the headline: Claude Code in the
- * middle with Codex, Antigravity, OpenCode and GitHub Copilot around it, all working today (dark
- * tiles, live lines), and the ones still to come at the ends, faded. Lines run from each down to
- * Pocket Agent.
+ * middle with Cursor, GitHub Copilot, Antigravity, Codex and OpenCode around it, all working
+ * today (dark tiles, live lines), and the one still to come at the end, faded. Lines run from each
+ * down to Pocket Agent.
  */
 
 type Tile = {
@@ -24,7 +24,7 @@ type Tile = {
 
 // Left to right. Connected agents sit on dark tiles, so they use their light-on-dark logos.
 const TILES: Tile[] = [
-  { name: 'Cursor', live: false, logo: 'cursor_light', dark: 'cursor_dark' },
+  { name: 'Cursor', live: true, logo: 'cursor_dark' },
   { name: 'GitHub Copilot', live: true, logo: 'copilot_dark' },
   { name: 'Antigravity', live: true, logo: 'antigravity' },
   { name: 'Claude Code', live: true, logo: 'claude-code', main: true },
@@ -69,7 +69,10 @@ export function AgentRow() {
   const live = TILES.filter((t) => t.live).map((t) => t.name);
   const soon = TILES.filter((t) => !t.live).map((t) => t.name);
   return (
-    <figure className="agents" aria-label={`Works with ${list(live)} today. ${list(soon)} are coming soon.`}>
+    <figure
+      className="agents"
+      aria-label={`Works with ${list(live)} today. ${list(soon)} ${soon.length > 1 ? 'are' : 'is'} coming soon.`}
+    >
       <svg className="agents__lines" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden>
         {TILES.map((t, i) => (
           <path

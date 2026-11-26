@@ -37,6 +37,7 @@ import {
   detectCopilot,
   spawnCopilotAcp,
 } from './providers/copilot/copilot.js';
+import { CURSOR_PROFILE, CursorSessions, detectCursor, spawnCursorAcp } from './providers/cursor/cursor.js';
 import {
   antigravityConversations,
   AntigravityWatcher,
@@ -75,6 +76,8 @@ export interface ServiceOptions {
   opencode?: (() => Transport) | false;
   /** `copilot --acp` stand-in (tests); false: don't look for Copilot CLI. */
   copilot?: (() => Transport) | false;
+  /** `agent acp` (Cursor) stand-in (tests); false: don't look for Cursor CLI. */
+  cursor?: (() => Transport) | false;
 }
 
 /**
@@ -90,6 +93,7 @@ export class AgentService {
   readonly antigravity: AntigravitySessions;
   readonly opencode: OpencodeSessions;
   readonly copilot: CopilotSessions;
+  readonly cursor: CursorSessions;
   readonly observed: ObservedInstructions;
   readonly wake: IdleWake;
   readonly link: AgentLink;
@@ -172,6 +176,16 @@ export class AgentService {
       { broker: this.approvals, enabled: () => this.policy.remoteApproval },
       COPILOT_PROFILE,
     );
+    this.cursor = new CursorSessions(
+      this.registry,
+      typeof opts.cursor === 'function' ? opts.cursor : spawnCursorAcp,
+      opts.agentVersion,
+      opts.log,
+      ack,
+      Date.now,
+      { broker: this.approvals, enabled: () => this.policy.remoteApproval },
+      CURSOR_PROFILE,
+    );
     this.observed = new ObservedInstructions(this.registry, ack);
     this.wake = new IdleWake(this.registry, opts.query, ack, opts.log, Date.now, {
       broker: this.approvals,
@@ -237,6 +251,7 @@ export class AgentService {
         antigravity: this.antigravity,
         opencode: this.opencode,
         copilot: this.copilot,
+        cursor: this.cursor,
       },
       attachments,
       policy: () => this.policy,
@@ -288,6 +303,7 @@ export class AgentService {
           this.antigravity.withdraw(commandId) ||
           this.opencode.withdraw(commandId) ||
           this.copilot.withdraw(commandId) ||
+          this.cursor.withdraw(commandId) ||
           this.observed.withdraw(commandId) ||
           this.wake.withdraw(commandId);
         this.link.send(createEvent('command.withdrawn', { requestId, withdrawn }));
@@ -347,7 +363,9 @@ export class AgentService {
               ? this.opencode.capabilities()
               : chat.provider === 'copilot'
                 ? this.copilot.capabilities()
-                : this.managed.capabilities();
+                : chat.provider === 'cursor'
+                  ? this.cursor.capabilities()
+                  : this.managed.capabilities();
       this.registry.announce(
         {
           externalSessionId: chat.id,
@@ -393,13 +411,14 @@ export class AgentService {
 
   /** Are Codex and Antigravity here and signed in, with which models; tells the backend when that changed. */
   private async loadAgents(): Promise<void> {
-    const [codex, antigravity, opencode, copilot] = await Promise.all([
+    const [codex, antigravity, opencode, copilot, cursor] = await Promise.all([
       detectCodex(this.opts.codex ?? spawnAppServer, this.opts.agentVersion, this.opts.log),
       this.opts.antigravity === false ? null : detectAntigravity().catch(() => null),
       this.opts.opencode === false ? null : detectOpencode().catch(() => null),
       this.opts.copilot === false ? null : detectCopilot().catch(() => null),
+      this.opts.cursor === false ? null : detectCursor().catch(() => null),
     ]);
-    const agents = [codex, antigravity, opencode, copilot].filter((a) => a !== null);
+    const agents = [codex, antigravity, opencode, copilot, cursor].filter((a) => a !== null);
     if (JSON.stringify(agents) === JSON.stringify(this.agents)) return;
     this.agents = agents;
     this.link.send(this.settingsEvent());
@@ -487,6 +506,7 @@ export class AgentService {
     await this.antigravity.stopAll().catch(() => undefined);
     await this.opencode.stopAll().catch(() => undefined);
     await this.copilot.stopAll().catch(() => undefined);
+    await this.cursor.stopAll().catch(() => undefined);
     const deadline = Date.now() + 2000;
     while (this.outbox.size && this.link.isOpen && Date.now() < deadline)
       await new Promise((r) => setTimeout(r, 50));

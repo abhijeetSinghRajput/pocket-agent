@@ -102,8 +102,12 @@ export const OPENCODE_AGENT_VERSION = '2.11.0';
 /** First Local Agent version that knows GitHub Copilot CLI (its chats, approvals, continuing them). */
 export const COPILOT_AGENT_VERSION = '2.12.0';
 
+/** First Local Agent version that knows Cursor's CLI agent (its chats, approvals, continuing them). */
+export const CURSOR_AGENT_VERSION = '2.13.0';
+
 /** First Local Agent version that can start a chat with this agent (Claude Code: any). */
 export function providerAgentVersion(provider: string): string {
+  if (provider === 'cursor') return CURSOR_AGENT_VERSION;
   if (provider === 'copilot') return COPILOT_AGENT_VERSION;
   if (provider === 'opencode') return OPENCODE_AGENT_VERSION;
   return provider === 'antigravity'
@@ -121,6 +125,7 @@ export const ANTIGRAVITY_RESUME_AGENT_VERSION = '2.9.0';
 
 /** First Local Agent version that continues an ended chat of this agent. */
 export function resumeAgentVersion(provider: string): string {
+  if (provider === 'cursor') return CURSOR_AGENT_VERSION;
   if (provider === 'copilot') return COPILOT_AGENT_VERSION;
   if (provider === 'opencode') return OPENCODE_AGENT_VERSION;
   return provider === 'antigravity'

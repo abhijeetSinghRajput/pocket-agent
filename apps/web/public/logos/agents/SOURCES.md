@@ -1,7 +1,7 @@
 # Agent logos
 
 From [SVGL](https://github.com/pheralb/svgl) (MIT), commit `995dfbe8f89b2a8c98cf4496a289698780a60663`, downloaded 2026-11-26, unchanged.
-Each logo is a trademark of its owner, used only to name the tool. Claude Code, Codex, Antigravity, OpenCode and GitHub Copilot work with Pocket Agent today; the page marks the others as coming soon.
+Each logo is a trademark of its owner, used only to name the tool. Claude Code, Codex, Antigravity, OpenCode, GitHub Copilot and Cursor work with Pocket Agent today; the page marks the others as coming soon.
 
 | File | Source |
 |---|---|

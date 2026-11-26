@@ -1,6 +1,7 @@
 import { createEvent, type Platform } from '@pocket-agent/protocol';
 import path from 'node:path';
 import { ApprovalBroker } from './approvals.js';
+import { Handover } from './sessions/handover.js';
 import { CommandRouter, type FullAck } from './command-router.js';
 import { isHelperSession } from './providers/claude-code/helper-sessions.js';
 import { listFolders } from './folders.js';
@@ -98,6 +99,8 @@ export class AgentService {
   /** Models Claude Code offers on this PC (read once after start). */
   private models: ModelOption[] = [];
   readonly approvals = new ApprovalBroker();
+  /** The chats this PC agent runs, kept on disk so a restart doesn't end them. */
+  private readonly handover: Handover;
   private expiryTimer: NodeJS.Timeout | null = null;
   private usageTimer: NodeJS.Timeout | null = null;
   /** Claude plan usage of the account on this PC (null = not available). */
@@ -107,6 +110,7 @@ export class AgentService {
   private agentsTimer: NodeJS.Timeout | null = null;
 
   constructor(private readonly opts: ServiceOptions) {
+    this.handover = new Handover(path.join(opts.home, 'managed-chats.json'));
     this.registry = new SessionRegistry((e) => this.enqueue(e));
     // Command status reports travel through the same reliable outbox as session events.
     const ack: FullAck = (commandId, status, extra = {}) =>
@@ -187,6 +191,7 @@ export class AgentService {
       ...(opts.discoveryIntervalMs ? { intervalMs: opts.discoveryIntervalMs } : {}),
     });
     this.router = new CommandRouter({
+      handover: this.handover,
       registry: this.registry,
       managed: this.managed,
       observed: this.observed,
@@ -284,7 +289,37 @@ export class AgentService {
     });
   }
 
+  /**
+   * The chats the last run left behind (it was restarted: an update, a crash) are shown again,
+   * waiting for their next message, which continues the same conversation. Announced before the
+   * link connects, so the server never sees them gone.
+   */
+  private restoreChats(): void {
+    for (const chat of this.handover.load()) {
+      if (this.registry.has(chat.id)) continue;
+      const capabilities =
+        chat.provider === 'codex'
+          ? this.codex.capabilities()
+          : chat.provider === 'antigravity'
+            ? this.antigravity.capabilities()
+            : this.managed.capabilities();
+      this.registry.announce(
+        {
+          externalSessionId: chat.id,
+          provider: chat.provider,
+          mode: 'managed',
+          projectPath: chat.projectPath,
+          status: 'WaitingForInput',
+          capabilities,
+          metadata: { entrypoint: 'pocket-agent' },
+        },
+        'managed',
+      );
+    }
+  }
+
   private enqueue(event: SessionEventOut): void {
+    this.handover.track(event);
     this.outbox.push(event);
     this.link.send(event);
   }
@@ -370,6 +405,7 @@ export class AgentService {
     this.codexWatch.start();
     if (this.opts.antigravity !== false) this.antigravityWatch.start();
     this.expiryTimer = setInterval(() => this.observed.expire(), 5_000);
+    this.restoreChats();
     this.link.start();
     if (this.opts.loadModels !== false) {
       void this.loadModels().then(() => this.loadUsage());
@@ -390,6 +426,7 @@ export class AgentService {
 
   /** Managed sessions end with the agent; give their final events a moment to be acknowledged. */
   async stop(): Promise<void> {
+    this.handover.freeze();
     this.discovery.stop();
     this.codexWatch.stop();
     this.antigravityWatch.stop();

@@ -121,7 +121,7 @@ export class CodexSessions implements ManagedRuntime {
   ) {}
 
   /** Remote approval only when the PC owner turned it on. */
-  private capabilities(): SessionCapabilities {
+  capabilities(): SessionCapabilities {
     return { ...CODEX_CAPABILITIES, remoteApproval: this.approvals?.enabled() ?? false };
   }
 

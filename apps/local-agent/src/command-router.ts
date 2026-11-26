@@ -7,6 +7,7 @@ import type { ObservedInstructions } from './providers/claude-code/instructions.
 import type { ManagedSessions } from './providers/claude-code/managed.js';
 import type { IdleWake } from './providers/claude-code/wake.js';
 import type { ManagedRuntime, OtherRuntimes } from './providers/types.js';
+import type { Handover, HandedOver } from './sessions/handover.js';
 import type { SessionRegistry } from './sessions/registry.js';
 
 type CommandExecute = Extract<BackendToAgent, { eventType: 'command.execute' }>;
@@ -52,8 +53,63 @@ export class CommandRouter {
       ack: FullAck;
       log?: (level: 'info' | 'warn' | 'error', msg: string) => void;
       now?: () => number;
+      /** Chats the last run of this PC agent left behind, waiting for their next message. */
+      handover?: Pick<Handover, 'dormantChat' | 'take'>;
     },
   ) {}
+
+  /**
+   * A command for a chat the last run left behind (the PC agent restarted): its next message
+   * continues the same conversation; a stop ends it; nothing else is running to interrupt.
+   */
+  private async wakeDormant(
+    msg: CommandExecute,
+    chat: HandedOver,
+    model: string | undefined,
+    turn: { permissionMode?: TurnMode; effort?: TurnEffort },
+    fail: (error: string) => void,
+  ): Promise<void> {
+    const p = msg.payload;
+    const sid = msg.sessionId!;
+    const { ack } = this.deps;
+    switch (p.commandType) {
+      case 'instruction': {
+        const runtime = chat.provider === 'claude-code' ? this.deps.managed : this.other(chat.provider);
+        if (!runtime) return fail('provider_not_available');
+        let files: LocalFile[] = [];
+        if (p.attachments?.length) {
+          if (!this.deps.attachments) return fail('attachments_not_supported');
+          try {
+            files = await this.deps.attachments.download(p.commandId, p.attachments);
+          } catch (err) {
+            this.deps.log?.('warn', `attachments of ${p.commandId}: ${(err as Error).message}`);
+            return fail('attachment_download_failed');
+          }
+        }
+        this.deps.handover!.take(sid);
+        const id = await runtime.start({
+          projectPath: chat.projectPath,
+          prompt: p.text,
+          commandId: p.commandId,
+          resumeSessionId: sid,
+          ...(model ? { model } : {}),
+          ...turn,
+          ...(files.length ? { files } : {}),
+        });
+        return ack(p.commandId, 'Executing', { externalSessionId: id });
+      }
+      case 'interrupt':
+      case 'session.configure':
+        // Nothing runs until the next message (which takes its own model and mode).
+        return ack(p.commandId, 'Completed');
+      case 'session.stop':
+        this.deps.handover!.take(sid);
+        this.deps.registry.end(sid, 'stopped');
+        return ack(p.commandId, 'Completed');
+      default:
+        return fail('not_supported');
+    }
+  }
 
   /**
    * The runtime of a provider other than Claude Code, or null when this PC hasn't got it (a
@@ -93,6 +149,12 @@ export class CommandRouter {
           : (running?.provider ?? 'claude-code');
       const other = this.other(provider);
       if (other === null) return fail('provider_not_available');
+      // A chat the last run left behind wakes up with its next message.
+      const dormant =
+        p.commandType !== 'session.start' && msg.sessionId
+          ? this.deps.handover?.dormantChat(msg.sessionId)
+          : undefined;
+      if (dormant) return await this.wakeDormant(msg, dormant, model, turn, fail);
       // Claude's models are checked here; another agent checks its own.
       const known = other ? [] : (this.deps.models?.() ?? []);
       if (model && known.length && !known.some((m) => m.id === model)) return fail('model_not_available');

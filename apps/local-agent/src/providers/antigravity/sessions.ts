@@ -91,7 +91,7 @@ export class AntigravitySessions implements ManagedRuntime {
   ) {}
 
   /** Remote approval only when the PC owner turned it on. */
-  private capabilities(): SessionCapabilities {
+  capabilities(): SessionCapabilities {
     return { ...ANTIGRAVITY_CAPABILITIES, remoteApproval: this.approvals?.enabled() ?? false };
   }
 

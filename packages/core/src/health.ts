@@ -5,10 +5,11 @@ import {
   type DeviceDto,
 } from '@pocket-agent/protocol';
 import { timeAgo } from './format.js';
+import { agentProduct } from './providers.js';
 
 /** One line of a PC's health check: how it is, and what fixes it when it isn't right. */
 export interface HealthCheck {
-  key: 'online' | 'version' | 'link' | 'approvals';
+  key: 'online' | 'version' | 'link' | 'approvals' | `agent-${string}`;
   label: string;
   state: 'ok' | 'warn' | 'fail' | 'info';
   detail: string;
@@ -68,6 +69,25 @@ export function pcHealth(d: DeviceDto, now = Date.now()): HealthCheck[] {
             detail: 'Sessions you start yourself won’t show here. Connecting again sets it up.',
             command: 'pocket-agent connect',
           },
+    // The other coding agents the PC found (Codex, Antigravity): ready, or how to sign in.
+    ...d.agents.map((a): HealthCheck => {
+      const name = agentProduct(a.provider);
+      return a.signedIn
+        ? {
+            key: `agent-${a.provider}`,
+            label: `${name} ready`,
+            state: 'ok',
+            detail: `Version ${a.version}${a.models.length ? ` · ${a.models.length} models` : ''}`,
+          }
+        : {
+            key: `agent-${a.provider}`,
+            label: `${name} signed out`,
+            state: 'warn',
+            detail: `Sign in to ${name} on the PC to chat with it from here.`,
+            // Antigravity signs in when it starts (with your Google account).
+            command: a.provider === 'codex' ? 'codex login' : 'agy',
+          };
+    }),
     d.remoteApprovalEnabled
       ? { key: 'approvals', label: 'Phone approvals on', state: 'ok', detail: 'Allow or deny from here.' }
       : {

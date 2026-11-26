@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 /** Coding-agent providers. Claude Code runs today; Codex (OpenAI's coding agent) is being added. */
-export const ProviderId = z.enum(['claude-code', 'codex']);
+export const ProviderId = z.enum(['claude-code', 'codex', 'antigravity']);
 export type ProviderId = z.infer<typeof ProviderId>;
 
 /**

@@ -12,7 +12,7 @@ import {
   SessionCapabilities,
   SessionControlRequest,
   StartSessionRequest,
-  PROVIDERS_AGENT_VERSION,
+  providerAgentVersion,
   CODEX_RESUME_AGENT_VERSION,
   OtherAgent,
   versionBelow,
@@ -299,7 +299,16 @@ export async function commandRoutes(app: FastifyInstance, ctx: Services): Promis
     }
     // Another agent than Claude Code: only PCs that know to start it (older ones would start Claude).
     const other = body.provider && body.provider !== 'claude-code' ? body.provider : undefined;
-    if (other && outdated(reply, device.agentVersion, PROVIDERS_AGENT_VERSION, 'Chatting with Codex', 409))
+    if (
+      other &&
+      outdated(
+        reply,
+        device.agentVersion,
+        providerAgentVersion(other),
+        `Chatting with ${agentProduct(other)}`,
+        409,
+      )
+    )
       return;
     if (other) {
       if (!otherAgentReady(reply, device, other, body.model)) return;

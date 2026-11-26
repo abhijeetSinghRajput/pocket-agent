@@ -90,6 +90,21 @@ export type ResumeSessionRequest = z.infer<typeof ResumeSessionRequest>;
  */
 export const PROVIDERS_AGENT_VERSION = '2.5.0';
 
+/**
+ * First Local Agent version that knows Antigravity CLI (finds it, and refuses its chats safely
+ * until it can run them). Older ones can't even read a command naming it.
+ */
+export const ANTIGRAVITY_AGENT_VERSION = '2.8.0';
+
+/** First Local Agent version that can start a chat with this agent (Claude Code: any). */
+export function providerAgentVersion(provider: string): string {
+  return provider === 'antigravity'
+    ? ANTIGRAVITY_AGENT_VERSION
+    : provider === 'codex'
+      ? PROVIDERS_AGENT_VERSION
+      : '0.0.0';
+}
+
 /** First Local Agent version that applies a mode chosen for a Codex chat (Manual / Auto / Plan). */
 export const CODEX_MODES_AGENT_VERSION = '2.7.0';
 

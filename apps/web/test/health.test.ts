@@ -44,6 +44,24 @@ describe('pcHealth', () => {
     expect(by['approvals']).toMatchObject({ state: 'info', command: 'pocket-agent approvals enable' });
   });
 
+  it('lists the other agents the PC found: ready, or how to sign in', () => {
+    const checks = pcHealth(
+      pc({
+        agents: [
+          { provider: 'codex', version: '0.172.0', signedIn: true, models: [] },
+          { provider: 'antigravity', version: '1.5.12', signedIn: false, models: [] },
+        ],
+      }),
+    );
+    const by = Object.fromEntries(checks.map((c) => [c.key, c]));
+    expect(by['agent-codex']).toMatchObject({ label: 'Codex ready', state: 'ok' });
+    expect(by['agent-antigravity']).toMatchObject({
+      label: 'Antigravity CLI signed out',
+      state: 'warn',
+      command: 'agy',
+    });
+  });
+
   it('a PC that does not report its link is not called broken', () => {
     expect(pcHealth(pc({ health: null })).find((c) => c.key === 'link')!.state).toBe('info');
   });

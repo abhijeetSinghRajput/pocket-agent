@@ -1,4 +1,10 @@
-import { BackendToAgent, createEvent, type ApprovalDto, type ApprovalStatus } from '@pocket-agent/protocol';
+import {
+  BackendToAgent,
+  createEvent,
+  ProviderId,
+  type ApprovalDto,
+  type ApprovalStatus,
+} from '@pocket-agent/protocol';
 import { redisKey } from '../context.js';
 import type { Approval, AgentSession, Device, Prisma } from '../generated/prisma/client.js';
 import { audit } from '../lib/audit.js';
@@ -24,7 +30,7 @@ export function toApprovalDto(a: ApprovalRow): ApprovalDto {
     deviceName: a.device.name,
     projectName: a.session.projectName,
     sessionMode: a.session.mode,
-    provider: a.session.provider === 'codex' ? 'codex' : 'claude-code',
+    provider: ProviderId.catch('claude-code').parse(a.session.provider),
     requestId: a.requestId,
     toolName: a.toolName,
     input: typeof payload.input === 'string' ? payload.input : '{}',

@@ -4,6 +4,7 @@ import type { ProviderId } from '@pocket-agent/protocol';
 const PROVIDERS: Record<ProviderId, { name: string; product: string }> = {
   'claude-code': { name: 'Claude', product: 'Claude Code' },
   codex: { name: 'Codex', product: 'Codex' },
+  antigravity: { name: 'Antigravity', product: 'Antigravity CLI' },
 };
 
 /** The agent's name in a sentence: "Claude is done", "Codex needs your OK". Unknown: Claude. */

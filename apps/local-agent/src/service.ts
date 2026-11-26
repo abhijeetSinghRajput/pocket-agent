@@ -26,6 +26,7 @@ import { AttachmentClient, safeFileName } from './attachments.js';
 import { readSubagents } from './providers/claude-code/subagents.js';
 import type { ClaudeUsage, ModelOption, OtherAgent } from '@pocket-agent/protocol';
 import { detectCodex } from './providers/codex/detect.js';
+import { detectAntigravity } from './providers/antigravity/detect.js';
 import { spawnAppServer, type Transport } from './providers/codex/rpc.js';
 import { CodexSessions } from './providers/codex/sessions.js';
 import { readUsage } from './providers/claude-code/usage.js';
@@ -51,6 +52,8 @@ export interface ServiceOptions {
   codex?: () => Transport;
   /** Codex's home (default: CODEX_HOME or ~/.codex). */
   codexDir?: string;
+  /** false: don't look for Antigravity CLI (tests). */
+  antigravity?: false;
 }
 
 /**
@@ -282,10 +285,13 @@ export class AgentService {
     if (!same) this.link.send(this.settingsEvent());
   }
 
-  /** Is Codex here and signed in, with which models; tells the backend when that changed. */
+  /** Are Codex and Antigravity here and signed in, with which models; tells the backend when that changed. */
   private async loadAgents(): Promise<void> {
-    const codex = await detectCodex(this.opts.codex ?? spawnAppServer, this.opts.agentVersion, this.opts.log);
-    const agents = codex ? [codex] : [];
+    const [codex, antigravity] = await Promise.all([
+      detectCodex(this.opts.codex ?? spawnAppServer, this.opts.agentVersion, this.opts.log),
+      this.opts.antigravity === false ? null : detectAntigravity().catch(() => null),
+    ]);
+    const agents = [codex, antigravity].filter((a) => a !== null);
     if (JSON.stringify(agents) === JSON.stringify(this.agents)) return;
     this.agents = agents;
     this.link.send(this.settingsEvent());

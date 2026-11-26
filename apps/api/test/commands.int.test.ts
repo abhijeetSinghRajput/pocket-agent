@@ -463,6 +463,28 @@ describe('chats with another coding agent (Codex)', () => {
     s.agent.ws.close();
   });
 
+  it('an Antigravity chat reaches only PCs that know it (2.8.0), with it signed in', async () => {
+    const AGY = { provider: 'antigravity' as const, version: '1.5.12', signedIn: true, models: [] };
+    const s = await codexPc('2.7.0');
+    await t.ctx.prisma.device.update({ where: { id: s.deviceId }, data: { agents: [AGY] } });
+    const start = () =>
+      post(`/devices/${s.deviceId}/sessions`, s.cookie, {
+        provider: 'antigravity',
+        projectPath: String.raw`C:\work\api`,
+        text: 'Hi',
+        idempotencyKey: randomUUID(),
+      });
+    const old = await start();
+    expect(old.statusCode).toBe(409);
+    expect(old.json().error).toBe('agent_outdated');
+    await t.ctx.prisma.device.update({
+      where: { id: s.deviceId },
+      data: { agentVersion: '2.8.0', agents: [{ ...AGY, signedIn: false }] },
+    });
+    expect((await start()).json().error).toBe('provider_signed_out');
+    s.agent.ws.close();
+  });
+
   it('a Claude Code chat says nothing about the agent (older PCs read it as always)', async () => {
     const s = await codexPc('2.5.0');
     const res = await post(`/devices/${s.deviceId}/sessions`, s.cookie, {

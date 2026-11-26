@@ -100,11 +100,17 @@ export function sessionKind(s: Pick<AgentSessionDto, 'mode' | 'metadata' | 'capa
     return { label: 'Managed', hint: 'Started by Pocket Agent on your PC — full remote control.' };
   }
   const where =
-    s.metadata?.['entrypoint'] === 'claude-vscode'
+    s.metadata?.['entrypoint'] === 'claude-vscode' || s.metadata?.['entrypoint'] === 'codex-vscode'
       ? 'VS Code'
       : s.metadata?.['entrypoint'] === 'cli'
         ? 'Terminal'
         : 'Claude Code';
+  if (s.metadata?.['transcript'] === 'watched') {
+    return {
+      label: `${where} · watch only`,
+      hint: 'Started by you. Pocket Agent follows it from Codex’s session files: you see it here, but can’t answer or stop it.',
+    };
+  }
   if (!hooksAreConnected(s)) {
     return {
       label: `${where} · status only`,
@@ -128,7 +134,8 @@ type KindIcon = { Icon: (p: { className?: string }) => ReactNode; cls: string };
 function kindIcon(s: Pick<AgentSessionDto, 'mode' | 'metadata'>): KindIcon {
   if (s.mode === 'managed') return { Icon: Bot, cls: 'text-primary' };
   const e = s.metadata?.['entrypoint'];
-  if (e === 'claude-vscode') return { Icon: VsCodeIcon, cls: 'text-[#0078d4] dark:text-[#3ea6ff]' };
+  if (e === 'claude-vscode' || e === 'codex-vscode')
+    return { Icon: VsCodeIcon, cls: 'text-[#0078d4] dark:text-[#3ea6ff]' };
   if (e === 'cli') return { Icon: SquareTerminal, cls: 'text-foreground/80' };
   return { Icon: Code, cls: 'text-muted-foreground' };
 }

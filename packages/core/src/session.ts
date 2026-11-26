@@ -30,6 +30,8 @@ export function canInstruct(s: AgentSessionDto): boolean {
 export function hooksAreConnected(s: Pick<AgentSessionDto, 'metadata' | 'capabilities'>): boolean {
   return (
     s.metadata?.['hooks'] === 'connected' ||
+    // A Codex chat followed from its session file: the conversation is visible too.
+    s.metadata?.['transcript'] === 'watched' ||
     s.capabilities.remoteApproval ||
     s.capabilities.instructBetweenTurns
   );
@@ -135,6 +137,21 @@ export type CapabilityRow = { label: string; state: 'yes' | 'soon' | 'no'; detai
 export function capabilityRows(s: AgentSessionDto): CapabilityRow[] {
   const c = s.capabilities;
   const managed = s.mode === 'managed';
+  if (!managed && s.metadata?.['transcript'] === 'watched') {
+    // A Codex chat started on the PC, followed from Codex's own session file.
+    const why =
+      'Codex runs this chat on the PC by itself: answer it there, or continue it here once it has ended.';
+    return [
+      {
+        label: 'Live status',
+        state: 'yes',
+        detail: 'Status, commands and messages show here, a few seconds late.',
+      },
+      { label: 'Send instructions', state: 'no', detail: why },
+      { label: 'Stop / interrupt', state: 'no', detail: why },
+      { label: 'Approve permissions remotely', state: 'no', detail: 'Codex asks on the PC for this chat.' },
+    ];
+  }
   const hooksConnected = !managed && hooksAreConnected(s);
   const hooksWhy =
     s.metadata?.['hooks'] === 'not-connected'

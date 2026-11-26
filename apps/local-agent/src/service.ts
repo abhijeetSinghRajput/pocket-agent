@@ -9,6 +9,7 @@ import { AgentLink, type LinkEvents } from './link.js';
 import { Outbox } from './outbox.js';
 import { loadPolicy, type Policy } from './policy.js';
 import { ClaudeDiscovery } from './providers/claude-code/discovery.js';
+import { codexHome, CodexWatcher } from './providers/codex/watch.js';
 import { ClaudeHookHandler } from './providers/claude-code/hooks.js';
 import {
   claudeConfigDir,
@@ -48,6 +49,8 @@ export interface ServiceOptions {
   loadModels?: boolean;
   /** How Codex's app-server is started (tests pass a fake). */
   codex?: () => Transport;
+  /** Codex's home (default: CODEX_HOME or ~/.codex). */
+  codexDir?: string;
 }
 
 /**
@@ -66,6 +69,8 @@ export class AgentService {
   readonly ingest: IngestServer;
   private readonly hooks: ClaudeHookHandler;
   private readonly discovery: ClaudeDiscovery;
+  /** Codex chats the user runs in the terminal or VS Code, followed from Codex's session files. */
+  private readonly codexWatch: CodexWatcher;
   private readonly router: CommandRouter;
   private hooksInstalled = false;
   private policy: Policy = {
@@ -143,6 +148,10 @@ export class AgentService {
     // A woken turn was reported from the SDK stream; the transcript reader skips over it.
     this.wake.onTurnEnd = (id) => this.hooks.transcripts.skipToEnd(id);
     const claudeDir = opts.claudeDir ?? claudeConfigDir();
+    this.codexWatch = new CodexWatcher(this.registry, {
+      dir: path.join(opts.codexDir ?? codexHome(), 'sessions'),
+      isManaged: this.codex.isManaged,
+    });
     this.discovery = new ClaudeDiscovery(path.join(claudeDir, 'sessions'), this.registry, {
       // Neither the app's own sessions nor the agent's short helper sessions are "discovered".
       isManaged: (id) => this.managed.isManaged(id) || isHelperSession(id),
@@ -326,6 +335,7 @@ export class AgentService {
     this.policy = await loadPolicy(this.opts.home);
     await this.ingest.start();
     this.discovery.start();
+    this.codexWatch.start();
     this.expiryTimer = setInterval(() => this.observed.expire(), 5_000);
     this.link.start();
     if (this.opts.loadModels !== false) {
@@ -348,6 +358,7 @@ export class AgentService {
   /** Managed sessions end with the agent; give their final events a moment to be acknowledged. */
   async stop(): Promise<void> {
     this.discovery.stop();
+    this.codexWatch.stop();
     if (this.expiryTimer) clearInterval(this.expiryTimer);
     if (this.usageTimer) clearInterval(this.usageTimer);
     if (this.agentsTimer) clearInterval(this.agentsTimer);

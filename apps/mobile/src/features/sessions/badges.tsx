@@ -248,11 +248,17 @@ export function sessionKind(s: Pick<AgentSessionDto, 'mode' | 'metadata' | 'capa
     return { label: 'Managed', hint: 'Started by Pocket Agent on your PC — full remote control.' };
   }
   const where =
-    s.metadata?.['entrypoint'] === 'claude-vscode'
+    s.metadata?.['entrypoint'] === 'claude-vscode' || s.metadata?.['entrypoint'] === 'codex-vscode'
       ? 'VS Code'
       : s.metadata?.['entrypoint'] === 'cli'
         ? 'Terminal'
         : 'Claude Code';
+  if (s.metadata?.['transcript'] === 'watched') {
+    return {
+      label: `${where} · watch only`,
+      hint: 'Started by you. Pocket Agent follows it from Codex’s session files: you see it here, but can’t answer or stop it.',
+    };
+  }
   if (!hooksAreConnected(s)) {
     return {
       label: `${where} · status only`,
@@ -289,7 +295,8 @@ export function SessionKindBadge({
   const iconSize = 14;
   let icon;
   if (session.mode === 'managed') icon = <Bot size={iconSize} color={c.primary} strokeWidth={2} />;
-  else if (e === 'claude-vscode') icon = <VsCodeIcon size={iconSize} color={c.toolLink} />;
+  else if (e === 'claude-vscode' || e === 'codex-vscode')
+    icon = <VsCodeIcon size={iconSize} color={c.toolLink} />;
   else if (e === 'cli')
     icon = <SquareTerminal size={iconSize} color={alpha(c.foreground, 0.8)} strokeWidth={2} />;
   else icon = <Code size={iconSize} color={c.mutedForeground} strokeWidth={2} />;

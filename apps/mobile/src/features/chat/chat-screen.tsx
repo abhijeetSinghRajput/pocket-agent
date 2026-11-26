@@ -113,9 +113,9 @@ function useMarkChatRead(sessionId: string) {
   });
 }
 
-/** Colour of the weekly limit: green below 75 %, a warning above 75 %, red above 90 %. */
+/** Colour of the weekly limit: green below 75 %, a warning from 75 %, red from 90 %. */
 function weeklyTone(percent: number): 'success' | 'warning' | 'danger' {
-  return percent > 90 ? 'danger' : percent > 75 ? 'warning' : 'success';
+  return percent >= 90 ? 'danger' : percent >= 75 ? 'warning' : 'success';
 }
 
 /**

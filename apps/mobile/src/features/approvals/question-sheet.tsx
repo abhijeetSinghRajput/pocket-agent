@@ -187,7 +187,8 @@ function QuestionBlock({
         </T>
         {timer}
       </View>
-      <T variant="heading" style={{ marginTop: 6 }}>
+      {/* Body-sized, not a heading: a long question still leaves the options in view. */}
+      <T variant="subheading" style={{ marginTop: 6, fontSize: 16, lineHeight: 22 }}>
         {q.question}
       </T>
       {q.multiSelect && (

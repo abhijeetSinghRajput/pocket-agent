@@ -57,6 +57,9 @@ function Chip({
       style={{
         height: 32,
         maxWidth: 170,
+        // On a narrow phone the chips give way (their label shortens), never the send/stop button.
+        flexShrink: 1,
+        minWidth: 0,
         flexDirection: 'row',
         alignItems: 'center',
         gap: 5,

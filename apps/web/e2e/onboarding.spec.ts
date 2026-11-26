@@ -13,7 +13,7 @@ test('an account without a PC only sees the setup screen, with one command to ru
   await expect(page.getByTestId('onboarding-status')).toContainText('Not connected');
   await page.getByTestId('onboarding-connect').click();
   const code = (await page.getByTestId('pairing-code').textContent())!.trim();
-  expect(code).toMatch(/^[0-9A-Z]{4}-[0-9A-Z]{4}$/);
+  expect(code).toMatch(/^[0-9A-Z]{6}$/);
   await expect(page.getByTestId('pairing-command')).toContainText(`pocket-agent connect ${code}`);
   await expect(page.getByTestId('install-command')).toHaveText('npm install -g @mrcodium/pocket-agent');
   await expect(page.getByTestId('onboarding-status')).toContainText('Waiting for your PC');

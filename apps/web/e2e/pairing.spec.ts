@@ -17,7 +17,7 @@ test('pair a real Local Agent, watch it go online/offline, then revoke it', asyn
   await expect(page.getByRole('heading', { level: 1 })).toContainText('Let’s connect your PC.');
   await page.getByTestId('onboarding-connect').click();
   const code = (await page.getByTestId('pairing-code').textContent())!.trim();
-  expect(code).toMatch(/^[0-9A-Z]{4}-[0-9A-Z]{4}$/);
+  expect(code).toMatch(/^[0-9A-Z]{6}$/);
 
   // 2. The PC pairs with it; the setup screen notices on its own.
   const pairOut = execFileSync(process.execPath, [CLI, 'pair', code, '--api', API, '--name', deviceName], {

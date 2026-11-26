@@ -49,13 +49,15 @@ export function sha256(value: string): string {
 // ── Pairing codes ────────────────────────────────────────────────────────────
 // Crockford base32 without I, L, O, U: easy to read aloud and type on a phone/PC.
 const ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
-export const PAIRING_CODE_LENGTH = 8; // 32^8 ≈ 1.1e12 combinations
+// Short enough to type in one go. 32^6 ≈ 1.07e9 combinations; also single use,
+// lives 10 minutes, and guessing is rate limited per IP (see /devices/pair).
+export const PAIRING_CODE_LENGTH = 6;
 
-/** Returns a code formatted for display, e.g. "7KQ2-M9XD". */
+/** Returns a code as shown to the user, e.g. "7KQ2M9". */
 export function generatePairingCode(): string {
   let raw = '';
   for (let i = 0; i < PAIRING_CODE_LENGTH; i++) raw += ALPHABET[randomInt(ALPHABET.length)];
-  return `${raw.slice(0, 4)}-${raw.slice(4)}`;
+  return raw;
 }
 
 /**

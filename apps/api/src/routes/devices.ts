@@ -85,7 +85,15 @@ export async function deviceRoutes(app: FastifyInstance, ctx: AppContext & { bus
           message: 'Too many unused pairing codes. Wait for one to expire or use it.',
         });
       }
-      const code = generatePairingCode();
+      // Short codes repeat over time, so only a code that is live right now must be unique.
+      let code = generatePairingCode();
+      for (let i = 0; i < 8; i++) {
+        const taken = await ctx.prisma.pairingCode.count({
+          where: { codeHash: sha256(normalizePairingCode(code)!), consumedAt: null, expiresAt: { gt: now } },
+        });
+        if (!taken) break;
+        code = generatePairingCode();
+      }
       const expiresAt = new Date(now.getTime() + PAIRING_CODE_TTL_MS);
       const row = await ctx.prisma.pairingCode.create({
         data: { userId, codeHash: sha256(normalizePairingCode(code)!), expiresAt },
@@ -216,13 +224,19 @@ export async function agentRoutes(app: FastifyInstance, ctx: AppContext): Promis
     const result = await ctx.prisma.$transaction(async (tx) => {
       const now = ctx.now();
       const codeHash = sha256(normalized);
+      // The same short code can exist from earlier (used or expired): take the live one.
+      const live = await tx.pairingCode.findFirst({
+        where: { codeHash, consumedAt: null, expiresAt: { gt: now } },
+        select: { id: true, userId: true },
+      });
+      if (!live) return null;
       // Atomic single-use consumption: only one concurrent request can win.
       const consumed = await tx.pairingCode.updateMany({
-        where: { codeHash, consumedAt: null, expiresAt: { gt: now } },
+        where: { id: live.id, consumedAt: null },
         data: { consumedAt: now },
       });
       if (consumed.count !== 1) return null;
-      const { userId } = await tx.pairingCode.findUniqueOrThrow({ where: { codeHash } });
+      const { userId } = live;
       const device = await tx.device.create({
         data: { userId, name, platform, agentVersion, secretHash: sha256(secret) },
       });

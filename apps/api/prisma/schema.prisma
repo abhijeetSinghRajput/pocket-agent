@@ -113,7 +113,8 @@ model AuthSession {
 model PairingCode {
   id         String    @id @default(uuid(7)) @db.Uuid
   userId     String    @db.Uuid
-  codeHash   String    @unique
+  /// Not unique: short codes can come round again. Only one *live* code has a given hash.
+  codeHash   String
   createdAt  DateTime  @default(now())
   expiresAt  DateTime
   consumedAt DateTime?
@@ -121,6 +122,7 @@ model PairingCode {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+  @@index([codeHash])
   @@map("pairing_codes")
 }
 

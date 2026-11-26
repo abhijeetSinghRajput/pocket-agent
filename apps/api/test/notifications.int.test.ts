@@ -127,6 +127,34 @@ describe('notifications', () => {
     tab.ws.close();
   });
 
+  it("opening a chat marks only that chat's notifications read", async () => {
+    const u = await user();
+    const mk = (link: string, key: string) =>
+      notify(services(), {
+        userId: u.user.id,
+        category: 'task_completed',
+        title: 'Claude is done',
+        body: 'Waiting for your next message.',
+        link,
+        dedupeKey: key,
+      });
+    await mk('/agents/chat-a', `a1:${randomUUID()}`);
+    await mk('/agents/chat-a', `a2:${randomUUID()}`);
+    await mk('/agents/chat-b', `b1:${randomUUID()}`);
+    expect((await list(u.cookie)).unread).toBe(3);
+
+    const r = await t.app.inject({
+      method: 'POST',
+      url: '/notifications/read',
+      headers: browser(u.cookie),
+      payload: { link: '/agents/chat-a' },
+    });
+    expect(r.statusCode).toBe(204);
+    const page = await list(u.cookie);
+    expect(page.unread).toBe(1);
+    expect(page.notifications.filter((n) => !n.readAt).map((n) => n.link)).toEqual(['/agents/chat-b']);
+  });
+
   it('a request asked only on the PC still notifies the phone, saying to answer it there', async () => {
     const u = await user();
     const d = await pairDevice(t, u.cookie);

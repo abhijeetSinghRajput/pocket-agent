@@ -33,7 +33,7 @@ Source of truth for request and response shapes: the Zod schemas in `packages/pr
 
 | Method | Path | Auth | Limit | Response |
 |---|---|---|---|---|
-| POST | `/devices/pairing-codes` | cookie + Origin | 10/min | `201 {code: "7KQ2-M9XD", expiresAt}`. 10 min TTL, single use, at most 5 unused per user (`429 too_many_pairing_codes`). |
+| POST | `/devices/pairing-codes` | cookie + Origin | 10/min | `201 {code: "7KQ2M9", expiresAt}`: 6 characters, any case. 10 min TTL, single use, at most 5 unused per user (`429 too_many_pairing_codes`). |
 | GET | `/devices` | cookie | | `200 {devices: DeviceDto[]}` (own devices only; secrets are never included) |
 | POST | `/devices/:id/revoke` | cookie + Origin | | `200 {device}`. Idempotent. Drops the live connection immediately on every API instance. |
 

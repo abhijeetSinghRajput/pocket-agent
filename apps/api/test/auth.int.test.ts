@@ -198,7 +198,7 @@ describe('brute-force protection', () => {
         const res = await t4.app.inject({
           method: 'POST',
           url: '/devices/pair',
-          payload: { code: 'AAAA-AAAA', name: 'x', platform: 'windows', agentVersion: '0' },
+          payload: { code: 'AAAAAA', name: 'x', platform: 'windows', agentVersion: '0' },
         });
         codes.push(res.statusCode);
       }

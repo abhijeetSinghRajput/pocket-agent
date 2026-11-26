@@ -42,20 +42,20 @@ describe('pairing codes', () => {
   it('issues a readable short-lived code and stores only its hash', async () => {
     const { user, cookie } = await newUser();
     const { code, expiresAt } = await newCode(cookie);
-    expect(code).toMatch(/^[0-9A-HJKMNP-TV-Z]{4}-[0-9A-HJKMNP-TV-Z]{4}$/);
+    expect(code).toMatch(/^[0-9A-HJKMNP-TV-Z]{6}$/);
     const ttl = Date.parse(expiresAt) - Date.now();
     expect(ttl).toBeGreaterThan(9 * 60_000);
     expect(ttl).toBeLessThanOrEqual(10 * 60_000);
     const rows = await t.ctx.prisma.pairingCode.findMany({ where: { userId: user.id } });
     expect(rows).toHaveLength(1);
-    expect(rows[0]!.codeHash).not.toContain(code.replace('-', ''));
+    expect(rows[0]!.codeHash).not.toContain(code);
   });
 
   it('pairs once; the code cannot be reused', async () => {
     const { cookie } = await newUser();
     const { code } = await newCode(cookie);
-    // Typed by a human: lower-case, no dash.
-    const first = await pair(code.toLowerCase().replace('-', ''));
+    // Typed by a human: lower-case.
+    const first = await pair(code.toLowerCase());
     expect(first.statusCode).toBe(201);
     const { deviceId, deviceSecret } = first.json();
     expect(deviceId).toMatch(/^[0-9a-f-]{36}$/);
@@ -66,6 +66,27 @@ describe('pairing codes', () => {
     expect(device.remoteApprovalEnabled).toBe(false);
 
     expect((await pair(code)).statusCode).toBe(400);
+  });
+
+  it('pairs with the live code when the same short code was used before', async () => {
+    const alice = await newUser();
+    const bob = await newUser();
+    const { code } = await newCode(alice.cookie);
+    const aliceDevice = (await pair(code, 'Alice PC')).json().deviceId as string;
+    // The same short code comes round again, now as Bob's live code (an expired copy too).
+    const codeHash = sha256(code);
+    await t.ctx.prisma.pairingCode.createMany({
+      data: [
+        { userId: alice.user.id, codeHash, expiresAt: new Date(Date.now() - 1000) },
+        { userId: bob.user.id, codeHash, expiresAt: new Date(Date.now() + 60_000) },
+      ],
+    });
+    const res = await pair(code, 'Bob PC');
+    expect(res.statusCode).toBe(201);
+    const device = await t.ctx.prisma.device.findUniqueOrThrow({ where: { id: res.json().deviceId } });
+    expect(device.userId).toBe(bob.user.id);
+    expect(res.json().deviceId).not.toBe(aliceDevice);
+    expect((await pair(code)).statusCode).toBe(400); // and now it is used up
   });
 
   it('rejects expired codes', async () => {

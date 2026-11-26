@@ -15,14 +15,14 @@ export function canDictate(): boolean {
 }
 
 /**
- * How long you can be quiet before dictation stops: the shortest the module takes, so it ends
- * about when the phone's own recognizer would (the keyboard's mic feels the same).
+ * How long you can be quiet before dictation stops: the longest the module takes, so a pause to
+ * think or breathe never ends it (1 s cut people off mid-thought). A second tap ends it.
  */
-export const DICTATION_SILENCE_MS = 1000;
+export const DICTATION_SILENCE_MS = 15_000;
 
 /**
  * Dictating into a message box: the words appear as they are heard, after whatever was already
- * typed. It stops at the phone's natural pause after you finish speaking, or with a second tap.
+ * typed. It keeps listening through pauses; a second tap ends it (or 15 s of silence).
  */
 export function useDictation(text: string, setText: (next: string) => void) {
   const [listening, setListening] = useState(false);

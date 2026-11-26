@@ -37,9 +37,11 @@ function fakeSdk() {
   let hold = false;
   // Claude processes started (a woken one is kept for the next message).
   const processes = { started: 0, ended: 0 };
+  // Mode and model switches asked of a running process.
+  const switches: string[] = [];
   const fn: QueryFn = (args) => {
     processes.started++;
-    return (async function* (): AsyncGenerator<SDKMessage> {
+    const gen = (async function* (): AsyncGenerator<SDKMessage> {
       for await (const m of args.prompt as AsyncIterable<SDKUserMessage>) {
         // The first woken turn of a session starts with the app context; the user's text is last.
         const content = m.message.content as string | Array<{ type: string; text?: string }>;
@@ -54,10 +56,15 @@ function fakeSdk() {
         yield { type: 'result', subtype: 'success' } as SDKMessage;
       }
       processes.ended++;
-    })() as unknown as Query;
+    })();
+    return Object.assign(gen, {
+      setPermissionMode: async (m: string) => void switches.push(`mode:${m}`),
+      setModel: async (m: string) => void switches.push(`model:${m}`),
+    }) as unknown as Query;
   };
   return {
     fn,
+    switches,
     calls,
     contexts,
     processes,
@@ -418,6 +425,61 @@ describe('waking an idle session from Pocket Agent', () => {
     expect(observedCapabilities(true, false, true).instructAnytime).toBe(true);
     expect(observedCapabilities(true, false, false).instructAnytime).toBe(false);
     expect(observedCapabilities(false, false, true).instructAnytime).toBe(false);
+  });
+});
+
+describe('switching mode and model while a woken turn runs', () => {
+  const configure = (change: Record<string, string>, sessionId = 'obs') =>
+    createEvent(
+      'command.execute',
+      {
+        commandId: crypto.randomUUID(),
+        commandType: 'session.configure',
+        ...change,
+        expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      },
+      { sessionId },
+    ) as unknown as Exec;
+  const liveSettings = (h: ReturnType<typeof setup>) => h.registry.get('obs')!.metadata?.['liveSettings'];
+
+  it('applies a new mode and model to the running turn at once, and tells the app it can', async () => {
+    const h = setup();
+    expect(liveSettings(h)).toBeUndefined();
+    h.sdk.holdTurns(true);
+    await h.router.handle(instruction('long job'));
+    await h.tick();
+    expect(liveSettings(h)).toBe('on');
+    const c = configure({ permissionMode: 'acceptEdits', model: 'haiku' });
+    await h.router.handle(c);
+    await h.tick();
+    expect(h.sdk.switches).toEqual(['mode:acceptEdits', 'model:haiku']);
+    expect(h.statuses(c.payload.commandId)).toEqual(['Delivered', 'Completed']);
+    h.sdk.release();
+    await h.tick();
+    // The next message with the same choices doesn't switch again.
+    await h.router.handle(instruction('next'));
+    await h.tick();
+    expect(h.sdk.switches).toHaveLength(2);
+  });
+
+  it('says so when the woken process has exited, and refuses a turn running in the editor', async () => {
+    const h = setup({}, 30);
+    await h.router.handle(instruction('quick'));
+    await h.tick();
+    await new Promise((r) => setTimeout(r, 80)); // kept 30 ms, then it exits
+    expect(h.wake.isRunning('obs')).toBe(false);
+    expect(liveSettings(h)).toBe('off');
+    // Claude working in the editor: its turn keeps the editor's settings.
+    h.hooks.handle({
+      session_id: 'obs',
+      cwd: String.raw`C:\work\app`,
+      hook_event_name: 'UserPromptSubmit',
+      prompt: 'mine',
+    });
+    const c = configure({ permissionMode: 'plan' });
+    await h.router.handle(c);
+    expect(h.statuses(c.payload.commandId)).toContain('Failed');
+    expect(h.sdk.switches).toEqual([]);
   });
 });
 

@@ -564,7 +564,7 @@ export function Composer({
           {canAttach && <AttachButton disabled={files.room <= 0} onPress={() => setAttachOpen(true)} />}
           {!locked && (
             <>
-              <ModePicker value={mode} onChange={chooseMode} locked={modelLocked} />
+              <ModePicker value={mode} onChange={chooseMode} locked={modelLocked} live={live} />
               <ModelPicker
                 models={models}
                 value={model}
@@ -572,6 +572,7 @@ export function Composer({
                 effort={effort}
                 onEffort={setEffort}
                 locked={modelLocked}
+                live={live}
               />
             </>
           )}

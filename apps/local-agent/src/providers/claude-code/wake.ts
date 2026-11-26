@@ -2,7 +2,7 @@ import type { Query, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import { truncate, type SessionRegistry } from '../../sessions/registry.js';
 import { filesDir, messageContent, type LocalFile } from '../../attachments.js';
 import { APP_CONTEXT } from './app-context.js';
-import type { TurnEffort, TurnMode } from '@pocket-agent/protocol';
+import { LIVE_SETTINGS_METADATA, type TurnEffort, type TurnMode } from '@pocket-agent/protocol';
 import type { CommandAck } from './instructions.js';
 import { approvalGate, reportSdkMessage, type ManagedApprovalOptions, type QueryFn } from './managed.js';
 
@@ -168,6 +168,27 @@ export class IdleWake {
     return false;
   }
 
+  /**
+   * A new mode or model for the session's woken process, at once: the turn that is running uses
+   * it from its next step, and so do the turns after it. False when no process is open for it.
+   */
+  async configure(
+    sessionId: string,
+    change: { permissionMode?: TurnMode; model?: string },
+  ): Promise<boolean> {
+    const w = this.woken.get(sessionId);
+    if (!w?.query || w.closed || w.finished) return false;
+    if (change.permissionMode) {
+      await w.query.setPermissionMode(change.permissionMode);
+      w.mode = change.permissionMode;
+    }
+    if (change.model) {
+      await w.query.setModel(change.model);
+      w.model = change.model;
+    }
+    return true;
+  }
+
   /** Stops the turn running for this session now, and drops what was queued behind it. */
   interrupt(sessionId: string): boolean {
     const w = this.woken.get(sessionId);
@@ -206,6 +227,8 @@ export class IdleWake {
       toolNames: new Map(),
     };
     this.woken.set(sessionId, w);
+    // While this process is open, the app can switch its mode and model at once (configure).
+    this.registry.setMetadata(sessionId, { [LIVE_SETTINGS_METADATA]: 'on' });
     const first = inbox[0];
     try {
       w.query = this.query({
@@ -365,7 +388,10 @@ export class IdleWake {
     if (w.finished) return;
     w.finished = true;
     if (w.idleTimer) clearTimeout(w.idleTimer);
-    if (this.woken.get(sessionId) === w) this.woken.delete(sessionId);
+    if (this.woken.get(sessionId) === w) {
+      this.woken.delete(sessionId);
+      this.registry.setMetadata(sessionId, { [LIVE_SETTINGS_METADATA]: 'off' });
+    }
     const stopped = w.interrupted || w.abort.signal.aborted;
     if (w.current) {
       const item = w.current;

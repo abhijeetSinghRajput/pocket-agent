@@ -168,10 +168,13 @@ export function ModePicker({
   value,
   onChange,
   locked,
+  live = false,
 }: {
   value: string;
   onChange: (v: string) => void;
   locked: string | null;
+  /** The choice applies at once, to the turn that is running too. */
+  live?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const current = MODES.find((m) => m.id === value);
@@ -194,7 +197,13 @@ export function ModePicker({
         open={open}
         onClose={() => setOpen(false)}
         title="Mode"
-        description={locked ?? 'Mode for your next message'}
+        description={
+          locked
+            ? 'Can’t be changed right now'
+            : live
+              ? 'Switches at once, mid-task too'
+              : 'Mode for your next message'
+        }
       >
         <Body>
           {locked && (
@@ -264,6 +273,7 @@ export function ModelPicker({
   effort,
   onEffort,
   locked,
+  live = false,
 }: {
   models: ModelOption[];
   value: string;
@@ -271,6 +281,8 @@ export function ModelPicker({
   effort: string;
   onEffort: (v: string) => void;
   locked: string | null;
+  /** The model applies at once, to the turn that is running too (effort: from the next message). */
+  live?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const current = models.find((m) => m.id === value);
@@ -294,7 +306,13 @@ export function ModelPicker({
         open={open}
         onClose={() => setOpen(false)}
         title="Select a model"
-        description={locked ?? 'Model and effort for your next message'}
+        description={
+          locked
+            ? 'Can’t be changed right now'
+            : live
+              ? 'The model switches at once; effort from your next message'
+              : 'Model and effort for your next message'
+        }
       >
         <Body ratio={0.5}>
           {locked && (

@@ -154,12 +154,6 @@ function Header({
                 color={p.live ? c.primary : c.mutedForeground}
               />
             </View>
-            <T variant="caption" tone="muted" accessibilityElementsHidden>
-              ·
-            </T>
-            <T variant="caption" tone="muted" numberOfLines={1} style={{ flexShrink: 1 }}>
-              {s.deviceName}
-            </T>
           </View>
         </View>
       </Press>

@@ -5,6 +5,7 @@
 //
 //   npm run ota:verify               (the version in app.config.ts)
 //   npm run ota:verify -- 2.4.1
+import { Buffer } from 'node:buffer';
 import { createHash, createVerify, X509Certificate } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';

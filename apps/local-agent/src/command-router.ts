@@ -167,14 +167,20 @@ export class CommandRouter {
         }
 
         case 'session.configure': {
-          // Only a session this PC runs for Pocket Agent; one in the editor keeps its own settings.
+          // A session this PC runs for Pocket Agent, or an editor session a message from the app
+          // woke (its process is ours). A turn running in the editor keeps the editor's settings.
           const sid = msg.sessionId;
-          if (!sid || !this.deps.managed.isManaged(sid)) return fail('not_a_managed_session');
+          if (!sid) return fail('not_a_managed_session');
+          const change = {
+            ...(p.permissionMode ? { permissionMode: p.permissionMode } : {}),
+            ...(p.model ? { model: p.model } : {}),
+          };
+          const managed = this.deps.managed.isManaged(sid);
+          if (!managed && !this.deps.wake?.isRunning(sid)) return fail('not_a_managed_session');
           try {
-            const ok = await this.deps.managed.configure(sid, {
-              ...(p.permissionMode ? { permissionMode: p.permissionMode } : {}),
-              ...(p.model ? { model: p.model } : {}),
-            });
+            const ok = managed
+              ? await this.deps.managed.configure(sid, change)
+              : await this.deps.wake!.configure(sid, change);
             return ok ? ack(p.commandId, 'Completed') : fail('session_not_found');
           } catch (err) {
             this.deps.log?.('warn', `configure ${sid}: ${(err as Error).message}`);

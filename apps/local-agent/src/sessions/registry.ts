@@ -111,6 +111,15 @@ export class SessionRegistry {
     );
   }
 
+  /** Changes a session's metadata (re-announced only when a value actually changed). */
+  setMetadata(id: string, patch: Record<string, string>): void {
+    const s = this.sessions.get(id);
+    if (!s) return;
+    const { projectName: _name, sources, pid, ...info } = s;
+    const source = sources.has('hooks') ? 'hooks' : sources.has('managed') ? 'managed' : 'discovery';
+    this.announce({ ...info, metadata: { ...s.metadata, ...patch } }, source, pid ? { pid } : {});
+  }
+
   /** Emits a session-scoped event (tool, permission, output, error). */
   event(id: string, eventType: string, payload: Record<string, unknown>): void {
     if (!this.sessions.has(id)) return;

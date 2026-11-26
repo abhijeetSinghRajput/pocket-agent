@@ -112,6 +112,13 @@ export type ConfigureSessionRequest = z.infer<typeof ConfigureSessionRequest>;
 
 /** First Local Agent version that switches a running session's mode or model at once. */
 export const CONFIGURE_AGENT_VERSION = '0.1.8';
+
+/**
+ * Session metadata key, "on" while the PC runs a session the user started in their editor on
+ * Pocket Agent's behalf (a message sent from the app woke it): its mode and model switch at once,
+ * mid-turn too, like a session Pocket Agent started. "off" (or absent) otherwise.
+ */
+export const LIVE_SETTINGS_METADATA = 'liveSettings';
 export type SessionControlRequest = z.infer<typeof SessionControlRequest>;
 
 /** How long a command may wait for the PC before it expires (never executed late). */

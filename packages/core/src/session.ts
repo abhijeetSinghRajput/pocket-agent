@@ -1,6 +1,7 @@
 import {
   CONFIGURE_AGENT_VERSION,
   isWithinFolder,
+  LIVE_SETTINGS_METADATA,
   RESUME_ANY_FOLDER_AGENT_VERSION,
   RESUME_MIN_AGENT_VERSION,
   versionBelow,
@@ -85,12 +86,21 @@ export const EFFORTS = [
   { id: 'max', name: 'Max' },
 ] as const;
 
-/** Why the model can't be chosen right now, or null if it can. */
+/**
+ * An editor session the PC is running for Pocket Agent right now (a message from here woke it):
+ * its mode and model switch at once, mid-turn too.
+ */
+export function runsForApp(s: AgentSessionDto): boolean {
+  return s.mode === 'observed' && !s.endedAt && s.metadata?.[LIVE_SETTINGS_METADATA] === 'on';
+}
+
+/** Why the mode and model can't be chosen right now, or null if they can. */
 export function modelLock(s: AgentSessionDto): string | null {
-  if (s.mode === 'managed') return null;
+  if (s.mode === 'managed' || runsForApp(s)) return null;
   if (!s.capabilities.instructAnytime)
     return 'This session runs in your editor with its own settings. Turn on wake on the PC to run turns from here with others.';
-  if (isBusy(s)) return 'Claude is mid-turn in your editor; that turn keeps the editor’s settings.';
+  if (isBusy(s))
+    return 'Claude is working in your editor, so this turn keeps the editor’s mode and model. You can choose again once it finishes.';
   return null;
 }
 
@@ -188,6 +198,8 @@ export function capabilityRows(s: AgentSessionDto): CapabilityRow[] {
  * Pocket Agent started, on a PC new enough to switch it. Otherwise it applies from the next message.
  */
 export function canConfigureLive(s: AgentSessionDto, device: DeviceDto | undefined): boolean {
+  // Only a PC that can switch it says so (see LIVE_SETTINGS_METADATA).
+  if (runsForApp(s)) return !!device;
   return (
     s.mode === 'managed' &&
     !s.endedAt &&

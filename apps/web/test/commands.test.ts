@@ -1,6 +1,14 @@
 import type { CommandDto } from '@pocket-agent/protocol';
 import { describe, expect, it } from 'vitest';
-import { canInstruct, capabilityRows, commandError, commandTitle, isOpen } from '@/lib/commands';
+import {
+  canConfigureLive,
+  canInstruct,
+  capabilityRows,
+  commandError,
+  commandTitle,
+  isOpen,
+  modelLock,
+} from '@/lib/commands';
 
 const cmd = (over: Partial<CommandDto>): CommandDto => ({
   id: '1',
@@ -88,5 +96,19 @@ describe('capability honesty', () => {
       (r) => r.label === 'Send instructions',
     )!;
     expect(stale.detail).toContain('Restart it on the PC');
+  });
+});
+
+describe('switching mode and model mid-turn', () => {
+  const device = { agentVersion: '2.4.0' } as never;
+  it('an editor session the PC runs for the app switches at once, even while working', () => {
+    const woken = session('observed', { instructAnytime: true }, { liveSettings: 'on' });
+    expect(modelLock(woken)).toBeNull();
+    expect(canConfigureLive(woken, device)).toBe(true);
+  });
+  it('a turn running in the editor keeps its settings, and says so once, plainly', () => {
+    const editor = session('observed', { instructAnytime: true }, { liveSettings: 'off' });
+    expect(modelLock(editor)).toContain('working in your editor');
+    expect(canConfigureLive(editor, device)).toBe(false);
   });
 });

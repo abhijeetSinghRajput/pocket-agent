@@ -411,6 +411,372 @@
   color: var(--ss-text);
 }
 
+/* ── The hero's chat, drawn as the app draws it (apps/mobile/src/features/chat, lib/theme.ts) ── */
+
+.pa-live {
+  --live-bg: #eff0f3;
+  --live-card: #fff;
+  --live-fg: #151619;
+  --live-muted: #616369;
+  --live-line: #e2e3e6;
+  --live-fill: #eaebee;
+  --live-primary: #c64200;
+  --live-bubble: #d95800;
+  --live-link: #0465af;
+  --live-ok: #1c985a;
+  --live-warn: #da950b;
+  --live-bad: #d02b31;
+  --live-code: #f6f7f9;
+  background: var(--live-bg);
+  color: var(--live-fg);
+}
+
+.ss-phone[data-dark] .pa-live,
+[data-theme='dark'] .pa-live {
+  --live-bg: #000;
+  --live-card: #202020;
+  --live-fg: #f2f2f2;
+  --live-muted: #9a9ca3;
+  --live-line: #333;
+  --live-fill: #2a2a2a;
+  --live-primary: #f67f2f;
+  --live-link: #6cb4f0;
+  --live-code: #171717;
+}
+
+.pa-live .pa-app-thread {
+  gap: 0;
+  padding: 2px 16px 14px;
+}
+
+/* The space between messages sits inside each one, so a row that is closed takes none */
+.pa-live-out,
+.pa-live-step,
+.pa-live-ask,
+.pa-live-working {
+  margin-top: 16px;
+}
+
+/* Your message */
+.pa-live-out {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.pa-live-bubble {
+  max-width: 88%;
+  padding: 8px 14px;
+  border-radius: 16px 16px 6px 16px;
+  background: var(--live-bubble);
+  color: #fefbf8;
+  font-size: 15.25px;
+  line-height: 22.5px;
+  will-change: transform;
+}
+
+.pa-live-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--live-muted);
+  font-size: 11px;
+}
+
+.pa-live-ticks {
+  color: var(--live-link);
+}
+
+/* One step of Claude's turn: a dot, then the content */
+.pa-live-step {
+  position: relative;
+  padding-left: 22px;
+  font-size: 15.75px;
+  line-height: 24px;
+}
+
+.pa-live-step::before {
+  content: '';
+  position: absolute;
+  top: 7.5px;
+  left: 0;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--live-muted) 45%, transparent);
+}
+
+.pa-live-step[data-tone='ok']::before {
+  background: var(--live-ok);
+}
+
+.pa-live-step[data-tone='run']::before {
+  background: var(--live-primary);
+  animation: pa-live-pulse 1s ease-in-out infinite alternate;
+}
+
+@keyframes pa-live-pulse {
+  to {
+    opacity: 0.35;
+  }
+}
+
+.pa-live-step code {
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--live-fg) 7%, transparent);
+  font-family: var(--ss-mono);
+  font-size: 13.5px;
+}
+
+/* A tool call: its name, then the file in link blue */
+.pa-live-tool {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.pa-live-tool-name {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.pa-live-tool-target {
+  overflow: hidden;
+  color: var(--live-link);
+  font-family: var(--ss-mono);
+  font-size: 12.5px;
+  text-overflow: ellipsis;
+}
+
+/* Bash: its command and output in a card, IN and OUT */
+.pa-live-io {
+  display: grid;
+  grid-template-columns: 38px 1fr;
+  margin-top: 4px;
+  border: 1px solid var(--live-line);
+  border-radius: 8px;
+  background: var(--live-card);
+  font-family: var(--ss-mono);
+  font-size: 12px;
+  line-height: 18.5px;
+}
+
+.pa-live-io > * {
+  padding: 6px 0;
+}
+
+.pa-live-io > :nth-child(n + 3) {
+  border-top: 1px solid var(--live-line);
+}
+
+.pa-live-io-label {
+  padding-left: 8px;
+  color: var(--live-muted);
+  font-family: var(--ss-font);
+  font-size: 10.5px;
+  font-weight: 600;
+}
+
+.pa-live-io-out {
+  color: var(--live-muted);
+}
+
+/* The permission card */
+.pa-live-ask {
+  display: flex;
+  flex-direction: column;
+  padding: 14px 16px 16px;
+  border-top: 3px solid var(--live-warn);
+  border-radius: 24px;
+  background: var(--live-card);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
+}
+
+.pa-live-ask-over {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--live-warn);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+}
+
+.pa-live-ask-left {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--live-muted);
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.pa-live-ask-title {
+  margin-top: 8px;
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 24px;
+}
+
+.pa-live-ask-sub {
+  color: var(--live-muted);
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.pa-live-ask-code {
+  margin-top: 10px;
+  padding: 11px 14px;
+  border: 1px solid var(--live-line);
+  border-radius: 14px;
+  background: var(--live-code);
+  font-family: var(--ss-mono);
+  font-size: 13.5px;
+  line-height: 20px;
+}
+
+.pa-live-ask-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.pa-live .pa-live-btn {
+  --ss-button-height: 52px;
+  --ss-button-pad: 14px;
+  --ss-button-pad-icon: 12px;
+  --ss-button-icon: 18px;
+  justify-content: center;
+  border-radius: 18px;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.pa-live .pa-live-btn--deny {
+  border: 1px solid color-mix(in srgb, var(--live-bad) 45%, transparent);
+  background: var(--live-card);
+  color: var(--live-bad);
+}
+
+.pa-live .pa-live-btn--allow {
+  background: var(--live-primary);
+  color: #fcfcfc;
+}
+
+.pa-live .pa-live-btn--allow[data-pressed] {
+  filter: brightness(0.94);
+}
+
+/* Claude at work */
+.pa-live-working {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--live-primary);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.pa-live-star {
+  font-family: var(--ss-mono);
+  font-size: 16px;
+}
+
+.pa-live-cursor {
+  width: 7.5px;
+  height: 15px;
+  background: var(--live-primary);
+  animation: pa-live-pulse 0.6s steps(2) infinite;
+}
+
+/* The composer: a white box, the text, then +, the mode, the mic and send */
+.pa-live .pa-live-composer {
+  display: block;
+  padding: 0 12px 34px;
+  border-top: 0;
+  background: linear-gradient(to bottom, transparent, var(--live-bg) 12px);
+}
+
+.pa-live-box {
+  border: 1.5px solid var(--live-line);
+  border-radius: 18px;
+  background: var(--live-card);
+  transition: border-color 200ms ease;
+}
+
+.pa-live-box[data-focused] {
+  border-color: color-mix(in srgb, var(--live-primary) 60%, transparent);
+}
+
+.pa-live .pa-live-field {
+  --ss-control: 46px;
+}
+
+.pa-live .pa-live-field .ss-field__box {
+  padding: 0 16px;
+  border: 0;
+  box-shadow: none;
+  background: transparent;
+  font-size: 16px;
+}
+
+.pa-live-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px 8px;
+}
+
+.pa-live-icon,
+.pa-live .pa-live-send {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  background: var(--live-fill);
+  color: var(--live-fg);
+}
+
+.pa-live .pa-live-send {
+  background: var(--live-primary);
+  color: #fff;
+  opacity: 0.55;
+  transition: opacity 200ms ease;
+}
+
+.pa-live .pa-live-send[data-ready] {
+  opacity: 1;
+}
+
+.pa-live-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--live-muted);
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+.pa-live-spacer {
+  flex: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pa-live-step[data-tone='run']::before,
+  .pa-live-cursor {
+    animation: none;
+  }
+}
+
 /* ── Feature cards ──────────────────────────────────────────────────────────────────────────── */
 
 .pa-feat .ss-stage {
@@ -1375,10 +1741,11 @@
   box-shadow: var(--ss-shadow-ground);
 }
 
+/* Narrow: the same pair, overlapping as on wide screens: the phone at the top right, the terminal
+   lower and to the left, under it. Whichever is acting comes to the front (.pa-dimmable) */
 .pa-f-stage[data-layout='compact'] .pa-f-term {
-  top: 0;
-  right: 0;
-  width: auto;
+  top: 150px;
+  width: 300px;
   height: 172px;
 }
 
@@ -1388,10 +1755,21 @@
 }
 
 .pa-f-stage[data-layout='compact'] .pa-f-phone {
-  top: 168px;
-  right: auto;
-  left: 50%;
-  translate: -50% 0;
+  top: 0;
+}
+
+/* The camera that moves in on New chat: no clip or feather while it shows the whole scene (the
+   devices' shadows run past the stage), clipped to the stage while it is pushed in. The clip eases
+   with the move, so the scene never spills out over the page */
+.pa-folders .ss-camera-view {
+  overflow: visible;
+  mask-image: none;
+  clip-path: inset(-80px);
+  transition: clip-path 1000ms cubic-bezier(0.45, 0, 0.1, 1) !important;
+}
+
+.pa-folders .ss-camera-view[data-zoomed] {
+  clip-path: inset(0 round 28px);
 }
 
 /* The phone's screen, in points */

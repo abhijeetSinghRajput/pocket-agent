@@ -2,9 +2,20 @@
 
 import Image from 'next/image';
 import { useLayoutEffect, useRef, type ReactNode } from 'react';
-import { ArrowUp, Check, CheckCheck, MessageSquare, ShieldQuestion, SquareTerminal } from 'lucide-react';
 import {
-  Bar,
+  ArrowUp,
+  Check,
+  CheckCheck,
+  Clock,
+  MessageSquare,
+  Mic,
+  Plus,
+  ShieldQuestion,
+  Smartphone,
+  X,
+  Zap,
+} from 'lucide-react';
+import {
   Button,
   Collapse,
   Field,
@@ -366,86 +377,104 @@ function Grow({ open, from, children }: { open: boolean; from: 'top' | 'bottom';
   );
 }
 
-function ToolCheck() {
+/** One step of Claude's turn, as the app draws it: a dot on the left, then the content. */
+function Step({
+  tone = 'idle',
+  children,
+  ...rest
+}: {
+  tone?: 'idle' | 'run' | 'ok';
+  children: ReactNode;
+} & React.HTMLAttributes<HTMLDivElement> & { [k: `data-${string}`]: string | undefined }) {
   return (
-    <span className="pa-tool-icon">
-      <Check size={16} strokeWidth={2.6} aria-hidden />
-    </span>
+    <div className="pa-live-step" data-tone={tone} {...rest}>
+      {children}
+    </div>
   );
 }
 
-function ChatScreen({ s }: { s: S }) {
+/** A tool call: its name, then what it worked on, in the app's link blue. */
+function ToolRow({ name, target, tone = 'ok' }: { name: string; target: string; tone?: 'run' | 'ok' }) {
   return (
-    <div className="pa-app pa-app--chat">
+    <Step tone={tone}>
+      <div className="pa-live-tool">
+        <span className="pa-live-tool-name">{name}</span>
+        <span className="pa-live-tool-target">{target}</span>
+      </div>
+    </Step>
+  );
+}
+
+/** Your message: the orange bubble, then where it came from, the time and its ticks. */
+function Bubble({ children, time }: { children: ReactNode; time: string }) {
+  return (
+    <div className="pa-live-out">
+      <div className="pa-live-bubble">{children}</div>
+      <div className="pa-live-meta">
+        <Smartphone size={12} strokeWidth={2.2} aria-hidden />
+        {time}
+        <CheckCheck size={14} strokeWidth={2.2} className="pa-live-ticks" aria-hidden />
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Pocket Agent's chat screen as the app draws it (apps/mobile/src/features/chat): your messages in
+ * orange bubbles, Claude's turn as dotted steps (text, then tool rows with the file in blue), the
+ * permission card with Deny and Allow, and the composer with its + and mode chip.
+ */
+function ChatScreen({ s }: { s: S }) {
+  // Claude is busy: from the task's arrival until it asks, and while the tests run
+  const working = (s.arrived && !s.ask) || (s.run && !s.done);
+  return (
+    <div className="pa-app pa-app--chat pa-live">
       <div className="pa-app-thread">
-        {/* The conversation so far: filler, the crop's edge runs through it */}
-        <div className="pa-claude">
-          <Bar w={256} h={9} tone={1} />
-          <Bar w={214} h={9} tone={1} />
-          <Bar w={240} h={9} tone={1} />
-          <Bar w={150} h={9} tone={1} />
-        </div>
-        <div className="pa-bubble pa-bubble--old">
-          <Bar w={190} h={9} className="pa-bubble-bar" />
-        </div>
-        <div className="pa-claude">
-          <Bar w={232} h={9} tone={1} />
-          <Bar w={176} h={9} tone={1} />
-        </div>
-        <div className="pa-bubble pa-bubble--old">
-          <Bar w={150} h={9} className="pa-bubble-bar" />
-        </div>
-        <div className="pa-claude">
-          <Bar w={270} h={9} tone={1} />
-          <Bar w={236} h={9} tone={1} />
-          <Bar w={180} h={9} tone={1} />
-        </div>
-        <div className="pa-tool pa-tool--old">
-          <ToolCheck />
-          <Bar w={96} h={8} tone={2} />
-        </div>
+        {/* Earlier in this chat: the crop's edge runs through it */}
+        <Bubble time="10:41">Why does sign-in fail after an hour?</Bubble>
+        <ToolRow name="Read" target="src/auth/session.ts" />
+        <Step>
+          The token expiry check compares seconds to <code>Date.now()</code>, which is in milliseconds. Want
+          me to fix it?
+        </Step>
 
         <Collapse open={s.sent} reveal="drop" from="below">
-          <div className="pa-bubble">{PROMPT}</div>
+          <Bubble time="10:44">{PROMPT}</Bubble>
         </Collapse>
         <Collapse open={s.work >= 1} reveal="drop" from="below">
-          <div className="pa-claude">
-            <Bar w={250} h={9} tone={2} />
-            <Bar w={190} h={9} tone={2} />
-          </div>
+          <Step>
+            <code>expiresAt</code> is in seconds. I&apos;ll compare it in seconds too.
+          </Step>
         </Collapse>
         <Collapse open={s.work >= 2} reveal="drop" from="below">
-          <div className="pa-tool">
-            <ToolCheck />
-            <span>Update</span>
-            <span className="pa-tool-file">session.ts</span>
-          </div>
+          <ToolRow name="Edit" target="src/auth/session.ts" />
         </Collapse>
 
         <Grow open={s.roomAsk && !s.closed} from="bottom">
           <div
-            className="pa-ask pa-morph-in"
+            className="pa-live-ask pa-morph-in"
             data-morph="card"
             data-target="phone-ask"
-
             data-allowed={s.allowed || undefined}
           >
-            <div className="pa-ask-head">
-              <span className="pa-ask-icon">
-                <SquareTerminal size={18} strokeWidth={2.2} aria-hidden />
+            <div className="pa-live-ask-over">
+              <span>Permission needed</span>
+              <span className="pa-live-ask-left">
+                <Clock size={12} strokeWidth={2.4} aria-hidden /> 0:42 left
               </span>
-              <span className="pa-ask-title">Run a command?</span>
             </div>
-            <div className="pa-ask-code">npm test</div>
-            <div className="pa-ask-actions">
-              <Button className="pa-btn" variant="secondary">
+            <div className="pa-live-ask-title">Claude wants to run a command</div>
+            <div className="pa-live-ask-sub">Command · Bash</div>
+            <div className="pa-live-ask-code">npm test</div>
+            <div className="pa-live-ask-actions">
+              <Button className="pa-live-btn pa-live-btn--deny" variant="secondary" icon={<X size={18} strokeWidth={2.6} />}>
                 Deny
               </Button>
               <Button
-                className="pa-btn pa-btn--allow"
+                className="pa-live-btn pa-live-btn--allow"
                 variant="primary"
                 data-target="allow"
-                icon={s.allowed ? <Check size={18} strokeWidth={2.8} /> : undefined}
+                icon={<Check size={18} strokeWidth={2.8} />}
               >
                 {s.allowed ? 'Allowed' : 'Allow'}
               </Button>
@@ -454,47 +483,61 @@ function ChatScreen({ s }: { s: S }) {
         </Grow>
 
         <Collapse open={s.closed} reveal="drop" from="below">
-          <div className="pa-tool">
-            <States
-              className="pa-tool-mark"
-              value={s.passed ? 'tick' : 'spin'}
-              states={{
-                spin: (
-                  <span className="pa-tool-icon pa-tool-icon--run">
-                    <Spinner size={14} />
-                  </span>
-                ),
-                tick: <ToolCheck />,
-              }}
-            />
-            <span>npm test</span>
-            <States
-              align="start"
-              className="pa-tool-file"
-              value={s.passed ? 'passed' : 'running'}
-              states={{ running: 'Running…', passed: '148 passed' }}
-            />
-          </div>
+          <Step tone={s.passed ? 'ok' : 'run'}>
+            <div className="pa-live-tool">
+              <span className="pa-live-tool-name">Bash</span>
+            </div>
+            <div className="pa-live-io">
+              <span className="pa-live-io-label">IN</span>
+              <span>npm test</span>
+              <span className="pa-live-io-label">OUT</span>
+              <States
+                align="start"
+                className="pa-live-io-out"
+                value={s.passed ? 'passed' : 'running'}
+                states={{ running: 'Running…', passed: '148 passed in 6.2s' }}
+              />
+            </div>
+          </Step>
         </Collapse>
         <Grow open={s.roomReply} from="bottom">
-          <div className="pa-reply-text pa-morph-in" data-target="phone-reply" data-morph="text">
+          <Step data-target="phone-reply" data-morph="text" className="pa-morph-in">
             {REPLY}
-          </div>
+          </Step>
         </Grow>
+        <Collapse open={working} reveal="drop" from="below">
+          <div className="pa-live-working">
+            <span className="pa-live-star">✻</span> Churning<span className="pa-live-cursor" />
+          </div>
+        </Collapse>
       </div>
 
       <div data-target="phone-next" className="pa-anchor" />
-      <div className="pa-composer">
-        <Field
-          className="pa-field"
-          value={s.draft}
-          placeholder="Message Claude…"
-          focused={s.typing}
-          box={{ 'data-target': 'composer', 'data-cursor': 'ibeam' }}
-        />
-        <span className="pa-send" data-target="send" data-ready={s.draft ? '' : undefined}>
-          <ArrowUp size={20} strokeWidth={2.6} aria-hidden />
-        </span>
+      <div className="pa-composer pa-live-composer">
+        <div className="pa-live-box" data-focused={s.typing || undefined}>
+          <Field
+            className="pa-field pa-live-field"
+            value={s.draft}
+            placeholder="Message Claude…"
+            focused={s.typing}
+            box={{ 'data-target': 'composer', 'data-cursor': 'ibeam' }}
+          />
+          <div className="pa-live-row">
+            <span className="pa-live-icon">
+              <Plus size={21} strokeWidth={2} aria-hidden />
+            </span>
+            <span className="pa-live-chip">
+              <Zap size={14} strokeWidth={2.2} aria-hidden /> Manual
+            </span>
+            <span className="pa-live-spacer" />
+            <span className="pa-live-icon">
+              <Mic size={19} strokeWidth={2} aria-hidden />
+            </span>
+            <span className="pa-send pa-live-send" data-target="send" data-ready={s.draft ? '' : undefined}>
+              <ArrowUp size={18} strokeWidth={2.6} aria-hidden />
+            </span>
+          </div>
+        </div>
       </div>
     </div>
   );

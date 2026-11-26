@@ -203,7 +203,7 @@ export default function HomePage() {
                 <Link
                   href="/register"
                   className={buttonVariants({
-                    className: 'raise-ink h-10 rounded-full px-5 text-white sm:h-10',
+                    className: 'raise-ink hidden h-10 rounded-full px-5 text-white sm:inline-flex sm:h-10',
                   })}
                 >
                   Get started

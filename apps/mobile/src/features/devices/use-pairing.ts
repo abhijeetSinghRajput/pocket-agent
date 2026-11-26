@@ -53,12 +53,16 @@ export function usePairing({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active, regenerate]);
 
-  // While a code is showing: tick the countdown and watch for the new device.
+  // While waiting: tick the countdown and watch for the new device. An expired code still waits,
+  // since the PC can also pair by its QR code.
+  const waiting = step.kind === 'code' || step.kind === 'expired';
   useEffect(() => {
-    if (!active || step.kind !== 'code') return;
+    if (!active || !waiting) return;
     const tick = setInterval(() => {
       setNow(Date.now());
-      if (Date.now() >= step.expiresAt) setStep({ kind: 'expired', code: step.code });
+      setStep((s) =>
+        s.kind === 'code' && Date.now() >= s.expiresAt ? { kind: 'expired', code: s.code } : s,
+      );
     }, 1000);
     const watch = setInterval(async () => {
       try {
@@ -76,7 +80,7 @@ export function usePairing({
       clearInterval(tick);
       clearInterval(watch);
     };
-  }, [active, step]);
+  }, [active, waiting]);
 
   // Paired but not online yet: follow that device until its background service connects.
   const pairedId = step.kind === 'paired' && step.device.status !== 'Online' ? step.device.id : null;

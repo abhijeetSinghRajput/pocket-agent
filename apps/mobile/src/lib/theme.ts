@@ -108,6 +108,17 @@ export function useTheme(): Theme {
   return { dark: isDark, c: isDark ? dark : light };
 }
 
+/**
+ * `color` at `a` over `base`, as one opaque `#rrggbb`: a tint that looks the same as `alpha()` on
+ * that base, but hides whatever scrolls under it (for things that float over content).
+ */
+export function tint(color: string, a: number, base: string): string {
+  const f = Number.parseInt(color.slice(1), 16);
+  const b = Number.parseInt(base.slice(1), 16);
+  const ch = (s: number) => Math.round(((f >> s) & 255) * a + ((b >> s) & 255) * (1 - a));
+  return `#${((ch(16) << 16) | (ch(8) << 8) | ch(0)).toString(16).padStart(6, '0')}`;
+}
+
 /** `#rrggbb` + alpha (0..1) as an rgba() string. Also usable inside animations (a worklet). */
 export function alpha(hex: string, a: number): string {
   'worklet';

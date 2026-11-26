@@ -102,5 +102,6 @@ export async function apiRequest<S extends z.ZodType>(
 const AGENT_DEFAULT_API_URL = 'https://pocket-agent-api.onrender.com';
 export const AGENT_NPM_PACKAGE = '@mrcodium/pocket-agent';
 export const installCommand = () => `npm install -g ${AGENT_NPM_PACKAGE}`;
-export const connectCommand = (code: string) =>
-  `pocket-agent connect ${code}${API_URL === AGENT_DEFAULT_API_URL ? '' : ` --api ${API_URL}`}`;
+/** Without a code the PC shows a QR code to scan with the phone. */
+export const connectCommand = (code = '') =>
+  `pocket-agent connect${code ? ` ${code}` : ''}${API_URL === AGENT_DEFAULT_API_URL ? '' : ` --api ${API_URL}`}`;

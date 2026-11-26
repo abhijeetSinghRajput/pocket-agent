@@ -1,11 +1,12 @@
-import type { DeviceDto } from '@pocket-agent/protocol';
+import { DeviceListResponse, type DeviceDto } from '@pocket-agent/protocol';
 import { ArrowLeft, Download, KeyRound, LogOut, Monitor, Plus, Zap } from 'lucide-react-native';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { BackHandler, Image, ScrollView, StyleSheet, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ConnectSteps } from '@/features/devices/connect-steps';
+import { ConnectStatus, ConnectSteps, type ConnectMode } from '@/features/devices/connect-steps';
 import { usePairing } from '@/features/devices/use-pairing';
+import { apiRequest } from '@/lib/api';
 import { useAuth, useUser } from '@/lib/auth';
 import { ease, enter, exit } from '@/lib/motion';
 import { alpha, radius, useTheme } from '@/lib/theme';
@@ -15,11 +16,11 @@ import { SuccessTick } from '@/ui/feedback';
 import { Sheet } from '@/ui/sheet';
 
 const STEPS = [
-  { icon: Download, title: 'Install Pocket Agent', text: 'Run a single command on your Windows PC.' },
+  { icon: Download, title: 'Install Pocket Agent', text: 'Run a single command on your PC.' },
   {
     icon: KeyRound,
     title: 'Pair your device',
-    text: 'Connect it with a one-time code from this app.',
+    text: 'Scan the QR code it shows, or type a 6-character code.',
   },
   { icon: Zap, title: 'You’re ready!', text: 'Follow and steer your Claude sessions from anywhere.' },
 ];
@@ -230,12 +231,63 @@ const riseAfter = (delay: number) =>
     .delay(delay)
     .withInitialValues({ opacity: 0, transform: [{ translateY: 12 }] });
 
-/** The PC is online: a big tick that draws itself, then the way into the app. */
+/** How long the tick shows before a PC that already has workspaces goes straight into the app. */
+const AUTO_OPEN_MS = 1600;
+/** How long to wait for the PC's settings (its workspaces) after it comes online. */
+const SETTINGS_WAIT_MS = 2000;
+
+/**
+ * Whether the new PC already has workspaces (a PC paired again keeps its list). Its settings
+ * arrive just after it comes online, so look a few times before deciding it has none.
+ */
+function useHasWorkspaces(device: DeviceDto): boolean | null {
+  const [has, setHas] = useState<boolean | null>(device.projects.length > 0 ? true : null);
+  useEffect(() => {
+    if (has !== null) return;
+    let alive = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const started = Date.now();
+    const look = async () => {
+      try {
+        const { devices } = await apiRequest('/devices', DeviceListResponse);
+        if (!alive) return;
+        if ((devices.find((d) => d.id === device.id)?.projects.length ?? 0) > 0) return setHas(true);
+      } catch {
+        /* decided by the deadline below */
+      }
+      if (!alive) return;
+      if (Date.now() - started >= SETTINGS_WAIT_MS) setHas(false);
+      else timer = setTimeout(() => void look(), 700);
+    };
+    void look();
+    return () => {
+      alive = false;
+      clearTimeout(timer);
+    };
+  }, [device.id, has]);
+  return has;
+}
+
+/**
+ * The PC is online: a big tick that draws itself. A PC that already has workspaces then opens the
+ * app by itself; a new one offers to set up its first workspace.
+ */
 function Connected({ device, onDone }: { device: DeviceDto; onDone: () => void }) {
+  const hasWorkspaces = useHasWorkspaces(device);
+  const [mountedAt] = useState(() => Date.now());
+  const doneRef = useRef(onDone);
+  useEffect(() => {
+    doneRef.current = onDone;
+  }, [onDone]);
   useEffect(() => {
     buzz(true);
     playSound('landed');
   }, []);
+  useEffect(() => {
+    if (!hasWorkspaces) return;
+    const id = setTimeout(() => doneRef.current(), Math.max(0, AUTO_OPEN_MS - (Date.now() - mountedAt)));
+    return () => clearTimeout(id);
+  }, [hasWorkspaces, mountedAt]);
   return (
     <View
       testID="onboarding-connected"
@@ -252,17 +304,86 @@ function Connected({ device, onDone }: { device: DeviceDto; onDone: () => void }
           <T variant="bodyMedium">{device.name}</T> is online. Pocket Agent runs in the background on it.
         </T>
       </Animated.View>
-      <Animated.View entering={riseAfter(560)} style={{ marginTop: 40, width: '100%', maxWidth: 384 }}>
-        <Button label="Set up your workspace" size="lg" full onPress={onDone} testID="onboarding-done" />
-      </Animated.View>
+      <View style={{ marginTop: 40, width: '100%', maxWidth: 384, minHeight: 52, justifyContent: 'center' }}>
+        {hasWorkspaces === false && (
+          <Animated.View entering={riseAfter(0)}>
+            <Button label="Set up your workspace" size="lg" full onPress={onDone} testID="onboarding-done" />
+          </Animated.View>
+        )}
+        {hasWorkspaces === true && (
+          <Animated.View entering={riseAfter(560)}>
+            <T variant="small" tone="muted" center accessibilityLiveRegion="polite">
+              Opening your workspaces…
+            </T>
+          </Animated.View>
+        )}
+      </View>
+    </View>
+  );
+}
+
+/** The connect page's top bar: back, the app's name, and the account. */
+function ConnectHeader({ onBack }: { onBack: () => void }) {
+  const user = useUser();
+  const { c } = useTheme();
+  const [account, setAccount] = useState(false);
+  return (
+    <View
+      style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+        paddingHorizontal: 20,
+        paddingTop: 16,
+        paddingBottom: 8,
+      }}
+    >
+      <Press
+        accessibilityRole="button"
+        accessibilityLabel="Back"
+        onPress={onBack}
+        scale={0.92}
+        style={{
+          width: 44,
+          height: 44,
+          borderRadius: radius.lg,
+          borderWidth: StyleSheet.hairlineWidth * 2,
+          borderColor: c.border,
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <ArrowLeft size={20} color={c.foreground} strokeWidth={2} />
+      </Press>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1, minWidth: 0 }}>
+        <Image
+          source={require('@/assets/images/logo.png')}
+          style={{ width: 32, height: 32, borderRadius: 8 }}
+          accessibilityIgnoresInvertColors
+        />
+        <T variant="subheading" numberOfLines={1}>
+          Pocket Agent
+        </T>
+      </View>
+      <Press
+        accessibilityRole="button"
+        accessibilityLabel="Account"
+        testID="onboarding-account"
+        onPress={() => setAccount(true)}
+        scale={0.92}
+        style={{ borderRadius: 22 }}
+      >
+        <Avatar name={user.name} url={user.avatarUrl} size={44} />
+      </Press>
+      <AccountSheet open={account} onClose={() => setAccount(false)} />
     </View>
   );
 }
 
 /**
  * The first screen for an account without a PC; it can't be skipped (nothing works without one),
- * the account sheet still offers sign out. Page 1 explains and has the one button; page 2 has the
- * two commands and follows the PC live; once the PC is online, the success screen.
+ * the account sheet still offers sign out. Page 1 explains and has the one button; page 2 connects
+ * the PC (scan its QR code or type a code) and follows it live; once it is online, the success screen.
  */
 export function Onboarding({ knownDeviceIds, onDone }: { knownDeviceIds: string[]; onDone: () => void }) {
   const user = useUser();
@@ -270,11 +391,11 @@ export function Onboarding({ knownDeviceIds, onDone }: { knownDeviceIds: string[
   const insets = useSafeAreaInsets();
   const firstName = user.name.trim().split(/\s+/)[0];
   const [started, setStarted] = useState(false);
+  const [mode, setMode] = useState<ConnectMode>('scan');
   const { step, now, regenerate } = usePairing({ active: started, knownDeviceIds });
-  const paired = started && step.kind === 'paired';
-  const connected = paired && step.device.status === 'Online';
+  const connected = started && step.kind === 'paired' && step.device.status === 'Online';
 
-  // Android back on the commands goes back to the welcome page instead of closing the app.
+  // Android back on the connect page goes back to the welcome page instead of closing the app.
   useEffect(() => {
     if (!started || connected) return;
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
@@ -290,92 +411,45 @@ export function Onboarding({ knownDeviceIds, onDone }: { knownDeviceIds: string[
         <Animated.View key="connected" entering={enter.fade} exiting={exit.fade} style={{ flex: 1 }}>
           <Connected device={step.device} onDone={onDone} />
         </Animated.View>
-      ) : (
-        <Animated.View key="pages" exiting={exit.fade} style={{ flex: 1 }}>
+      ) : !started ? (
+        <Animated.View key="welcome" entering={enter.fade} exiting={exit.fade} style={{ flex: 1 }}>
           <Header />
           <ScrollView
             contentContainerStyle={{ paddingBottom: insets.bottom + 48 }}
             showsVerticalScrollIndicator={false}
+          >
+            <Welcome firstName={firstName} onStart={() => setStarted(true)} />
+          </ScrollView>
+        </Animated.View>
+      ) : (
+        <Animated.View key="connect" entering={enter.fade} exiting={exit.fade} style={{ flex: 1 }}>
+          <ConnectHeader onBack={() => setStarted(false)} />
+          <ScrollView
+            contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 12, paddingBottom: 24 }}
+            showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
           >
-            {!started ? (
-              <Animated.View key="welcome" entering={enter.fade} exiting={exit.fade}>
-                <Welcome firstName={firstName} onStart={() => setStarted(true)} />
-              </Animated.View>
-            ) : (
-              <Animated.View
-                key="commands"
-                entering={enter.rise(0)}
-                exiting={exit.fade}
-                style={{ paddingHorizontal: 20 }}
-              >
-                <Divider />
-                <View style={{ paddingTop: 20 }}>
-                  {!paired && (
-                    <Animated.View exiting={exit.fade} style={{ alignSelf: 'flex-start' }}>
-                      <Press
-                        accessibilityRole="button"
-                        accessibilityLabel="Back"
-                        onPress={() => setStarted(false)}
-                        scale={0.94}
-                        style={{
-                          flexDirection: 'row',
-                          alignItems: 'center',
-                          gap: 6,
-                          height: 36,
-                          marginLeft: -8,
-                          paddingHorizontal: 8,
-                          borderRadius: radius.md,
-                        }}
-                      >
-                        <ArrowLeft size={16} color={c.mutedForeground} strokeWidth={2} />
-                        <T variant="small" tone="muted">
-                          Back
-                        </T>
-                      </Press>
-                    </Animated.View>
-                  )}
-                  <T variant="title" accessibilityRole="header" style={{ marginTop: 12 }}>
-                    Connect your PC
-                  </T>
-                  <T variant="body" tone="muted" style={{ marginTop: 6 }}>
-                    Run these in PowerShell on your Windows PC. This page updates by itself.
-                  </T>
-                  <View style={{ marginTop: 24 }}>
-                    <ConnectSteps
-                      step={step}
-                      now={now}
-                      regenerate={() => void regenerate()}
-                      footer={
-                        <View
-                          accessibilityLiveRegion="polite"
-                          testID="onboarding-status"
-                          style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}
-                        >
-                          <Spinner />
-                          <Animated.View
-                            key={paired ? 'found' : 'waiting'}
-                            entering={enter.fade}
-                            style={{ flex: 1 }}
-                          >
-                            {paired ? (
-                              <T variant="small">
-                                <T variant="smallMedium">{step.device.name}</T> found. Connecting…
-                              </T>
-                            ) : (
-                              <T variant="small" tone="muted">
-                                Waiting for your PC…
-                              </T>
-                            )}
-                          </Animated.View>
-                        </View>
-                      }
-                    />
-                  </View>
-                </View>
-              </Animated.View>
-            )}
+            <Animated.View entering={enter.rise(0)}>
+              <T variant="display" accessibilityRole="header">
+                Connect your PC
+              </T>
+            </Animated.View>
+            <Animated.View entering={enter.rise(1)} style={{ marginTop: 20 }}>
+              <ConnectSteps
+                step={step}
+                now={now}
+                regenerate={() => void regenerate()}
+                mode={mode}
+                onModeChange={setMode}
+              />
+            </Animated.View>
           </ScrollView>
+          <Animated.View
+            entering={enter.rise(2)}
+            style={{ paddingHorizontal: 20, paddingTop: 8, paddingBottom: insets.bottom + 12 }}
+          >
+            <ConnectStatus step={step} mode={mode} />
+          </Animated.View>
         </Animated.View>
       )}
     </View>

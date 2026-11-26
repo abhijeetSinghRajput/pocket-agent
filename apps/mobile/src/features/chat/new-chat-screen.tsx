@@ -263,7 +263,7 @@ export function NewChatScreen({ deviceId, path, name }: { deviceId: string; path
           >
             {(error ?? dictation.error) && (
               <Animated.View exiting={exit.fade} layout={layout} testID="send-error">
-                <Notice>{error ?? dictation.error}</Notice>
+                <Notice solid>{error ?? dictation.error}</Notice>
               </Animated.View>
             )}
             <Animated.View

@@ -1,5 +1,5 @@
 import { buildChat, chatMatches, isBusy, pendingQuestion, timeAgo } from '@pocket-agent/core';
-import { CommandResponse, type AgentSessionDto } from '@pocket-agent/protocol';
+import { CommandResponse, type AgentSessionDto, type NotificationPage } from '@pocket-agent/protocol';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import { ArrowLeft, Search } from 'lucide-react-native';
@@ -21,6 +21,7 @@ import { markRead, useApprovals, useCommands, useEventFeed, useSession } from '@
 import { chatLink } from '@/lib/links';
 import { foreground, useLiveEvents, useLiveRefresh } from '@/lib/live';
 import { ease, enter } from '@/lib/motion';
+import { dismissChatNotifications } from '@/lib/push';
 import { alpha, radius, useTheme } from '@/lib/theme';
 import { apiRequest } from '@/lib/api';
 import { getDraft, saveDraft } from '@/lib/drafts';
@@ -68,7 +69,21 @@ function useMarkChatRead(sessionId: string) {
   const client = useQueryClient();
   const mark = useCallback(() => {
     if (!foreground()) return;
-    void markRead({ link: chatLink(sessionId) })
+    const link = chatLink(sessionId);
+    // Show them read at once (Alerts list and the tab badge), then confirm with the server.
+    const now = new Date().toISOString();
+    client.setQueriesData<NotificationPage>({ queryKey: ['notifications'] }, (page) => {
+      if (!page) return page;
+      let cleared = 0;
+      const notifications = page.notifications.map((n) => {
+        if (n.readAt || n.link !== link) return n;
+        cleared++;
+        return { ...n, readAt: now };
+      });
+      return cleared ? { ...page, notifications, unread: Math.max(0, page.unread - cleared) } : page;
+    });
+    void dismissChatNotifications(link);
+    void markRead({ link })
       .then(() => client.invalidateQueries({ queryKey: ['notifications'] }))
       .catch(() => undefined);
   }, [sessionId, client]);

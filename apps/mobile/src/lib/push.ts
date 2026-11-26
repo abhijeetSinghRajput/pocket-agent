@@ -173,6 +173,16 @@ export async function refreshPushRegistration(): Promise<void> {
 }
 
 /** What a notification carried (the server's data payload). */
+/** Takes a chat's notifications off the phone's notification shade (the chat is being read). */
+export async function dismissChatNotifications(link: string): Promise<void> {
+  const shown = await Notifications.getPresentedNotificationsAsync().catch(() => []);
+  await Promise.all(
+    shown
+      .filter((n) => notificationLink(n).link === link)
+      .map((n) => Notifications.dismissNotificationAsync(n.request.identifier).catch(() => undefined)),
+  );
+}
+
 export function notificationLink(n: Notifications.Notification): {
   link: string | null;
   notificationId: string | null;

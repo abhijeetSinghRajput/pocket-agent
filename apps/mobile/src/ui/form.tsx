@@ -1,3 +1,4 @@
+import type { LucideIcon } from 'lucide-react-native';
 import { useEffect, useState, type ComponentRef, type ReactNode, type Ref } from 'react';
 import { Pressable, TextInput, View, type LayoutChangeEvent, type TextInputProps } from 'react-native';
 import Animated, {
@@ -152,16 +153,19 @@ export function Segmented<V extends string>({
   value,
   onChange,
   compact,
+  large,
   strong,
   disabled,
   label,
   testID,
 }: {
-  options: { value: V; label: string }[];
+  options: { value: V; label: string; icon?: LucideIcon }[];
   value: V;
   onChange: (next: V) => void;
   /** Smaller text, for many short choices in one row. */
   compact?: boolean;
+  /** Taller, for a choice that switches the whole screen below it. */
+  large?: boolean;
   /** The choice filled with the accent, on a clearer track (on sheets, where the plain one fades). */
   strong?: boolean;
   disabled?: boolean;
@@ -194,7 +198,7 @@ export function Segmented<V extends string>({
         borderWidth: strong ? 1 : 0,
         borderColor: c.border,
         padding: strong ? 2 : 3,
-        height: 40,
+        height: large ? 52 : 40,
         opacity: disabled ? 0.5 : 1,
       }}
     >
@@ -207,8 +211,8 @@ export function Segmented<V extends string>({
               top: strong ? 2 : 3,
               left: strong ? 2 : 3,
               width: seg,
-              height: 34,
-              borderRadius: radius.md + 1,
+              height: (large ? 52 : 40) - (strong ? 4 : 6),
+              borderRadius: large ? radius.lg : radius.md + 1,
               backgroundColor: strong ? c.primary : c.card,
               shadowColor: '#000',
               shadowOpacity: 0.08,
@@ -236,15 +240,40 @@ export function Segmented<V extends string>({
               }
               onChange(o.value);
             }}
-            style={{ flex: 1, alignItems: 'center', justifyContent: 'center', minWidth: 0 }}
+            style={{
+              flex: 1,
+              flexDirection: 'row',
+              gap: 8,
+              alignItems: 'center',
+              justifyContent: 'center',
+              minWidth: 0,
+            }}
           >
+            {o.icon && (
+              <o.icon
+                size={17}
+                strokeWidth={2.1}
+                color={
+                  strong
+                    ? selected
+                      ? c.primaryForeground
+                      : c.mutedForeground
+                    : selected
+                      ? c.foreground
+                      : c.mutedForeground
+                }
+              />
+            )}
             <T
               variant={compact ? 'captionMedium' : 'smallMedium'}
               tone={selected ? 'default' : 'muted'}
               numberOfLines={1}
               style={[
                 compact && { fontSize: 11.5 },
-                strong && { color: selected ? c.primaryForeground : c.foreground },
+                strong && {
+                  color: selected ? c.primaryForeground : o.icon ? c.mutedForeground : c.foreground,
+                },
+                large && { fontSize: 15 },
                 strong && selected && { fontFamily: fonts.semibold },
               ]}
             >

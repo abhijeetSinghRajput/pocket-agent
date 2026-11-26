@@ -12,7 +12,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { Path, Svg } from 'react-native-svg';
 import { dur, ease, enter } from '@/lib/motion';
-import { alpha, radius, useTheme } from '@/lib/theme';
+import { alpha, radius, tint, useTheme } from '@/lib/theme';
 import { Button, IconTile, T, toneColor, type TextVariant, type Tone } from '@/ui/core';
 
 /** A placeholder at the content's own geometry while it loads; it breathes softly. */
@@ -211,7 +211,16 @@ export function EmptyState({
 }
 
 /** An inline message: something went wrong, or needs attention. */
-export function Notice({ tone = 'danger', children }: { tone?: Tone; children: ReactNode }) {
+export function Notice({
+  tone = 'danger',
+  solid,
+  children,
+}: {
+  tone?: Tone;
+  /** Opaque, for a notice that floats over scrolling content (e.g. above the composer). */
+  solid?: boolean;
+  children: ReactNode;
+}) {
   const { c } = useTheme();
   const color = toneColor(c, tone);
   return (
@@ -219,7 +228,9 @@ export function Notice({ tone = 'danger', children }: { tone?: Tone; children: R
       entering={enter.fade}
       accessibilityRole="alert"
       style={{
-        backgroundColor: alpha(color, 0.12),
+        backgroundColor: solid ? tint(color, 0.16, c.background) : alpha(color, 0.12),
+        borderWidth: solid ? 1 : 0,
+        borderColor: alpha(color, 0.35),
         borderRadius: radius.md,
         paddingHorizontal: 12,
         paddingVertical: 10,

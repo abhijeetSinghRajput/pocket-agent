@@ -1,6 +1,6 @@
 import { pairingRequestId, PairingRequestResponse, type PairingRequestDto } from '@pocket-agent/protocol';
 import { CameraView, useCameraPermissions } from 'expo-camera';
-import { Laptop, QrCode, X } from 'lucide-react-native';
+import { Laptop, X } from 'lucide-react-native';
 import { useState } from 'react';
 import { Linking, Modal, StyleSheet, View } from 'react-native';
 import Animated from 'react-native-reanimated';
@@ -23,24 +23,7 @@ type Stage =
  * Pairing a PC by its QR code: `pocket-agent connect` (without a code) shows one. Scan it, check
  * that the code under it matches the one shown here, and approve; the PC connects by itself.
  */
-export function ScanPcButton() {
-  const [open, setOpen] = useState(false);
-  return (
-    <>
-      <Button
-        label="Scan the PC’s QR code"
-        icon={QrCode}
-        variant="outline"
-        full
-        onPress={() => setOpen(true)}
-        testID="scan-pc"
-      />
-      {open && <PairScanner onClose={() => setOpen(false)} />}
-    </>
-  );
-}
-
-function PairScanner({ onClose }: { onClose: () => void }) {
+export function PairScanner({ onClose }: { onClose: () => void }) {
   const { c } = useTheme();
   const insets = useSafeAreaInsets();
   const [permission, requestPermission] = useCameraPermissions();

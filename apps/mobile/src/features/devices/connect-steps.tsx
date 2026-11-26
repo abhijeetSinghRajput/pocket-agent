@@ -1,7 +1,7 @@
 import { PAIRING_CODE_TTL_MS } from '@pocket-agent/protocol';
 import { mmss } from '@pocket-agent/core';
-import { Check, Clock, RefreshCw, Share2 } from 'lucide-react-native';
-import { useEffect, type ReactNode } from 'react';
+import { Check, Clock, Hash, QrCode, RefreshCw, ScanLine, Share2 } from 'lucide-react-native';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Share, StyleSheet, View } from 'react-native';
 import Animated, {
   Easing,
@@ -11,42 +11,49 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import type { PairingStep } from '@/features/devices/use-pairing';
-import { ScanPcButton } from '@/features/devices/pair-scanner';
+import { PairScanner } from '@/features/devices/pair-scanner';
 import { AGENT_NPM_PACKAGE, connectCommand, installCommand } from '@/lib/api';
 import { dur, ease, enter, exit, layout } from '@/lib/motion';
 import { alpha, fonts, radius, useTheme } from '@/lib/theme';
-import { Button, Divider, T, tap } from '@/ui/core';
+import { Button, Divider, Dot, Press, T, tap } from '@/ui/core';
 import { CopyButton } from '@/ui/copy';
 import { Notice, Skeleton } from '@/ui/feedback';
+import { Segmented } from '@/ui/form';
 
-type StepState = 'todo' | 'current' | 'done';
+/** How the PC gets paired: its QR code scanned by this phone, or a code typed on the PC. */
+export type ConnectMode = 'scan' | 'code';
 
-/** The step's number: the brand colour while it is to do, green with a tick once done. */
-function StepNumber({ n, state }: { n: number; state: StepState }) {
+const MODES = [
+  { value: 'scan' as const, label: 'Scan QR', icon: ScanLine },
+  { value: 'code' as const, label: 'Use code', icon: Hash },
+];
+
+/** The step's number in a small circle; green with a tick once done. */
+function StepNumber({ n, done }: { n: number; done: boolean }) {
   const { c } = useTheme();
-  const done = useSharedValue(state === 'done' ? 1 : 0);
+  const on = useSharedValue(done ? 1 : 0);
   useEffect(() => {
-    done.set(withTiming(state === 'done' ? 1 : 0, { duration: dur.enter, easing: ease.out }));
-  }, [state, done]);
+    on.set(withTiming(done ? 1 : 0, { duration: dur.enter, easing: ease.out }));
+  }, [done, on]);
   const fill = useAnimatedStyle(() => ({
-    backgroundColor: interpolateColor(done.value, [0, 1], [c.primary, c.success]),
+    backgroundColor: interpolateColor(on.value, [0, 1], [c.muted, c.success]),
   }));
   return (
     <Animated.View
       accessibilityElementsHidden
       importantForAccessibility="no"
       style={[
-        { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
+        { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
         fill,
       ]}
     >
-      {state === 'done' ? (
+      {done ? (
         <Animated.View key="done" entering={enter.pop} exiting={exit.fade}>
-          <Check size={17} color="#ffffff" strokeWidth={3} />
+          <Check size={15} color="#ffffff" strokeWidth={3} />
         </Animated.View>
       ) : (
         <Animated.View key="n" entering={enter.pop} exiting={exit.fade}>
-          <T variant="smallMedium" style={{ color: c.primaryForeground, fontFamily: fonts.semibold }}>
+          <T variant="smallMedium" style={{ fontFamily: fonts.semibold }}>
             {n}
           </T>
         </Animated.View>
@@ -58,37 +65,72 @@ function StepNumber({ n, state }: { n: number; state: StepState }) {
 function Step({
   n,
   title,
-  state,
+  done = false,
+  aside,
   children,
 }: {
   n: number;
   title: string;
-  state: StepState;
+  done?: boolean;
+  /** Small note at the end of the title row (e.g. "Node 24+"). */
+  aside?: ReactNode;
   children: ReactNode;
 }) {
   return (
-    <View style={{ padding: 20, gap: 16 }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
-        <StepNumber n={n} state={state} />
+    <View style={{ padding: 16, gap: 14 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+        <StepNumber n={n} done={done} />
         <T
-          variant="heading"
+          variant="subheading"
           accessibilityRole="header"
-          accessibilityLabel={`Step ${n}${state === 'done' ? ' (done)' : ''}: ${title}`}
+          accessibilityLabel={`Step ${n}${done ? ' (done)' : ''}: ${title}`}
           style={{ flex: 1 }}
+          numberOfLines={1}
         >
           {title}
         </T>
+        {aside}
       </View>
       {children}
     </View>
   );
 }
 
+function Chip({ label }: { label: string }) {
+  const { c } = useTheme();
+  return (
+    <View
+      style={{
+        paddingHorizontal: 9,
+        height: 24,
+        borderRadius: radius.full,
+        borderWidth: StyleSheet.hairlineWidth * 2,
+        borderColor: c.border,
+        justifyContent: 'center',
+      }}
+    >
+      <T variant="captionMedium" tone="muted">
+        {label}
+      </T>
+    </View>
+  );
+}
+
 /**
  * A command to run, drawn as a small terminal: a "Terminal" bar with Copy, then the command.
- * `accent` is the part shown in the brand colour (the package, the pairing code).
+ * `accent` is the word shown in the brand colour. An expired command is grey and its code struck out.
  */
-function TerminalBox({ command, accent, expired }: { command: string; accent: string; expired?: boolean }) {
+function TerminalBox({
+  command,
+  accent,
+  expired,
+  testID,
+}: {
+  command: string;
+  accent: string;
+  expired?: boolean;
+  testID?: string;
+}) {
   const { c, dark } = useTheme();
   const [program = '', ...rest] = command.split(' ');
   return (
@@ -103,14 +145,12 @@ function TerminalBox({ command, accent, expired }: { command: string; accent: st
     >
       <View
         style={{
-          height: 44,
+          height: 40,
           flexDirection: 'row',
           alignItems: 'center',
           justifyContent: 'space-between',
-          paddingLeft: 16,
-          paddingRight: 8,
-          borderBottomWidth: StyleSheet.hairlineWidth,
-          borderBottomColor: c.border,
+          paddingLeft: 14,
+          paddingRight: 6,
         }}
       >
         <T variant="overline" tone="muted" style={{ letterSpacing: 1.6 }}>
@@ -136,36 +176,30 @@ function TerminalBox({ command, accent, expired }: { command: string; accent: st
           <CopyButton value={command} />
         )}
       </View>
-      <View style={{ paddingHorizontal: 16, paddingVertical: 14 }}>
-        <T
-          variant="mono"
-          selectable
-          testID={accent === AGENT_NPM_PACKAGE ? 'install-command' : 'pairing-command'}
-          style={expired ? { color: c.mutedForeground, textDecorationLine: 'line-through' } : undefined}
-        >
-          {expired ? (
-            command
-          ) : (
-            <>
-              <T variant="mono" style={{ fontFamily: fonts.monoMedium }}>
-                {program}
-              </T>{' '}
-              {rest.map((word, i) => (
-                <T
-                  key={i}
-                  variant="mono"
-                  style={
-                    word === accent
-                      ? { fontFamily: fonts.monoMedium, color: c.primary }
-                      : { color: c.mutedForeground }
-                  }
-                >
-                  {word}
-                  {i < rest.length - 1 ? ' ' : ''}
-                </T>
-              ))}
-            </>
-          )}
+      <View style={{ paddingHorizontal: 14, paddingBottom: 14, paddingTop: 2 }}>
+        <T variant="mono" selectable={!expired} testID={testID}>
+          <T
+            variant="mono"
+            style={{ fontFamily: fonts.monoMedium, color: expired ? c.mutedForeground : c.foreground }}
+          >
+            {program}
+          </T>{' '}
+          {rest.map((word, i) => (
+            <T
+              key={i}
+              variant="mono"
+              style={
+                word === accent
+                  ? expired
+                    ? { color: c.mutedForeground, textDecorationLine: 'line-through' }
+                    : { fontFamily: fonts.monoMedium, color: c.primary }
+                  : { color: c.mutedForeground }
+              }
+            >
+              {word}
+              {i < rest.length - 1 ? ' ' : ''}
+            </T>
+          ))}
         </T>
       </View>
     </View>
@@ -196,167 +230,263 @@ function CountdownBar({ fraction }: { fraction: number }) {
   );
 }
 
-/** The two commands as one text, for the share sheet (typed on the PC while the phone is in hand). */
-function shareCommands(code: string) {
+/** A viewfinder (brackets in the corners) around a QR glyph: tapping it opens the scanner too. */
+function Viewfinder({ onPress }: { onPress: () => void }) {
+  const { c, dark } = useTheme();
+  const corner = (v: 'top' | 'bottom', h: 'left' | 'right') => ({
+    position: 'absolute' as const,
+    width: 22,
+    height: 22,
+    [v]: 0,
+    [h]: 0,
+    borderColor: c.primary,
+    [`border${v === 'top' ? 'Top' : 'Bottom'}Width`]: 3,
+    [`border${h === 'left' ? 'Left' : 'Right'}Width`]: 3,
+    [`border${v === 'top' ? 'Top' : 'Bottom'}${h === 'left' ? 'Left' : 'Right'}Radius`]: 10,
+  });
+  return (
+    <Press
+      accessibilityRole="button"
+      accessibilityLabel="Open scanner"
+      onPress={onPress}
+      scale={0.98}
+      style={{
+        height: 128,
+        borderRadius: radius.lg,
+        borderWidth: StyleSheet.hairlineWidth,
+        borderColor: c.border,
+        backgroundColor: dark ? c.code : alpha(c.background, 0.6),
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+    >
+      <View style={{ width: 88, height: 88, alignItems: 'center', justifyContent: 'center' }}>
+        <View style={corner('top', 'left')} />
+        <View style={corner('top', 'right')} />
+        <View style={corner('bottom', 'left')} />
+        <View style={corner('bottom', 'right')} />
+        <QrCode size={44} color={c.foreground} strokeWidth={1.8} />
+      </View>
+    </Press>
+  );
+}
+
+/** The commands as one text, for the share sheet (typed on the PC while the phone is in hand). */
+function shareCommands(code: string | null) {
   tap();
-  const message = `Connect your PC to Pocket Agent (run in PowerShell):\n\n${installCommand()}\n${connectCommand(code)}\n\nThe code is single use and expires in ${PAIRING_CODE_TTL_MS / 60_000} minutes.`;
+  const message = code
+    ? `Connect your PC to Pocket Agent (run in a terminal):\n\n${installCommand()}\n${connectCommand(code)}\n\nThe code is single use and expires in ${PAIRING_CODE_TTL_MS / 60_000} minutes.`
+    : `Connect your PC to Pocket Agent (run in a terminal):\n\n${installCommand()}\n${connectCommand()}\n\nThen scan the QR code it shows with the Pocket Agent app.`;
   void Share.share({ message, title: 'Connect your PC to Pocket Agent' }).catch(() => undefined);
 }
 
 /**
- * The two things to run on a PC: install once, then connect with this code (counting down, and
- * replaced in place once it expires). Shared by the onboarding screen and the Add device sheet.
+ * How to pair a PC, either way: "Scan QR" (run connect, scan the PC's QR code with this phone) or
+ * "Use code" (run connect with a short code, counting down; once it expires it is struck out and a
+ * button gets a new one). Shared by the onboarding screen and the Add device sheet.
  */
 export function ConnectSteps({
   step,
   now,
   regenerate,
-  footer,
+  mode,
+  onModeChange,
 }: {
   step: PairingStep;
   now: number;
   regenerate: () => void;
-  /** Shown under the steps while waiting (live status). */
-  footer?: ReactNode;
+  mode: ConnectMode;
+  onModeChange: (mode: ConnectMode) => void;
 }) {
   const { c, dark } = useTheme();
+  const [scanning, setScanning] = useState(false);
   const paired = step.kind === 'paired';
   const expired = step.kind === 'expired';
   const left = step.kind === 'code' ? Math.max(0, Math.min(step.expiresAt - now, PAIRING_CODE_TTL_MS)) : 0;
   const code = step.kind === 'code' || step.kind === 'expired' ? step.code : '';
 
   return (
-    <Animated.View
-      layout={layout}
-      testID="connect-steps"
+    <View style={{ gap: 16 }}>
+      <Segmented
+        options={MODES}
+        value={mode}
+        onChange={onModeChange}
+        large
+        strong
+        label="How to connect"
+        testID="connect-mode"
+      />
+      <Animated.View
+        layout={layout}
+        testID="connect-steps"
+        style={{
+          backgroundColor: c.card,
+          borderRadius: radius.xxl,
+          borderWidth: dark ? 0 : StyleSheet.hairlineWidth,
+          borderColor: c.border,
+          overflow: 'hidden',
+        }}
+      >
+        <Step n={1} title="Install Pocket Agent" done={paired} aside={<Chip label="Node 24+" />}>
+          <TerminalBox command={installCommand()} accent={AGENT_NPM_PACKAGE} testID="install-command" />
+        </Step>
+        <Divider />
+
+        {paired ? (
+          <Animated.View key="paired" entering={enter.fade}>
+            <Step n={2} title="Connect this PC" done>
+              <T variant="small">
+                <T variant="smallMedium">{step.device.name}</T> is paired. Finishing setup on the PC…
+              </T>
+            </Step>
+          </Animated.View>
+        ) : mode === 'scan' ? (
+          <Animated.View key="scan" entering={enter.fade} exiting={exit.fade}>
+            <Step n={2} title="Run on your PC">
+              <TerminalBox command={connectCommand()} accent="connect" testID="scan-command" />
+            </Step>
+            <Divider />
+            <Step n={3} title="Scan with this phone">
+              <Viewfinder onPress={() => setScanning(true)} />
+              <Button
+                label="Open scanner"
+                icon={ScanLine}
+                size="lg"
+                full
+                onPress={() => setScanning(true)}
+                testID="scan-pc"
+              />
+            </Step>
+          </Animated.View>
+        ) : (
+          <Animated.View key="code" entering={enter.fade} exiting={exit.fade}>
+            <Step n={2} title="Your pairing code">
+              {step.kind === 'creating' && <Skeleton height={86} round={radius.lg} />}
+              {step.kind === 'error' && (
+                <View style={{ gap: 12 }}>
+                  <Notice>{step.message}</Notice>
+                  <Button
+                    label="Try again"
+                    icon={RefreshCw}
+                    variant="outline"
+                    size="sm"
+                    onPress={regenerate}
+                  />
+                </View>
+              )}
+              {(step.kind === 'code' || expired) && (
+                <View style={{ gap: 14 }}>
+                  <TerminalBox
+                    command={connectCommand(code)}
+                    accent={code}
+                    expired={expired}
+                    testID="pairing-command"
+                  />
+                  <View
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: 12,
+                      minHeight: 32,
+                    }}
+                  >
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1 }}>
+                      <Clock size={15} color={c.mutedForeground} strokeWidth={2} />
+                      <T variant="small" tone="muted">
+                        Single use
+                      </T>
+                    </View>
+                    {expired ? (
+                      <Animated.View key="new" entering={enter.pop}>
+                        <Button
+                          label="New code"
+                          icon={RefreshCw}
+                          size="sm"
+                          onPress={regenerate}
+                          testID="new-code"
+                        />
+                      </Animated.View>
+                    ) : (
+                      <T
+                        variant="small"
+                        tone="muted"
+                        accessibilityLiveRegion="polite"
+                        style={{ fontVariant: ['tabular-nums'] }}
+                      >
+                        Expires in{' '}
+                        <T
+                          variant="smallMedium"
+                          style={{ fontFamily: fonts.semibold, fontVariant: ['tabular-nums'] }}
+                        >
+                          {mmss(left)}
+                        </T>
+                      </T>
+                    )}
+                  </View>
+                  {!expired && <CountdownBar fraction={left / PAIRING_CODE_TTL_MS} />}
+                </View>
+              )}
+            </Step>
+          </Animated.View>
+        )}
+      </Animated.View>
+      {scanning && <PairScanner onClose={() => setScanning(false)} />}
+    </View>
+  );
+}
+
+/**
+ * The live status under the steps: waiting (a pulsing dot) or the PC found, and Share for sending
+ * the commands to the PC.
+ */
+export function ConnectStatus({ step, mode }: { step: PairingStep; mode: ConnectMode }) {
+  const { c, dark } = useTheme();
+  const paired = step.kind === 'paired';
+  const code = mode === 'code' && step.kind === 'code' ? step.code : null;
+  return (
+    <View
+      testID="onboarding-status"
       style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+        paddingLeft: 16,
+        paddingRight: 8,
+        height: 60,
+        borderRadius: radius.xl,
         backgroundColor: c.card,
-        borderRadius: radius.xxl,
         borderWidth: dark ? 0 : StyleSheet.hairlineWidth,
         borderColor: c.border,
-        overflow: 'hidden',
       }}
     >
-      <Step n={1} title="Install Pocket Agent" state={paired ? 'done' : 'current'}>
-        <TerminalBox command={installCommand()} accent={AGENT_NPM_PACKAGE} />
-        <T variant="small" tone="muted">
-          Needs Node.js 24 or newer. Already installed? Skip this step.
-        </T>
-      </Step>
-      <Divider />
-
-      <Step n={2} title="Connect this PC" state={paired ? 'done' : 'current'}>
-        {step.kind === 'creating' && (
-          <Animated.View key="creating" entering={enter.fade} exiting={exit.fade}>
-            <Skeleton height={100} round={radius.lg} />
-          </Animated.View>
+      <Dot color={paired ? c.success : c.primary} pulse={!paired} />
+      <Animated.View
+        key={paired ? 'found' : 'waiting'}
+        entering={enter.fade}
+        accessibilityLiveRegion="polite"
+        style={{ flex: 1, minWidth: 0 }}
+      >
+        {paired ? (
+          <T variant="small" numberOfLines={1}>
+            <T variant="smallMedium">{step.device.name}</T> found. Connecting…
+          </T>
+        ) : (
+          <T variant="small" tone="muted" numberOfLines={1}>
+            Waiting for your PC…
+          </T>
         )}
-        {step.kind === 'error' && (
-          <Animated.View key="error" entering={enter.fade} exiting={exit.fade} style={{ gap: 12 }}>
-            <Notice>{step.message}</Notice>
-            <Button label="Try again" icon={RefreshCw} variant="outline" size="sm" onPress={regenerate} />
-          </Animated.View>
-        )}
-        {(step.kind === 'code' || expired) && (
-          <Animated.View key="code" entering={enter.fade} exiting={exit.fade} style={{ gap: 16 }}>
-            <TerminalBox command={connectCommand(code)} accent={code} expired={expired} />
-            <View style={{ gap: 10 }}>
-              <View
-                style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  gap: 12,
-                }}
-              >
-                <T variant="small" tone="muted" style={{ flexShrink: 1 }}>
-                  Code{' '}
-                  <T variant="mono" testID="pairing-code" style={{ fontFamily: fonts.monoMedium }}>
-                    {code}
-                  </T>{' '}
-                  · single use
-                </T>
-                <View
-                  accessibilityLiveRegion="polite"
-                  style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 0 }}
-                >
-                  <Clock size={15} color={c.mutedForeground} strokeWidth={2} />
-                  {expired ? (
-                    <T variant="small" tone="muted">
-                      Expired
-                    </T>
-                  ) : (
-                    <T variant="small" tone="muted" style={{ fontVariant: ['tabular-nums'] }}>
-                      Expires in{' '}
-                      <T
-                        variant="smallMedium"
-                        style={{ fontFamily: fonts.semibold, fontVariant: ['tabular-nums'] }}
-                      >
-                        {mmss(left)}
-                      </T>
-                    </T>
-                  )}
-                </View>
-              </View>
-              <CountdownBar fraction={left / PAIRING_CODE_TTL_MS} />
-            </View>
-          </Animated.View>
-        )}
-        {paired && (
-          <Animated.View key="paired" entering={enter.fade} exiting={exit.fade}>
-            <T variant="small">
-              <T variant="smallMedium">{step.device.name}</T> used the code. Finishing setup on the PC…
-            </T>
-          </Animated.View>
-        )}
-      </Step>
-
-      {step.kind === 'code' && (
-        <Animated.View key="share" entering={enter.fade} exiting={exit.fade}>
-          <Divider />
-          <View style={{ paddingHorizontal: 20, paddingVertical: 16, gap: 12 }}>
-            <Button
-              label="Share commands"
-              icon={Share2}
-              variant="secondary"
-              full
-              onPress={() => shareCommands(code)}
-              testID="share-commands"
-            />
-            {/* No typing: the PC shows a QR code when connect has no code (Pocket Agent 2.0+). */}
-            <T variant="small" tone="muted" center>
-              Or run{' '}
-              <T variant="mono" style={{ fontSize: 13 }}>
-                pocket-agent connect
-              </T>{' '}
-              without a code and scan the QR code it shows:
-            </T>
-            <ScanPcButton />
-          </View>
-        </Animated.View>
+      </Animated.View>
+      {!paired && (
+        <Button
+          label="Share"
+          icon={Share2}
+          variant="secondary"
+          size="sm"
+          onPress={() => shareCommands(code)}
+          testID="share-commands"
+        />
       )}
-
-      {expired && (
-        <Animated.View key="expired" entering={enter.fade} exiting={exit.fade} testID="code-expired">
-          <Divider />
-          <View style={{ padding: 20, gap: 16 }}>
-            <View style={{ gap: 4 }}>
-              <T variant="heading">This code has expired</T>
-              <T variant="small" tone="muted">
-                Get a new code, then run the new connect command.
-              </T>
-            </View>
-            <Button label="Get a new code" icon={RefreshCw} size="lg" full onPress={regenerate} />
-          </View>
-        </Animated.View>
-      )}
-
-      {footer && !expired && (
-        <Animated.View key="footer" entering={enter.fade} exiting={exit.fade}>
-          <Divider />
-          <View style={{ paddingHorizontal: 20, paddingVertical: 16 }}>{footer}</View>
-        </Animated.View>
-      )}
-    </Animated.View>
+    </View>
   );
 }

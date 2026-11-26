@@ -39,7 +39,7 @@ import { useDraftFiles } from '@/features/chat/use-draft-files';
 import { apiRequest } from '@/lib/api';
 import { useDevices } from '@/lib/data';
 import { dur, ease, enter, exit, layout } from '@/lib/motion';
-import { alpha, fonts, radius, useTheme } from '@/lib/theme';
+import { alpha, fonts, radius, tint, useTheme } from '@/lib/theme';
 import { getDraft, saveDraft, useDraft } from '@/lib/drafts';
 import { useStored } from '@/lib/storage';
 import { Button, IconButton, Press, T, thud } from '@/ui/core';
@@ -427,7 +427,7 @@ export function Composer({
     <Animated.View layout={layout} style={{ gap: 8 }} testID="composer">
       {(error ?? dictation.error) && (
         <Animated.View exiting={exit.fade} layout={layout} testID="send-error">
-          <Notice>{error ?? dictation.error}</Notice>
+          <Notice solid>{error ?? dictation.error}</Notice>
         </Animated.View>
       )}
       {offerReplies && (
@@ -450,7 +450,7 @@ export function Composer({
                   borderRadius: radius.full,
                   borderWidth: 1,
                   borderColor: alpha(c.primary, 0.35),
-                  backgroundColor: alpha(c.primary, 0.08),
+                  backgroundColor: tint(c.primary, 0.1, c.background),
                   paddingHorizontal: 14,
                   paddingVertical: 7,
                 }}

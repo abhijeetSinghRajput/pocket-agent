@@ -1,15 +1,15 @@
 import { CircleCheck } from 'lucide-react-native';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useWindowDimensions, View } from 'react-native';
 import { ScrollView } from 'react-native-gesture-handler';
 import Animated from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ConnectSteps } from '@/features/devices/connect-steps';
+import { ConnectStatus, ConnectSteps, type ConnectMode } from '@/features/devices/connect-steps';
 import { usePairing } from '@/features/devices/use-pairing';
 import { enter } from '@/lib/motion';
 import { alpha, radius, useTheme } from '@/lib/theme';
 import { playSound } from '@/lib/sound';
-import { Button, buzz, Spinner, T } from '@/ui/core';
+import { Button, buzz, T } from '@/ui/core';
 import { Sheet } from '@/ui/sheet';
 
 /** "Add device": the two commands in a sheet, following the PC live until it is paired. */
@@ -29,6 +29,7 @@ export function AddDeviceSheet({
   const insets = useSafeAreaInsets();
   const { step, now, regenerate } = usePairing({ active: open, knownDeviceIds, onPaired });
   const paired = step.kind === 'paired';
+  const [mode, setMode] = useState<ConnectMode>('scan');
 
   useEffect(() => {
     if (open && paired) {
@@ -42,7 +43,7 @@ export function AddDeviceSheet({
       open={open}
       onClose={onClose}
       title={paired ? 'Device paired' : 'Pair a device'}
-      description={paired ? undefined : 'Run these in PowerShell on the PC.'}
+      description={paired ? undefined : 'Run these in a terminal on the PC.'}
     >
       {paired ? (
         <Animated.View entering={enter.fade} style={{ gap: 20, paddingBottom: 4 }}>
@@ -77,22 +78,16 @@ export function AddDeviceSheet({
           contentContainerStyle={{ paddingBottom: 4 }}
           showsVerticalScrollIndicator={false}
         >
-          <ConnectSteps
-            step={step}
-            now={now}
-            regenerate={() => void regenerate()}
-            footer={
-              <View
-                accessibilityLiveRegion="polite"
-                style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}
-              >
-                <Spinner />
-                <T variant="small" tone="muted">
-                  Waiting for your PC…
-                </T>
-              </View>
-            }
-          />
+          <View style={{ gap: 12 }}>
+            <ConnectSteps
+              step={step}
+              now={now}
+              regenerate={() => void regenerate()}
+              mode={mode}
+              onModeChange={setMode}
+            />
+            <ConnectStatus step={step} mode={mode} />
+          </View>
         </ScrollView>
       )}
     </Sheet>

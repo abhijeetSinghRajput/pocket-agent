@@ -32,7 +32,7 @@ import {
   stopRunning,
   writePidFile,
 } from './background.js';
-import { spawn } from 'node:child_process';
+import { spawn, type SpawnOptions } from 'node:child_process';
 import {
   currentPlatform,
   DEFAULT_API_URL,
@@ -488,11 +488,30 @@ async function installThenConnect(): Promise<never> {
   process.exit(exit);
 }
 
+/**
+ * npm is a .cmd script on Windows, which Node runs only through a shell. Passing args separately
+ * with `shell: true` is deprecated (DEP0190), so give the shell one command line; every arg here
+ * is a fixed word or the package name, never user input.
+ */
+function spawnNpm(args: string[], opts: SpawnOptions) {
+  return process.platform === 'win32'
+    ? spawn(['npm', ...args].join(' '), { ...opts, shell: true })
+    : spawn('npm', args, opts);
+}
+
+/** Compares plain x.y.z versions: negative, 0 or positive. */
+function compareVersions(a: string, b: string): number {
+  const pa = a.split(/[.-]/).map((n) => parseInt(n, 10) || 0);
+  const pb = b.split(/[.-]/).map((n) => parseInt(n, 10) || 0);
+  for (let i = 0; i < 3; i++) if (pa[i] !== pb[i]) return (pa[i] ?? 0) - (pb[i] ?? 0);
+  return 0;
+}
+
 function npmOutput(args: string[]): Promise<string> {
   return new Promise((resolve) => {
     let out = '';
-    const child = spawn('npm', args, { shell: process.platform === 'win32', windowsHide: true });
-    child.stdout.on('data', (d: Buffer) => (out += d.toString()));
+    const child = spawnNpm(args, { windowsHide: true });
+    child.stdout?.on('data', (d: Buffer) => (out += d.toString()));
     child.on('error', () => resolve(''));
     child.on('exit', () => resolve(out));
   });
@@ -501,7 +520,7 @@ function npmOutput(args: string[]): Promise<string> {
 /** Runs npm (global install/uninstall) with its output shown; resolves with the exit code. */
 function npmGlobal(args: string[]): Promise<number> {
   return new Promise((resolve) => {
-    const child = spawn('npm', args, { stdio: 'inherit', shell: process.platform === 'win32' });
+    const child = spawnNpm(args, { stdio: 'inherit' });
     child.on('error', () => resolve(1));
     child.on('exit', (code) => resolve(code ?? 1));
   });
@@ -782,18 +801,37 @@ export function buildCli(): Command {
     .description('Update Pocket Agent to the latest version and restart it')
     .action(async () => {
       requireStableInstall('Updating');
-      console.log(`Updating ${PACKAGE_NAME}…`);
-      const code = await npmGlobal(['install', '-g', `${PACKAGE_NAME}@latest`]);
-      if (code !== 0) fail(`npm exited with code ${code}. Try: npm install -g ${PACKAGE_NAME}@latest`);
+      const latest = (await npmOutput(['view', PACKAGE_NAME, 'version'])).trim();
+      if (!/^\d+\.\d+\.\d+/.test(latest))
+        fail(`Could not reach npm. Try: npm install -g ${PACKAGE_NAME}@latest`);
+      if (compareVersions(latest, version) <= 0)
+        return void console.log(`Pocket Agent ${version} is the latest version.`);
+      console.log(`Updating Pocket Agent ${version} → ${latest}…`);
       const home = agentHome();
-      if (await runningPid(home)) {
-        // Same install path, new files: a restart runs the new version.
-        await ensureRunning(setupContext(), true);
-        const online = await withSpinner('Reconnecting…', () => waitOnline(home, 45_000));
-        console.log(
-          online.ok ? 'Updated and reconnected.' : 'Updated. Not connected yet: run pocket-agent doctor',
-        );
-      } else console.log('Updated.');
+      // A running agent (and the Claude Code it started) keeps files of this install open, and
+      // Windows can't replace open files: stop it first, start the new version after.
+      const wasRunning = await stopRunning(home).catch(() => false);
+      const code = await npmGlobal([
+        'install',
+        '-g',
+        `${PACKAGE_NAME}@${latest}`,
+        '--no-fund',
+        '--no-audit',
+        '--loglevel=error',
+      ]);
+      if (code !== 0) {
+        if (wasRunning) await ensureRunning(setupContext()).catch(() => undefined);
+        fail(`npm exited with code ${code}. Try: npm install -g ${PACKAGE_NAME}@${latest}`);
+      }
+      if (!wasRunning) return void console.log(`Updated to ${latest}.`);
+      // Same install path, new files: starting it again runs the new version.
+      await ensureRunning(setupContext(), true);
+      const online = await withSpinner('Reconnecting…', () => waitOnline(home, 60_000));
+      console.log(
+        online.ok
+          ? `Updated to ${latest} and reconnected.`
+          : `Updated to ${latest}, but not connected yet: run pocket-agent doctor`,
+      );
     });
 
   program
@@ -815,7 +853,7 @@ export function buildCli(): Command {
   program
     .command('pair')
     .description('Pair this PC: with the code from the app (Devices → Add device), or by a QR code')
-    .argument('[code]', 'pairing code, e.g. 7KQ2-M9XD; without one, a QR code is shown to scan')
+    .argument('[code]', 'pairing code, e.g. 7KQ2M9 (any case); without one, a QR code is shown to scan')
     .option('--api <url>', 'Pocket Agent API URL', process.env['POCKET_AGENT_API_URL'] ?? DEFAULT_API_URL)
     .option('--name <name>', 'name shown in the dashboard', os.hostname())
     .action(async (code: string | undefined, opts: { api: string; name: string }) => {

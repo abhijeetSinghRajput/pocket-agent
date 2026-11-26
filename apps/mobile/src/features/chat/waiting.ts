@@ -1,14 +1,15 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { CommandResponse, type AttachmentRef, type CommandDto } from '@pocket-agent/protocol';
-import { useEffect, useSyncExternalStore } from 'react';
+import { useEffect, useMemo, useSyncExternalStore } from 'react';
 import { useDevices } from '@/lib/data';
+import { useLiveConnection } from '@/lib/live';
 import { ApiClientError, apiRequest } from '@/lib/api';
 import { newId } from '@/features/chat/upload';
 
 /**
- * Messages written while the PC was offline, kept on this phone (like a messenger) and sent by the
- * app once that PC is online again, oldest first. The server never queues them: nothing runs on the
+ * Messages that couldn't go yet (this phone had no connection, or the PC was offline), kept on this
+ * phone (like a messenger) and sent by the app once both are online again, oldest first. The server never queues them: nothing runs on the
  * PC unless this app sends it while you can see it go. They survive closing the app; an open app
  * sends them (`sendWaiting`), from any screen.
  */
@@ -87,12 +88,16 @@ export function useHiddenCommands(): ReadonlySet<string> {
   return useSyncExternalStore(subscribe, () => hiddenSet);
 }
 
-/** Keeps a message until its PC is online. `replaces`: the failed command it is sent instead of. */
+/**
+ * Keeps a message until it can go. `key`: its idempotency key, kept when the server may already
+ * have it (no answer came back); `replaces`: the failed command it is sent instead of.
+ */
 export function holdMessage(
-  m: Omit<WaitingMessage, 'at' | 'key'> & { at?: string; replaces?: string },
+  m: Omit<WaitingMessage, 'at' | 'key'> & { at?: string; key?: string; replaces?: string },
 ): void {
-  const { replaces, ...rest } = m;
-  const key = newId();
+  const { replaces, key: kept, ...rest } = m;
+  const key = kept ?? newId();
+  if (state.waiting.some((w) => w.key === key)) return;
   const w: WaitingMessage = {
     ...rest,
     key,
@@ -185,13 +190,15 @@ export async function sendWaiting(online: ReadonlySet<string>, client: QueryClie
 const RETRY_MS = 30_000;
 
 /**
- * Sends waiting messages whenever their PC is online: when it comes back, when one is written,
- * and again every 30 s while one is left. Mounted once, behind sign-in.
+ * Sends waiting messages whenever they can go: when the phone's connection or their PC comes back,
+ * when one is written, and again every 30 s while one is left. Mounted once, behind sign-in.
  */
 export function useSendWhenOnline(): void {
   const devices = useDevices().state.data;
   const waiting = useWaiting();
   const client = useQueryClient();
+  // Live updates reconnecting means the connection is back: try at once instead of in 30 s.
+  const live = useLiveConnection() === 'live';
   const online = (devices ?? [])
     .filter((d) => d.status === 'Online')
     .map((d) => d.id)
@@ -204,5 +211,17 @@ export function useSendWhenOnline(): void {
     go();
     const t = setInterval(go, RETRY_MS);
     return () => clearInterval(t);
-  }, [due, online, waiting, client]);
+  }, [due, online, waiting, client, live]);
+}
+
+/** Sends waiting messages from any screen (see `useSendWhenOnline`). */
+export function SendWhenOnline(): null {
+  useSendWhenOnline();
+  return null;
+}
+
+/** The waiting messages of one chat. */
+export function useChatWaiting(sessionId: string): WaitingMessage[] {
+  const all = useWaiting();
+  return useMemo(() => all.filter((w) => w.sessionId === sessionId), [all, sessionId]);
 }

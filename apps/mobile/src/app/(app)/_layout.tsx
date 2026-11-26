@@ -1,6 +1,7 @@
 import { Stack } from 'expo-router';
 import { InAppToasts } from '@/features/alerts/in-app-toasts';
 import { ApprovalPrompt } from '@/features/approvals/approval-prompt';
+import { SendWhenOnline } from '@/features/chat/waiting';
 import { AppGate } from '@/features/shell/app-gate';
 import { PushBootstrap } from '@/features/shell/push-bootstrap';
 import { UpdateNotice } from '@/features/shell/app-update';
@@ -32,6 +33,8 @@ export default function AppLayout() {
         <InAppToasts />
         <ApprovalPrompt />
         <PushBootstrap />
+        {/* Messages that couldn't go yet go by themselves, from any screen. */}
+        <SendWhenOnline />
         <UpdateNotice />
       </AppGate>
     </LiveProvider>

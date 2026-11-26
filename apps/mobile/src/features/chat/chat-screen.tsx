@@ -1,4 +1,12 @@
-import { buildChat, chatMatches, isBusy, pendingQuestion, quickReplies, timeAgo } from '@pocket-agent/core';
+import {
+  buildChat,
+  chatMatches,
+  isBusy,
+  pendingQuestion,
+  quickReplies,
+  timeAgo,
+  type ChatItem,
+} from '@pocket-agent/core';
 import { CommandResponse, type AgentSessionDto, type NotificationPage } from '@pocket-agent/protocol';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
@@ -13,13 +21,20 @@ import { PermissionSheet } from '@/features/approvals/permission-sheet';
 import { QuestionSheet } from '@/features/approvals/question-sheet';
 import { ChatSearchBar } from '@/features/chat/chat-search';
 import { Composer, EndSessionButton } from '@/features/chat/composer';
-import { useOutbox } from '@/features/chat/outbox';
-import { ChatMessages, EditContext, RetryContext } from '@/features/chat/messages';
+import { useOutbox, type OutgoingMessage } from '@/features/chat/outbox';
+import {
+  dropWaiting,
+  holdMessage,
+  retryWaiting,
+  useChatWaiting,
+  useHiddenCommands,
+} from '@/features/chat/waiting';
+import { ChatMessages, EditContext, RetryContext, WaitingReason } from '@/features/chat/messages';
 import { SessionInfo } from '@/features/chat/session-info';
 import { SessionAvatar } from '@/features/sessions/badges';
-import { markRead, useApprovals, useCommands, useEventFeed, useSession } from '@/lib/data';
+import { markRead, useApprovals, useCommands, useDevices, useEventFeed, useSession } from '@/lib/data';
 import { chatLink } from '@/lib/links';
-import { foreground, useLiveEvents, useLiveRefresh } from '@/lib/live';
+import { foreground, useLiveConnection, useLiveEvents, useLiveRefresh } from '@/lib/live';
 import { ease, enter } from '@/lib/motion';
 import { dismissChatNotifications } from '@/lib/push';
 import { alpha, radius, useTheme } from '@/lib/theme';
@@ -255,6 +270,7 @@ export function ChatScreen({ id }: { id: string }) {
   );
   // Messages sent from here show at once; one that could not be sent stays, to send again.
   const outbox = useOutbox({
+    chat: { sessionId: id, deviceId: state.data?.deviceId ?? '' },
     accepted: (command) => {
       if (command.status === 'Failed') {
         buzz(false);
@@ -264,20 +280,54 @@ export function ChatScreen({ id }: { id: string }) {
       void feed.refreshHead();
       void refresh();
     },
+    held: () => setSentAt(null),
     failed: () => {
       buzz(false);
       setSentAt(null);
     },
   });
+  // Messages that couldn't go yet (no connection, or the PC is offline): they go by themselves.
+  const waiting = useChatWaiting(id);
+  const hidden = useHiddenCommands();
+  const connected = useLiveConnection() === 'live';
+  const pc = useDevices().state.data?.find((d) => d.id === state.data?.deviceId);
+  const waitingReason = !connected
+    ? 'No connection · sends when you’re back online'
+    : pc && pc.status !== 'Online'
+      ? 'PC offline · sends when it’s back'
+      : 'Sending…';
+  // While some wait, a new message waits behind them: they reach Claude in the order written.
+  const { send, retry: resend } = outbox;
+  const submit = useCallback(
+    (m: OutgoingMessage) => {
+      if (!waiting.some((w) => !w.error) || !state.data) return send(m);
+      holdMessage({ sessionId: id, deviceId: state.data.deviceId, ...m });
+      setSentAt(null);
+    },
+    [waiting, state.data, id, send],
+  );
+  const retry = useCallback(
+    (key: string) => (key.startsWith('wait-') ? retryWaiting(key.slice(5)) : resend(key.slice(4))),
+    [resend],
+  );
   const items = useMemo(() => {
     // Messages you sent are listed separately; while older events aren't loaded yet, show only
     // the ones from the loaded stretch, so your messages and Claude's replies always line up.
-    const all = commands.state.data ?? [];
+    // A command that failed only because the PC was offline was sent again: only the new one shows.
+    const all = (commands.state.data ?? []).filter((c) => !hidden.has(c.id));
     const sent = feed.hasMore && feed.oldestAt ? all.filter((c) => c.createdAt >= feed.oldestAt!) : all;
-    return [...buildChat(feed.events, sent), ...outbox.items(all)];
+    const held = waiting.map((w): Extract<ChatItem, { kind: 'user' }> => ({
+      kind: 'user',
+      key: `wait-${w.key}`,
+      at: w.at,
+      text: w.text,
+      ...(w.files.length ? { attachments: w.files } : {}),
+      local: w.error ? 'failed' : 'waiting',
+    }));
+    return [...buildChat(feed.events, sent), ...held, ...outbox.items(all)];
     // `outbox.items` reads `outbox.outgoing`.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [feed.events, feed.hasMore, feed.oldestAt, commands.state.data, outbox.outgoing]);
+  }, [feed.events, feed.hasMore, feed.oldestAt, commands.state.data, outbox.outgoing, waiting, hidden]);
   // Claude already answered (too fast for its status to be seen here): nothing is on its way.
   if (
     sentAt !== null &&
@@ -306,7 +356,8 @@ export function ChatScreen({ id }: { id: string }) {
     };
     if (!item.command) {
       // Never sent: just take it out of the chat.
-      outbox.discard(item.key.replace(/^out-/, ''));
+      if (item.key.startsWith('wait-')) dropWaiting(item.key.slice(5));
+      else outbox.discard(item.key.replace(/^out-/, ''));
       intoBox();
       return;
     }
@@ -450,37 +501,39 @@ export function ChatScreen({ id }: { id: string }) {
               </T>
             </View>
           ) : (
-            <RetryContext.Provider value={outbox.retry}>
-              <EditContext.Provider value={editWaiting}>
-                <ChatMessages
-                  items={shown}
-                  search={
-                    searching
-                      ? {
-                          query,
-                          matches: matchSet,
-                          current: shownMatch >= 0 ? matches[shownMatch]! : null,
-                        }
-                      : undefined
-                  }
-                  typing={typingKind(s) ?? (sending ? 'sending' : null)}
-                  bottomInset={dock}
-                  jumpKey={jump}
-                  header={
-                    feed.hasMore ? (
-                      <Button
-                        label={feed.loadingMore ? 'Loading…' : 'Load older messages'}
-                        variant="outline"
-                        size="sm"
-                        disabled={feed.loadingMore}
-                        onPress={() => void feed.loadMore()}
-                        style={{ alignSelf: 'center', borderRadius: radius.full, marginVertical: 8 }}
-                      />
-                    ) : undefined
-                  }
-                />
-              </EditContext.Provider>
-            </RetryContext.Provider>
+            <WaitingReason.Provider value={waitingReason}>
+              <RetryContext.Provider value={retry}>
+                <EditContext.Provider value={editWaiting}>
+                  <ChatMessages
+                    items={shown}
+                    search={
+                      searching
+                        ? {
+                            query,
+                            matches: matchSet,
+                            current: shownMatch >= 0 ? matches[shownMatch]! : null,
+                          }
+                        : undefined
+                    }
+                    typing={typingKind(s) ?? (sending ? 'sending' : null)}
+                    bottomInset={dock}
+                    jumpKey={jump}
+                    header={
+                      feed.hasMore ? (
+                        <Button
+                          label={feed.loadingMore ? 'Loading…' : 'Load older messages'}
+                          variant="outline"
+                          size="sm"
+                          disabled={feed.loadingMore}
+                          onPress={() => void feed.loadMore()}
+                          style={{ alignSelf: 'center', borderRadius: radius.full, marginVertical: 8 }}
+                        />
+                      ) : undefined
+                    }
+                  />
+                </EditContext.Provider>
+              </RetryContext.Provider>
+            </WaitingReason.Provider>
           )}
 
           {/*
@@ -541,7 +594,7 @@ export function ChatScreen({ id }: { id: string }) {
                   // its way at once; the PC's own status takes over when it arrives.
                   if (s.capabilities.instructAnytime) setSentAt(Date.now());
                 }}
-                submit={outbox.send}
+                submit={submit}
                 onSent={changed}
                 onInfo={() => setInfoOpen(true)}
                 replies={replies}

@@ -101,10 +101,11 @@ export type ChatItem =
       /** Photos/PDFs sent with it (from the app, or attached in the editor). */
       attachments?: AttachmentRef[];
       /**
-       * Sent from this app and not confirmed by the server yet ('sending'), or not sent at all
-       * ('failed': it can be sent again). Absent for everything the server knows.
+       * Sent from this app and not confirmed by the server yet ('sending'), kept on the phone
+       * until the connection or the PC is back ('waiting': it goes by itself), or not sent at
+       * all ('failed': it can be sent again). Absent for everything the server knows.
        */
-      local?: 'sending' | 'failed';
+      local?: 'sending' | 'waiting' | 'failed';
     }
   | { kind: 'assistant'; key: string; at: string; text: string }
   | {

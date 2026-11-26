@@ -103,6 +103,26 @@ const TICK: Record<CommandStatus, { Icon: LucideIcon; color: (c: Colors) => stri
   Expired: { Icon: Clock, color: (c) => c.destructive },
 };
 
+/** A message kept on this phone until it can go. */
+const WAITING_TICK = { Icon: Clock, color: (c: Colors) => c.mutedForeground };
+
+/**
+ * Why kept messages haven't gone yet, and that they will by themselves. Given by the chat around
+ * the list.
+ */
+export const WaitingReason = createContext('Sends by itself when it can');
+
+function WaitingNote() {
+  const reason = useContext(WaitingReason);
+  return (
+    <Animated.View entering={enter.fade} testID="waiting-note">
+      <T variant="caption" tone="muted" style={{ fontSize: 11, textAlign: 'right' }}>
+        {reason}
+      </T>
+    </Animated.View>
+  );
+}
+
 /** Long messages are folded, like a messenger's "Read more". */
 const FOLD_CHARS = 700;
 const FOLD_LINES = 12;
@@ -255,8 +275,8 @@ function BubbleMenu({
 }
 
 /**
- * Sends again a message that could not be sent (the chat's outbox, by the message's key). Given
- * by the chat around the list.
+ * Sends again a message that could not be sent (by the message's item key). Given by the chat
+ * around the list.
  */
 export const RetryContext = createContext<(key: string) => void>(() => undefined);
 
@@ -285,12 +305,14 @@ function UserMessage({ item }: { item: Of<'user'> }) {
   const retry = useContext(RetryContext);
   const editMessage = useContext(EditContext);
   // Waiting for Claude (or not sent at all): it can still be edited. On its way: not yet.
-  const editable = !!editMessage && isQueued(item) && (!!cmd || item.local === 'failed');
+  const editable = !!editMessage && isQueued(item) && (!!cmd || (!!item.local && item.local !== 'sending'));
   // Not confirmed yet: a clock, like a message still on its way; not sent: a red mark.
   const tick = cmd
     ? TICK[cmd.status]
     : item.local
-      ? TICK[item.local === 'failed' ? 'Failed' : 'Pending']
+      ? item.local === 'waiting'
+        ? WAITING_TICK
+        : TICK[item.local === 'failed' ? 'Failed' : 'Pending']
       : null;
   const err = cmd ? commandError(cmd) : null;
   const long = item.text.length > FOLD_CHARS || item.text.split('\n').length > FOLD_LINES;
@@ -372,7 +394,10 @@ function UserMessage({ item }: { item: Of<'user'> }) {
             entering={
               cmd && cmd.status !== firstStatus ? enter.pop : item.local === 'failed' ? enter.pop : undefined
             }
-            accessibilityLabel={status ?? (item.local === 'failed' ? 'Not sent' : 'Sending')}
+            accessibilityLabel={
+              status ??
+              (item.local === 'failed' ? 'Not sent' : item.local === 'waiting' ? 'Waiting' : 'Sending')
+            }
           >
             <tick.Icon size={14} color={tick.color(c)} strokeWidth={2.2} />
           </Animated.View>
@@ -393,12 +418,13 @@ function UserMessage({ item }: { item: Of<'user'> }) {
           </T>
         </Animated.View>
       )}
+      {item.local === 'waiting' && <WaitingNote />}
       {item.local === 'failed' && (
         <Animated.View entering={enter.fade}>
           <Press
             accessibilityRole="button"
             accessibilityLabel="Not sent. Send again"
-            onPress={() => retry(item.key.replace(/^out-/, ''))}
+            onPress={() => retry(item.key)}
             scale={0.96}
             hitSlop={8}
             testID="retry-send"

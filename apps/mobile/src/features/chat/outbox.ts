@@ -1,7 +1,8 @@
 import type { ChatItem } from '@pocket-agent/core';
 import { CommandResponse, type AttachmentRef, type CommandDto } from '@pocket-agent/protocol';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { apiRequest } from '@/lib/api';
+import { ApiClientError, apiRequest } from '@/lib/api';
+import { failedOffline, holdMessage } from '@/features/chat/waiting';
 
 /** A message on its way: what was sent, where, and how far it got. */
 interface Outgoing {
@@ -27,9 +28,13 @@ export type OutgoingMessage = Pick<Outgoing, 'key' | 'path' | 'body' | 'text' | 
  * the server made of it. `send` and `retry` never change (the chat list doesn't redraw for them).
  */
 export function useOutbox(on: {
-  /** The server took it (the command may still have failed, e.g. the PC is offline). */
+  /** Where its messages go: one that can't go yet waits on this phone for them. */
+  chat: { sessionId: string; deviceId: string };
+  /** The server took it and passed it on (the command may still fail on the PC). */
   accepted: (command: CommandDto) => void;
-  /** It could not be sent (no connection, the server refused it). */
+  /** It can't go yet (no connection, or the PC is offline): it waits and goes by itself. */
+  held: () => void;
+  /** The server refused it: it stays, to send again. */
   failed: () => void;
 }) {
   const [outgoing, setOutgoing] = useState<Outgoing[]>([]);
@@ -44,11 +49,21 @@ export function useOutbox(on: {
     const update = (change: Partial<Outgoing>) =>
       setOutgoing((list) => list.map((x) => (x.key === o.key ? { ...x, ...change } : x)));
     update({ state: 'sending', error: undefined });
+    const { chat } = handlers.current;
+    const hold = (extra: { key?: string; replaces?: string }) => {
+      holdMessage({ ...chat, path: o.path, body: o.body, text: o.text, files: o.files, at: o.at, ...extra });
+      setOutgoing((list) => list.filter((x) => x.key !== o.key));
+      handlers.current.held();
+    };
     try {
       const { command } = await apiRequest(o.path, CommandResponse, { method: 'POST', body: o.body });
+      // Nothing reached the PC: it waits for it under a new key (this one is a failed command).
+      if (failedOffline(command) && chat.deviceId) return hold({ replaces: command.id });
       update({ commandId: command.id });
       handlers.current.accepted(command);
     } catch (err) {
+      // No answer: the same key, so if the server did get it, it can never run twice.
+      if (err instanceof ApiClientError && err.status === 0 && chat.deviceId) return hold({ key: o.key });
       update({ state: 'failed', error: (err as Error).message });
       handlers.current.failed();
     }

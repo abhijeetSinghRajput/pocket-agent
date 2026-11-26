@@ -132,6 +132,13 @@
   white-space: nowrap;
 }
 
+/* Phones: the command alone with its copy button (Get started is in the header), so it shows whole */
+@media (max-width: 639px) {
+  .hh-pill code {
+    font-size: 13px;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .hh-swap,
   .hh-swap__inner,

@@ -1,7 +1,7 @@
 'use client';
 
 import { ArrowLeft, ChevronRight, CircleCheck, Copy, Folder, FolderPlus, Monitor, Plus } from 'lucide-react';
-import { Bar, Caret, Collapse, Phone, Prompt, Stage, States, Window, type Act } from './kit';
+import { Bar, Camera, Caret, Collapse, Phone, Prompt, Stage, States, Window, type Act, type Rect } from './kit';
 import { useStageLook } from './look';
 import './home.css';
 
@@ -31,6 +31,8 @@ type F = {
   hidden: boolean;
   /** Where the eye belongs now: that device shows in full, the other steps back. */
   focus: 'pc' | 'phone' | 'both';
+  /** The camera: pushed in on this (New chat, as it is tapped), or null for the whole scene. */
+  zoom: Rect | null;
 };
 
 const START: F = {
@@ -42,6 +44,7 @@ const START: F = {
   listed: false,
   hidden: false,
   focus: 'phone',
+  zoom: null,
 };
 const POSTER: F = {
   sheet: true,
@@ -52,14 +55,22 @@ const POSTER: F = {
   listed: true,
   hidden: false,
   focus: 'both',
+  zoom: null,
 };
+
+/** How long the camera takes to move in or back out. */
+const CAMERA = 1000;
 
 async function script(a: Act<F>) {
   await a.wait(800);
-  // On the phone: New chat, its sheet rises
+  // On the phone: the camera moves in on New chat, it is tapped, its sheet rises, the camera pulls back
+  await a.set({ zoom: a.rect('new-chat', { layout: true }) });
+  await a.wait(CAMERA + 100);
   await a.click({ at: 'new-chat', x: 0.5, y: 0.5 });
   await a.set({ sheet: true });
-  await a.wait(1000);
+  await a.wait(500);
+  await a.set({ zoom: null });
+  await a.wait(CAMERA);
   // Add a workspace
   await a.click({ at: 'add-row', x: 0.35, y: 0.5 });
   await a.set({ view: 'add' });
@@ -246,27 +257,29 @@ export function FolderDemo() {
     <Stage
       width={660}
       height={600}
-      compact={{ below: 560, width: 358, height: 660 }}
+      compact={{ below: 560, width: 358, height: 530 }}
       initial={START}
       poster={POSTER}
       script={script}
-      cursor={{ style: 'touch', at: { wide: { x: 600, y: 560 }, compact: { x: 320, y: 630 } } }}
+      cursor={{ style: 'touch', at: { wide: { x: 600, y: 560 }, compact: { x: 320, y: 500 } } }}
       className="pa-folders"
       {...look}
     >
       {(s, _rect, layout) => (
-        <div className="pa-f-stage" data-layout={layout} data-hidden={s.hidden || undefined}>
-          <Terminal s={s} />
-          <Phone
-            width={layout === 'compact' ? 250 : 290}
-            screenHeight={820}
-            frame="android"
-            className="pa-f-phone pa-dimmable"
-            data-dim={s.focus === 'pc' || undefined}
-          >
-            <Screen s={s} />
-          </Phone>
-        </div>
+        <Camera focus={s.zoom} max={1.9} duration={CAMERA} feather={0} className="pa-f-camera">
+          <div className="pa-f-stage" data-layout={layout} data-hidden={s.hidden || undefined}>
+            <Terminal s={s} />
+            <Phone
+              width={layout === 'compact' ? 250 : 290}
+              screenHeight={820}
+              frame="android"
+              className="pa-f-phone pa-dimmable"
+              data-dim={s.focus === 'pc' || undefined}
+            >
+              <Screen s={s} />
+            </Phone>
+          </div>
+        </Camera>
       )}
     </Stage>
   );

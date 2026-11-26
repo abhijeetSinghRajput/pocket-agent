@@ -1,4 +1,5 @@
 import {
+  agentName,
   clockTime,
   commandError,
   controlText,
@@ -110,6 +111,9 @@ const WAITING_TICK = { Icon: Clock, color: (c: Colors) => c.mutedForeground };
  * Why kept messages haven't gone yet, and that they will by themselves. Given by the chat around
  * the list.
  */
+/** The chat's agent in a sentence ("Claude", "Codex"). Given by the chat around the list. */
+export const AgentName = createContext(agentName('claude-code'));
+
 export const WaitingReason = createContext('Sends by itself when it can');
 
 function WaitingNote() {
@@ -518,13 +522,14 @@ function Step({
 type Join = { joinAbove: boolean; joinBelow: boolean };
 
 function AssistantMessage({ item, ...join }: { item: Of<'assistant'> } & Join) {
+  const agent = useContext(AgentName);
   const { c } = useTheme();
   return (
     <Step dot={alpha(c.mutedForeground, 0.45)} dotTop={7} {...join}>
       <View>
         {/* No long-press on a reply: a press held on a table must stay free to scroll it. Copying
             is the button under the reply; your own messages keep their long-press menu. */}
-        <View accessibilityLabel="Claude:">
+        <View accessibilityLabel={`${agent}:`}>
           <Markdown text={item.text} />
         </View>
         {/* Under the reply: Copy (on the reply that ends a turn, as in the editor) and the time. */}
@@ -1127,6 +1132,7 @@ function ShimmerText({ text, cursor }: { text: string; cursor: number | null }) 
 export type TypingKind = 'working' | 'starting' | 'sending';
 
 export function TypingIndicator({ kind, since }: { kind: TypingKind; since: string | null }) {
+  const agent = useContext(AgentName);
   const reduce = useReducedMotion();
   const [start] = useState(() => (since ? Math.min(Date.parse(since), Date.now()) : Date.now()));
   const [now, setNow] = useState(() => Date.now());
@@ -1170,7 +1176,7 @@ export function TypingIndicator({ kind, since }: { kind: TypingKind; since: stri
   return (
     <View
       accessibilityRole="progressbar"
-      accessibilityLabel="Claude is working"
+      accessibilityLabel={`${agent} is working`}
       testID="typing-indicator"
       style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 4 }}
     >
@@ -1293,6 +1299,7 @@ function splitPath(p: string): { name: string; dir: string } {
  * glance (the steps themselves are above). A long file list folds.
  */
 function TurnSummary({ item }: { item: Of<'summary'> }) {
+  const agent = useContext(AgentName);
   const { c, dark } = useTheme();
   const [open, setOpen] = useState(false);
   const [first, ...rest] = summaryParts(item);
@@ -1302,7 +1309,7 @@ function TurnSummary({ item }: { item: Of<'summary'> }) {
   return (
     <View
       testID="turn-summary"
-      accessibilityLabel={`Claude finished: ${summaryParts(item).join(', ')}`}
+      accessibilityLabel={`${agent} finished: ${summaryParts(item).join(', ')}`}
       style={{
         borderRadius: radius.xl,
         borderWidth: dark ? 0 : StyleSheet.hairlineWidth,

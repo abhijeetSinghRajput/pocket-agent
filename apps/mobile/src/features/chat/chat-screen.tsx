@@ -1,4 +1,5 @@
 import {
+  agentName,
   buildChat,
   chatMatches,
   isBusy,
@@ -29,7 +30,7 @@ import {
   useChatWaiting,
   useHiddenCommands,
 } from '@/features/chat/waiting';
-import { ChatMessages, EditContext, RetryContext, WaitingReason } from '@/features/chat/messages';
+import { AgentName, ChatMessages, EditContext, RetryContext, WaitingReason } from '@/features/chat/messages';
 import { SessionInfo } from '@/features/chat/session-info';
 import { SessionAvatar } from '@/features/sessions/badges';
 import { markRead, useApprovals, useCommands, useDevices, useEventFeed, useSession } from '@/lib/data';
@@ -504,39 +505,41 @@ export function ChatScreen({ id }: { id: string }) {
               </T>
             </View>
           ) : (
-            <WaitingReason.Provider value={waitingReason}>
-              <RetryContext.Provider value={retry}>
-                <EditContext.Provider value={editWaiting}>
-                  <ChatMessages
-                    items={shown}
-                    search={
-                      searching
-                        ? {
-                            query,
-                            matches: matchSet,
-                            current: shownMatch >= 0 ? matches[shownMatch]! : null,
-                          }
-                        : undefined
-                    }
-                    typing={typingKind(s) ?? (sending ? 'sending' : null)}
-                    bottomInset={dock}
-                    jumpKey={jump}
-                    header={
-                      feed.hasMore ? (
-                        <Button
-                          label={feed.loadingMore ? 'Loading…' : 'Load older messages'}
-                          variant="outline"
-                          size="sm"
-                          disabled={feed.loadingMore}
-                          onPress={() => void feed.loadMore()}
-                          style={{ alignSelf: 'center', borderRadius: radius.full, marginVertical: 8 }}
-                        />
-                      ) : undefined
-                    }
-                  />
-                </EditContext.Provider>
-              </RetryContext.Provider>
-            </WaitingReason.Provider>
+            <AgentName.Provider value={agentName(state.data?.provider)}>
+              <WaitingReason.Provider value={waitingReason}>
+                <RetryContext.Provider value={retry}>
+                  <EditContext.Provider value={editWaiting}>
+                    <ChatMessages
+                      items={shown}
+                      search={
+                        searching
+                          ? {
+                              query,
+                              matches: matchSet,
+                              current: shownMatch >= 0 ? matches[shownMatch]! : null,
+                            }
+                          : undefined
+                      }
+                      typing={typingKind(s) ?? (sending ? 'sending' : null)}
+                      bottomInset={dock}
+                      jumpKey={jump}
+                      header={
+                        feed.hasMore ? (
+                          <Button
+                            label={feed.loadingMore ? 'Loading…' : 'Load older messages'}
+                            variant="outline"
+                            size="sm"
+                            disabled={feed.loadingMore}
+                            onPress={() => void feed.loadMore()}
+                            style={{ alignSelf: 'center', borderRadius: radius.full, marginVertical: 8 }}
+                          />
+                        ) : undefined
+                      }
+                    />
+                  </EditContext.Provider>
+                </RetryContext.Provider>
+              </WaitingReason.Provider>
+            </AgentName.Provider>
           )}
 
           {/*

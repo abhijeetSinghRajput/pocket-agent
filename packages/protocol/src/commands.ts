@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { CommandStatus } from './enums.js';
+import { CommandStatus, ProviderId } from './enums.js';
 import { ATTACHMENT_MAX_PER_MESSAGE, AttachmentRefs } from './attachments.js';
 import { INSTRUCTION_MAX, ModelId, TurnEffort, TurnMode } from './events.js';
 
@@ -66,6 +66,8 @@ export const SendInstructionRequest = z.object({
 export type SendInstructionRequest = z.infer<typeof SendInstructionRequest>;
 
 export const StartSessionRequest = z.object({
+  /** The coding agent to chat with (absent: Claude Code). */
+  provider: ProviderId.optional(),
   projectPath: z.string().min(1).max(1024),
   text: z.string().trim().min(1, 'Type the first instruction').max(INSTRUCTION_MAX),
   model: ModelId.optional(),
@@ -80,6 +82,13 @@ export type StartSessionRequest = z.infer<typeof StartSessionRequest>;
 /** Continue an ended session from the app: same conversation, reopened on the PC. */
 export const ResumeSessionRequest = StartSessionRequest.omit({ projectPath: true });
 export type ResumeSessionRequest = z.infer<typeof ResumeSessionRequest>;
+
+/**
+ * First Local Agent version that starts a chat with the coding agent asked for (and refuses one it
+ * hasn't got). Older agents would start Claude Code whatever was asked, so the API never sends
+ * them another provider.
+ */
+export const PROVIDERS_AGENT_VERSION = '2.5.0';
 
 /** First Local Agent version that can continue an ended session. */
 export const RESUME_MIN_AGENT_VERSION = '0.1.4';

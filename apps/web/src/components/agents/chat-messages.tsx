@@ -1,5 +1,6 @@
 'use client';
 
+import { agentName } from '@pocket-agent/core';
 import type { CommandStatus } from '@pocket-agent/protocol';
 import {
   ArrowDown,
@@ -13,7 +14,15 @@ import {
   ShieldAlert,
   Smartphone,
 } from 'lucide-react';
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 import { ClaudeSpinner } from '@/components/agents/claude-spinner';
 import { SentAttachments } from '@/components/agents/attachments';
 import { Markdown } from '@/components/agents/markdown';
@@ -45,6 +54,9 @@ const TICK: Record<CommandStatus, { Icon: typeof Check; cls: string }> = {
 /** Long messages are folded, like a messenger's "Read more". */
 const FOLD_CHARS = 700;
 const FOLD_LINES = 12;
+
+/** The chat's agent in a sentence ("Claude", "Codex"); given around the conversation. */
+export const AgentName = createContext(agentName('claude-code'));
 
 function UserMessage({ item }: { item: Of<'user'> }) {
   const c = item.command;
@@ -121,6 +133,7 @@ function Step({
 }
 
 function AssistantMessage({ item }: { item: Of<'assistant'> }) {
+  const agent = useContext(AgentName);
   return (
     <Step dot="bg-muted-foreground/45">
       <time
@@ -129,7 +142,7 @@ function AssistantMessage({ item }: { item: Of<'assistant'> }) {
       >
         {clockTime(item.at)}
       </time>
-      <span className="sr-only">Claude:</span>
+      <span className="sr-only">{agent}:</span>
       <Markdown text={item.text} />
     </Step>
   );
@@ -400,6 +413,7 @@ export function typeOver(from: string, to: string, i: number): string {
 const TYPE_STEP_MS = 55;
 
 export function TypingIndicator({ kind, since }: { kind: 'working' | 'starting'; since: string | null }) {
+  const agent = useContext(AgentName);
   const [start] = useState(() => (since ? Math.min(Date.parse(since), Date.now()) : Date.now()));
   const [now, setNow] = useState(() => Date.now());
   // What is on screen: mid-change it is part new word, part old.
@@ -442,7 +456,7 @@ export function TypingIndicator({ kind, since }: { kind: 'working' | 'starting';
         {word}…
       </span>
       <span className="text-xs text-muted-foreground tabular-nums">({elapsed(now - start)})</span>
-      <span className="sr-only">Claude is working</span>
+      <span className="sr-only">{agent} is working</span>
     </div>
   );
 }
@@ -609,6 +623,7 @@ export function ChatMessages({
  * glance (the steps themselves are above). A long file list folds.
  */
 function TurnSummary({ item }: { item: Extract<ChatItem, { kind: 'summary' }> }) {
+  const agent = useContext(AgentName);
   const [open, setOpen] = useState(false);
   const parts = summaryParts(item);
   const [first, ...rest] = parts;
@@ -617,7 +632,7 @@ function TurnSummary({ item }: { item: Extract<ChatItem, { kind: 'summary' }> })
   return (
     <div
       data-testid="turn-summary"
-      aria-label={`Claude finished: ${parts.join(', ')}`}
+      aria-label={`${agent} finished: ${parts.join(', ')}`}
       className="rounded-xl border bg-card px-4 py-3 text-sm"
     >
       <div className="flex items-center gap-2">

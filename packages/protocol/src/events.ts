@@ -325,6 +325,11 @@ export const CommandExecute = defineEvent(
     z.object({
       commandId: z.uuid(),
       commandType: z.literal('session.start'),
+      /**
+       * The coding agent to start (absent: Claude Code). PC agents before PROVIDERS_AGENT_VERSION
+       * don't know it, so the API never sends another provider to them.
+       */
+      provider: ProviderId.optional(),
       projectPath: z.string().max(1024),
       text: z.string().min(1).max(INSTRUCTION_MAX),
       /**

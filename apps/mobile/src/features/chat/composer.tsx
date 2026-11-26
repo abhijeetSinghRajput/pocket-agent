@@ -1,4 +1,5 @@
 import {
+  agentName,
   canConfigureLive,
   canInstruct,
   capabilityRows,
@@ -501,7 +502,7 @@ export function Composer({
               ? 'Messaging is off for this session'
               : resuming
                 ? 'Continue this session…'
-                : 'Message Claude…'
+                : `Message ${agentName(session.provider)}…`
           }
           placeholderTextColor={c.mutedForeground}
           selectionColor={c.primary}
@@ -590,8 +591,8 @@ export function Composer({
               stopMode
                 ? canInterrupt
                   ? session.mode === 'managed'
-                    ? 'Stop Claude'
-                    : 'Stop Claude (it stops at its next step)'
+                    ? `Stop ${agentName(session.provider)}`
+                    : `Stop ${agentName(session.provider)} (it stops at its next step)`
                   : 'Stopping is turned off on this PC (pocket-agent instructions enable)'
                 : 'Send'
             }

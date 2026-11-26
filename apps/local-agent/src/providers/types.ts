@@ -1,43 +1,46 @@
-import type { AgentStatus, ProviderId, SessionCapabilities, SessionMode } from '@pocket-agent/protocol';
+import type { ProviderId, TurnEffort, TurnMode } from '@pocket-agent/protocol';
+import type { LocalFile } from '../attachments.js';
 
 /**
- * Contract every coding-agent provider implements (architecture: Approved constraints #1).
- * Claude Code is the first implementation (M3); Codex/OpenCode can be added later without
- * changes to the API, protocol envelope, or web app. Provider SDKs are imported only inside
- * their own folder under src/providers/<name>/.
+ * What every coding agent this PC runs for Pocket Agent (a "managed" session) offers the command
+ * router: start a chat, take messages, switch mode or model, stop. Claude Code's
+ * `ManagedSessions` is the first; another provider (Codex) adds its own under
+ * src/providers/<name>/ and is handed to the router by id. Provider SDKs are imported only inside
+ * their own folder.
  */
-export interface ProviderSession {
-  provider: ProviderId;
-  mode: SessionMode;
-  externalSessionId: string;
-  projectPath: string;
-  status: AgentStatus;
-  capabilities: SessionCapabilities;
+export interface ManagedRuntime {
+  /** Whether this runtime runs the session (its id is the provider's own session id). */
+  isManaged(id: string): boolean;
+  /** Starts a session (or continues `resumeSessionId`); resolves with its id. */
+  start(input: {
+    projectPath: string;
+    prompt: string;
+    model?: string;
+    permissionMode?: TurnMode;
+    effort?: TurnEffort;
+    commandId?: string;
+    resumeSessionId?: string;
+    files?: LocalFile[];
+  }): Promise<string>;
+  /** Queues a message; false when the session isn't running here. */
+  send(
+    id: string,
+    text: string,
+    command?: {
+      commandId: string;
+      expiresAt: number;
+      model?: string;
+      permissionMode?: TurnMode;
+      effort?: TurnEffort;
+      files?: LocalFile[];
+    },
+  ): boolean;
+  configure(id: string, change: { permissionMode?: TurnMode; model?: string }): Promise<boolean>;
+  interrupt(id: string): Promise<boolean>;
+  stop(id: string): Promise<boolean>;
+  /** Takes back a message still waiting in a queue (to edit it in the app). */
+  withdraw(commandId: string): boolean;
 }
 
-export interface PermissionPrompt {
-  requestId: string;
-  toolName: string;
-  input: unknown;
-}
-
-export type PermissionDecision = { behavior: 'allow' } | { behavior: 'deny'; message: string };
-
-export interface ProviderEvents {
-  sessionChanged(session: ProviderSession): void;
-  /** Resolve with a decision, or with null to fall back to the provider's local behaviour. */
-  permissionRequested(session: ProviderSession, prompt: PermissionPrompt): Promise<PermissionDecision | null>;
-}
-
-export interface AgentProvider {
-  readonly id: ProviderId;
-  /** Capabilities a session of the given mode has with this provider. */
-  capabilities(mode: SessionMode): SessionCapabilities;
-  start(events: ProviderEvents): Promise<void>;
-  stop(): Promise<void>;
-  /** Start a managed session. Providers that can't manage sessions throw. */
-  startSession(projectPath: string, instruction: string): Promise<ProviderSession>;
-  /** Deliver an instruction; how and when depends on the session's capabilities. */
-  sendInstruction(externalSessionId: string, text: string): Promise<'delivered' | 'queued'>;
-  interrupt(externalSessionId: string): Promise<void>;
-}
+/** Runtimes of the providers other than Claude Code that this PC has (none yet: Codex is next). */
+export type OtherRuntimes = Partial<Record<Exclude<ProviderId, 'claude-code'>, ManagedRuntime>>;

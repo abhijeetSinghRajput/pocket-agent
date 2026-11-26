@@ -5,3 +5,4 @@ export * from './workers.js';
 export * from './defaults.js';
 export * from './session.js';
 export * from './health.js';
+export * from './providers.js';

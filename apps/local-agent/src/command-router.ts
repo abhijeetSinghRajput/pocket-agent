@@ -1,11 +1,12 @@
 import { findConversation } from './providers/claude-code/conversation.js';
-import type { BackendToAgent } from '@pocket-agent/protocol';
+import type { BackendToAgent, ProviderId, TurnEffort, TurnMode } from '@pocket-agent/protocol';
 import { filesNote, type AttachmentClient, type LocalFile } from './attachments.js';
 import { isAllowedProject, type Policy } from './policy.js';
 import type { CommandAck } from './providers/claude-code/instructions.js';
 import type { ObservedInstructions } from './providers/claude-code/instructions.js';
 import type { ManagedSessions } from './providers/claude-code/managed.js';
 import type { IdleWake } from './providers/claude-code/wake.js';
+import type { ManagedRuntime, OtherRuntimes } from './providers/types.js';
 import type { SessionRegistry } from './sessions/registry.js';
 
 type CommandExecute = Extract<BackendToAgent, { eventType: 'command.execute' }>;
@@ -35,6 +36,8 @@ export class CommandRouter {
     private readonly deps: {
       registry: SessionRegistry;
       managed: ManagedSessions;
+      /** The coding agents besides Claude Code this PC runs chats with (by provider). */
+      others?: OtherRuntimes;
       /** An ended session's conversation on this PC, with its folder (tests replace it). */
       findConversation?: (sessionId: string) => Promise<{ cwd: string } | null>;
       observed: ObservedInstructions;
@@ -51,6 +54,15 @@ export class CommandRouter {
       now?: () => number;
     },
   ) {}
+
+  /**
+   * The runtime of a provider other than Claude Code, or null when this PC hasn't got it (a
+   * command for it fails instead of ever reaching Claude). undefined: Claude Code itself.
+   */
+  private other(provider: ProviderId): ManagedRuntime | null | undefined {
+    if (provider === 'claude-code') return undefined;
+    return this.deps.others?.[provider] ?? null;
+  }
 
   async handle(msg: CommandExecute): Promise<void> {
     const p = msg.payload;
@@ -73,8 +85,18 @@ export class CommandRouter {
         ...('permissionMode' in p && p.permissionMode ? { permissionMode: p.permissionMode } : {}),
         ...('effort' in p && p.effort ? { effort: p.effort } : {}),
       };
-      const known = this.deps.models?.() ?? [];
+      // A session-scoped command goes to the agent that runs the session.
+      const running = msg.sessionId ? this.deps.registry.get(msg.sessionId) : undefined;
+      const provider: ProviderId =
+        p.commandType === 'session.start'
+          ? (p.provider ?? 'claude-code')
+          : (running?.provider ?? 'claude-code');
+      const other = this.other(provider);
+      if (other === null) return fail('provider_not_available');
+      // Claude's models are checked here; another agent checks its own.
+      const known = other ? [] : (this.deps.models?.() ?? []);
       if (model && known.length && !known.some((m) => m.id === model)) return fail('model_not_available');
+      if (other) return await this.forOther(other, msg, model, turn, fail);
       switch (p.commandType) {
         case 'session.start': {
           // Continue an ended session: any one whose conversation is still on this PC and that isn't
@@ -230,6 +252,88 @@ export class CommandRouter {
     } catch (err) {
       this.deps.log?.('error', `command ${p.commandType} failed: ${(err as Error).message}`);
       fail((err as Error).message.slice(0, 300));
+    }
+  }
+
+  /** A command for a chat another agent runs here (only chats started from Pocket Agent). */
+  private async forOther(
+    runtime: ManagedRuntime,
+    msg: CommandExecute,
+    model: string | undefined,
+    turn: { permissionMode?: TurnMode; effort?: TurnEffort },
+    fail: (error: string) => void,
+  ): Promise<void> {
+    const p = msg.payload;
+    const { ack } = this.deps;
+    const sid = msg.sessionId;
+    switch (p.commandType) {
+      case 'session.start': {
+        // Continuing an ended chat of another agent isn't supported yet.
+        if (p.resume) return fail('not_supported');
+        const allowed = isAllowedProject(this.deps.policy(), p.projectPath);
+        if (!allowed) return fail('project_not_allowed');
+        let files: LocalFile[] = [];
+        if (p.attachments?.length) {
+          if (!this.deps.attachments) return fail('attachments_not_supported');
+          try {
+            files = await this.deps.attachments.download(p.commandId, p.attachments);
+          } catch (err) {
+            this.deps.log?.('warn', `attachments of ${p.commandId}: ${(err as Error).message}`);
+            return fail('attachment_download_failed');
+          }
+        }
+        const id = await runtime.start({
+          projectPath: allowed.path,
+          prompt: p.text,
+          commandId: p.commandId,
+          ...(files.length ? { files } : {}),
+          ...(model ? { model } : {}),
+          ...turn,
+        });
+        return ack(p.commandId, 'Executing', { externalSessionId: id });
+      }
+      case 'instruction': {
+        if (!sid || !runtime.isManaged(sid)) return fail('session_not_found');
+        let files: LocalFile[] = [];
+        if (p.attachments?.length) {
+          if (!this.deps.attachments) return fail('attachments_not_supported');
+          try {
+            files = await this.deps.attachments.download(p.commandId, p.attachments);
+          } catch (err) {
+            this.deps.log?.('warn', `attachments of ${p.commandId}: ${(err as Error).message}`);
+            return fail('attachment_download_failed');
+          }
+        }
+        const sent = runtime.send(sid, p.text, {
+          commandId: p.commandId,
+          expiresAt: QUEUED_UNTIL_RUN,
+          ...(model ? { model } : {}),
+          ...turn,
+          ...(files.length ? { files } : {}),
+        });
+        return sent ? undefined : fail('session_not_found');
+      }
+      case 'session.configure': {
+        if (!sid || !runtime.isManaged(sid)) return fail('not_a_managed_session');
+        const change = {
+          ...(p.permissionMode ? { permissionMode: p.permissionMode } : {}),
+          ...(p.model ? { model: p.model } : {}),
+        };
+        try {
+          return (await runtime.configure(sid, change))
+            ? ack(p.commandId, 'Completed')
+            : fail('session_not_found');
+        } catch (err) {
+          this.deps.log?.('warn', `configure ${sid}: ${(err as Error).message}`);
+          return fail('configure_failed');
+        }
+      }
+      case 'interrupt':
+      case 'session.stop': {
+        if (!sid || !runtime.isManaged(sid)) return fail('session_not_found');
+        const ok = p.commandType === 'interrupt' ? await runtime.interrupt(sid) : await runtime.stop(sid);
+        return ok ? ack(p.commandId, 'Completed') : fail('session_not_found');
+      }
     }
   }
 }

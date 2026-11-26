@@ -11,6 +11,7 @@ import {
   SessionCapabilities,
   SessionControlRequest,
   StartSessionRequest,
+  PROVIDERS_AGENT_VERSION,
   versionBelow,
   type AttachmentRef,
   type CommandKind,
@@ -214,7 +215,8 @@ export async function commandRoutes(app: FastifyInstance, ctx: Services): Promis
       if (outdated(reply, s.device.agentVersion, CONFIGURE_AGENT_VERSION, 'Switching mode mid-task', 409))
         return;
     }
-    if (unknownModel(reply, s.device, body.model)) return;
+    // The model list is Claude Code's: another agent checks its own models on the PC.
+    if (s.provider === 'claude-code' && unknownModel(reply, s.device, body.model)) return;
     const attachments = await sentFiles(req, reply, s.device.agentVersion, body.attachmentIds);
     if (attachments === null) return;
     return issue(req, reply, {
@@ -267,7 +269,12 @@ export async function commandRoutes(app: FastifyInstance, ctx: Services): Promis
         400,
       );
     }
-    if (unknownModel(reply, device, body.model)) return;
+    // Another agent than Claude Code: only PCs that know to start it (older ones would start Claude).
+    const other = body.provider && body.provider !== 'claude-code' ? body.provider : undefined;
+    if (other && outdated(reply, device.agentVersion, PROVIDERS_AGENT_VERSION, 'Chatting with Codex', 409))
+      return;
+    // The model list is Claude Code's: another agent checks its own models on the PC.
+    if (!other && unknownModel(reply, device, body.model)) return;
     const attachments = await sentFiles(req, reply, device.agentVersion, body.attachmentIds, {
       version: RESUME_FILES_AGENT_VERSION,
       what: 'Sending files when starting a chat',
@@ -277,6 +284,7 @@ export async function commandRoutes(app: FastifyInstance, ctx: Services): Promis
       deviceId: device.id,
       session: null,
       kind: 'session.start',
+      ...(other ? { provider: other } : {}),
       idempotencyKey: body.idempotencyKey,
       text: body.text,
       projectPath: body.projectPath,
@@ -297,7 +305,7 @@ export async function commandRoutes(app: FastifyInstance, ctx: Services): Promis
     if (!s.endedAt) return bad(reply, 'session_running', 'This session is still running. Send it a message.');
     if (s.device.revokedAt) return bad(reply, 'device_revoked', 'This device was revoked.');
     if (s.provider !== 'claude-code')
-      return bad(reply, 'not_supported', 'Only Claude Code sessions can be continued.');
+      return bad(reply, 'not_supported', 'Only Claude Code chats can be continued for now.');
     if (outdated(reply, s.device.agentVersion, RESUME_MIN_AGENT_VERSION, 'Continuing a session', 409)) return;
     // From 0.1.5 the PC continues the session in the folder its conversation ran in, whatever the
     // project list says (that list is for starting new chats). Older agents still require it.

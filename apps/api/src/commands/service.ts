@@ -10,6 +10,7 @@ import {
   type TurnMode,
   type CommandKind,
   type CommandStatus,
+  type ProviderId,
   versionBelow,
   WITHDRAW_AGENT_VERSION,
   WITHDRAWN,
@@ -31,6 +32,8 @@ interface CommandPayload {
   attachments?: AttachmentRef[];
   /** session.start: continue the command's session instead of starting a new one. */
   resume?: boolean;
+  /** session.start: the coding agent to start (absent: Claude Code). */
+  provider?: ProviderId;
 }
 
 export function toCommandDto(c: Command): CommandDto {
@@ -112,6 +115,7 @@ export function commandFrame(c: Command, externalSessionId: string | null) {
             projectPath: p.projectPath!,
             text: p.text!,
             ...(p.resume ? { resume: true } : {}),
+            ...(p.provider && p.provider !== 'claude-code' ? { provider: p.provider } : {}),
             ...(p.attachments?.length ? { attachments: p.attachments } : {}),
           }
         : c.commandType === 'session.configure'
@@ -152,6 +156,8 @@ export interface CreateCommandInput {
   attachments?: AttachmentRef[];
   /** session.start of an ended session (`session`) that the PC continues. */
   resume?: boolean;
+  /** session.start: the coding agent to start (absent: Claude Code). */
+  provider?: ProviderId;
   ip?: string;
 }
 
@@ -192,6 +198,7 @@ export async function createCommand(
           ...(input.effort !== undefined ? { effort: input.effort } : {}),
           ...(input.attachments?.length ? { attachments: input.attachments } : {}),
           ...(input.resume ? { resume: true } : {}),
+          ...(input.provider && input.provider !== 'claude-code' ? { provider: input.provider } : {}),
         },
         idempotencyKey: input.idempotencyKey,
         status: online ? 'Pending' : 'Failed',

@@ -1,6 +1,7 @@
 import {
   AgentStatus,
   OrganizeSessionRequest,
+  ProviderId,
   SessionCapabilities,
   type AgentEventDto,
   type AgentSessionDto,
@@ -40,7 +41,8 @@ export function toSessionDto(s: AgentSession & { device: Pick<Device, 'name'> })
     id: s.id,
     deviceId: s.deviceId,
     deviceName: s.device.name,
-    provider: 'claude-code',
+    // Recorded by the PC; anything unknown shows as Claude Code (the only one before Codex).
+    provider: ProviderId.catch('claude-code').parse(s.provider),
     mode: s.mode,
     externalSessionId: s.externalSessionId,
     projectName: s.projectName,

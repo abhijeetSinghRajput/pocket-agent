@@ -1,3 +1,4 @@
+import { agentName } from '@pocket-agent/core';
 import type { BackendToWeb } from '@pocket-agent/protocol';
 import type { FastifyInstance } from 'fastify';
 import type { PushAction } from './push.js';
@@ -90,12 +91,13 @@ export async function notifyFromEvents(ctx: NotifyServices, events: BackendToWeb
       });
       if (!a) continue;
       const asking = a.toolName === 'AskUserQuestion';
+      const agent = agentName(a.session.provider);
       await notify(ctx, {
         userId: a.userId,
         category: 'permission_required',
         // Plain words, the chat's name in the header; no command text in the push itself (it
         // passes through Google/Apple), the app shows it.
-        title: asking ? 'Claude has a question' : 'Claude needs your OK',
+        title: asking ? `${agent} has a question` : `${agent} needs your OK`,
         body: asking ? 'Tap to answer.' : wantsTo(a.toolName, a.device.name),
         subtitle: a.session.projectName,
         group: a.sessionId,
@@ -112,6 +114,7 @@ export async function notifyFromEvents(ctx: NotifyServices, events: BackendToWeb
         include: { device: true },
       });
       if (!s) continue;
+      const agent = agentName(s.provider);
       // Each chat's notifications stack together, under its name.
       const base = {
         userId: s.device.userId,
@@ -141,7 +144,7 @@ export async function notifyFromEvents(ctx: NotifyServices, events: BackendToWeb
         await notify(ctx, {
           ...base,
           category: 'permission_required',
-          title: tool === 'AskUserQuestion' ? 'Claude has a question' : 'Claude needs your OK',
+          title: tool === 'AskUserQuestion' ? `${agent} has a question` : `${agent} needs your OK`,
           body: `Answer it on ${s.device.name}.`,
           dedupeKey: `on-pc:${s.id}:${e.eventId}`,
         });
@@ -150,7 +153,7 @@ export async function notifyFromEvents(ctx: NotifyServices, events: BackendToWeb
           ...base,
           category: 'agent_failed',
           title: 'Something went wrong',
-          body: `Claude stopped with an error on ${s.device.name}.`,
+          body: `${agent} stopped with an error on ${s.device.name}.`,
           dedupeKey: `failed:${s.id}:${e.eventId}`,
           // Only the latest one per chat stays on the phone.
           replaces: `failed:${s.id}`,
@@ -164,7 +167,7 @@ export async function notifyFromEvents(ctx: NotifyServices, events: BackendToWeb
         await notify(ctx, {
           ...base,
           category: 'task_completed',
-          title: 'Claude is done',
+          title: `${agent} is done`,
           body: 'Waiting for your next message.',
           dedupeKey: `done:${s.id}:${e.eventId}`,
           // Only the latest one per chat stays on the phone.

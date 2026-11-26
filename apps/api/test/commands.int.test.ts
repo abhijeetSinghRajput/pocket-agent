@@ -367,6 +367,95 @@ describe('starting managed sessions remotely', () => {
   });
 });
 
+describe('chats with another coding agent (Codex)', () => {
+  async function codexPc(agentVersion: string) {
+    const s = await setup();
+    await s.agent.send(
+      createEvent('device.settings', {
+        projects: [{ name: 'api', path: String.raw`C:\work\api` }],
+        observedInstructions: false,
+      }),
+    );
+    await waitFor(async () => {
+      const d = await t.ctx.prisma.device.findUniqueOrThrow({ where: { id: s.deviceId } });
+      return JSON.stringify(d.projects).includes('api');
+    });
+    await t.ctx.prisma.device.update({ where: { id: s.deviceId }, data: { agentVersion } });
+    return s;
+  }
+  const startCodex = (s: { deviceId: string; cookie: string }, model?: string) =>
+    post(`/devices/${s.deviceId}/sessions`, s.cookie, {
+      provider: 'codex',
+      projectPath: String.raw`C:\work\api`,
+      text: 'Fix the build',
+      ...(model ? { model } : {}),
+      idempotencyKey: randomUUID(),
+    });
+
+  it('never reach an older PC agent (it would start Claude Code instead)', async () => {
+    const s = await codexPc('2.4.2');
+    const res = await startCodex(s);
+    expect(res.statusCode).toBe(409);
+    expect(await t.ctx.prisma.command.count({ where: { deviceId: s.deviceId } })).toBe(0);
+    s.agent.ws.close();
+  });
+
+  it('go to the PC with the agent named, and its own model (not checked against Claude’s list)', async () => {
+    const s = await codexPc('2.5.0');
+    const res = await startCodex(s, 'gpt-5.5-codex');
+    expect(res.statusCode).toBe(201);
+    const frame = await s.agent.next(
+      (m) =>
+        m['eventType'] === 'command.execute' &&
+        (m['payload'] as { commandType: string }).commandType === 'session.start',
+    );
+    expect(frame['payload']).toMatchObject({
+      provider: 'codex',
+      model: 'gpt-5.5-codex',
+      text: 'Fix the build',
+    });
+
+    // The chat the PC reports is a Codex chat, and its messages may name Codex's models.
+    const ext = randomUUID();
+    await s.agent.send(
+      sessionStarted(ext, { provider: 'codex', mode: 'managed', capabilities: MANAGED_CAPS }),
+    );
+    const chat = await t.ctx.prisma.agentSession.findUniqueOrThrow({
+      where: { deviceId_externalSessionId: { deviceId: s.deviceId, externalSessionId: ext } },
+    });
+    const dto = await t.app.inject({
+      method: 'GET',
+      url: `/sessions/${chat.id}`,
+      headers: { cookie: s.cookie },
+    });
+    expect(dto.json().session.provider).toBe('codex');
+    const sent = await post(`/sessions/${chat.id}/instructions`, s.cookie, {
+      text: 'and test it',
+      model: 'gpt-5.5',
+      idempotencyKey: randomUUID(),
+    });
+    expect(sent.statusCode).toBe(201);
+    s.agent.ws.close();
+  });
+
+  it('a Claude Code chat says nothing about the agent (older PCs read it as always)', async () => {
+    const s = await codexPc('2.5.0');
+    const res = await post(`/devices/${s.deviceId}/sessions`, s.cookie, {
+      projectPath: String.raw`C:\work\api`,
+      text: 'Set up',
+      idempotencyKey: randomUUID(),
+    });
+    expect(res.statusCode).toBe(201);
+    const frame = await s.agent.next(
+      (m) =>
+        m['eventType'] === 'command.execute' &&
+        (m['payload'] as { commandType: string }).commandType === 'session.start',
+    );
+    expect(frame['payload']).not.toHaveProperty('provider');
+    s.agent.ws.close();
+  });
+});
+
 describe('continuing an ended session', () => {
   async function ended(agentVersion: string) {
     const s = await setup();

@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
-/** Coding-agent providers. Only `claude-code` is implemented in the MVP. */
-export const ProviderId = z.enum(['claude-code']);
+/** Coding-agent providers. Claude Code runs today; Codex (OpenAI's coding agent) is being added. */
+export const ProviderId = z.enum(['claude-code', 'codex']);
 export type ProviderId = z.infer<typeof ProviderId>;
 
 /**

@@ -1,5 +1,6 @@
 'use client';
 
+import { agentName } from '@pocket-agent/core';
 import { SessionResponse, type AgentSessionDto } from '@pocket-agent/protocol';
 import { ArrowLeft, FolderOpen, Laptop, X } from 'lucide-react';
 import Link from 'next/link';
@@ -7,7 +8,7 @@ import { Dialog } from 'radix-ui';
 import { useCallback, useMemo, useState, useEffect } from 'react';
 import { duration } from '@/components/agents/agents-view';
 import { CapabilityList } from '@/components/agents/capabilities';
-import { ChatMessages } from '@/components/agents/chat-messages';
+import { AgentName, ChatMessages } from '@/components/agents/chat-messages';
 import { Composer, EndSessionButton, SessionControls, useCommands } from '@/components/agents/remote-control';
 import {
   SessionAvatar,
@@ -305,26 +306,28 @@ export function AgentDetail({ id }: { id: string }) {
           {feed.error}
         </p>
       ) : (
-        <ChatMessages
-          items={
-            // The question being asked is shown below, not also in the conversation.
-            question ? items.filter((i) => !(i.kind === 'question' && i.state === 'running')) : items
-          }
-          typing={typingKind(s)}
-          header={
-            feed.hasMore && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="self-center rounded-full"
-                disabled={feed.loadingMore}
-                onClick={() => void feed.loadMore()}
-              >
-                {feed.loadingMore ? 'Loading…' : 'Load older messages'}
-              </Button>
-            )
-          }
-        />
+        <AgentName.Provider value={agentName(s.provider)}>
+          <ChatMessages
+            items={
+              // The question being asked is shown below, not also in the conversation.
+              question ? items.filter((i) => !(i.kind === 'question' && i.state === 'running')) : items
+            }
+            typing={typingKind(s)}
+            header={
+              feed.hasMore && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="self-center rounded-full"
+                  disabled={feed.loadingMore}
+                  onClick={() => void feed.loadMore()}
+                >
+                  {feed.loadingMore ? 'Loading…' : 'Load older messages'}
+                </Button>
+              )
+            }
+          />
+        </AgentName.Provider>
       )}
 
       {(question || permissions.length > 0) && (

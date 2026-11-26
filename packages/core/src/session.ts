@@ -4,7 +4,7 @@ import {
   LIVE_SETTINGS_METADATA,
   RESUME_ANY_FOLDER_AGENT_VERSION,
   RESUME_MIN_AGENT_VERSION,
-  CODEX_RESUME_AGENT_VERSION,
+  resumeAgentVersion,
   versionBelow,
   type AgentSessionDto,
   type ApprovalDto,
@@ -13,6 +13,7 @@ import {
 } from '@pocket-agent/protocol';
 import { parseQuestions } from './chat.js';
 import { MODE_NAME } from './commands.js';
+import { agentProduct } from './providers.js';
 
 /**
  * What a chat may do and how it says so, the same on the web and the phone: who can send
@@ -55,13 +56,15 @@ export function deliveryHint(s: AgentSessionDto): string {
 export function resumeBlocker(s: AgentSessionDto, device: DeviceDto | undefined): string | null {
   const ended = 'This session has ended.';
   if (!device || device.status === 'Revoked') return ended;
-  if (s.provider === 'codex') {
-    // Continued by the PC's Codex (agent 2.6.0 on), which must still be there and signed in.
-    if (versionBelow(device.agentVersion, CODEX_RESUME_AGENT_VERSION))
+  if (s.provider === 'codex' || s.provider === 'antigravity') {
+    // Continued by the PC's own agent (a PC agent that knows how), still there and signed in.
+    const name = agentProduct(s.provider);
+    if (versionBelow(device.agentVersion, resumeAgentVersion(s.provider)))
       return `${ended} To continue it from here, update Pocket Agent on the PC: \`pocket-agent update\``;
-    const codex = device.agents.find((a) => a.provider === 'codex');
-    if (!codex) return `${ended} Codex isn’t installed on this PC any more.`;
-    if (!codex.signedIn) return `${ended} To continue it, sign in to Codex on the PC (\`codex login\`).`;
+    const agent = device.agents.find((a) => a.provider === s.provider);
+    if (!agent) return `${ended} ${name} isn’t installed on this PC any more.`;
+    if (!agent.signedIn)
+      return `${ended} To continue it, sign in to ${name} on the PC (\`${s.provider === 'codex' ? 'codex login' : 'agy'}\`).`;
     return null;
   }
   if (s.provider !== 'claude-code') return ended;

@@ -537,6 +537,26 @@ describe('continuing an ended session', () => {
     s.agent.ws.close();
   });
 
+  it('an Antigravity chat continues on a PC from 2.9.0 with Antigravity signed in', async () => {
+    const AGY = { provider: 'antigravity' as const, version: '1.5.12', signedIn: true, models: [] };
+    const s = await ended('2.8.0');
+    await t.ctx.prisma.agentSession.update({
+      where: { id: s.session.id },
+      data: { provider: 'antigravity' },
+    });
+    await t.ctx.prisma.device.update({ where: { id: s.deviceId }, data: { agents: [AGY] } });
+    expect((await resume(s)).json().error).toBe('agent_outdated');
+    await t.ctx.prisma.device.update({ where: { id: s.deviceId }, data: { agentVersion: '2.9.0' } });
+    expect((await resume(s)).statusCode).toBe(201);
+    const frame = await s.agent.next((m) => m['eventType'] === 'command.execute');
+    expect(frame['payload']).toMatchObject({
+      commandType: 'session.start',
+      provider: 'antigravity',
+      resume: true,
+    });
+    s.agent.ws.close();
+  });
+
   it('a Codex chat continues on a PC from 2.6.0 with Codex signed in, named for the PC', async () => {
     const CODEX = { provider: 'codex' as const, version: '0.172.0', signedIn: true, models: [] };
     const s = await ended('2.5.0');

@@ -13,14 +13,14 @@ import {
   SessionControlRequest,
   StartSessionRequest,
   providerAgentVersion,
-  CODEX_RESUME_AGENT_VERSION,
+  resumeAgentVersion,
+  ProviderId,
   OtherAgent,
   versionBelow,
   type AttachmentRef,
   type CommandKind,
   type TurnEffort,
   type TurnMode,
-  type ProviderId,
 } from '@pocket-agent/protocol';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
@@ -342,13 +342,19 @@ export async function commandRoutes(app: FastifyInstance, ctx: Services): Promis
     if (!body) return;
     if (!s.endedAt) return bad(reply, 'session_running', 'This session is still running. Send it a message.');
     if (s.device.revokedAt) return bad(reply, 'device_revoked', 'This device was revoked.');
-    // Codex chats continue on PCs that know how (from agent 2.6.0), with Codex still signed in.
-    const other = s.provider === 'codex' ? ('codex' as const) : undefined;
-    if (s.provider !== 'claude-code' && !other)
-      return bad(reply, 'not_supported', 'This chat can’t be continued from here.');
+    // Another agent's chat continues on PCs that know how, with that agent still signed in.
+    const provider = ProviderId.safeParse(s.provider);
+    if (!provider.success) return bad(reply, 'not_supported', 'This chat can’t be continued from here.');
+    const other = provider.data === 'claude-code' ? undefined : provider.data;
     if (
       other &&
-      outdated(reply, s.device.agentVersion, CODEX_RESUME_AGENT_VERSION, 'Continuing a Codex chat', 409)
+      outdated(
+        reply,
+        s.device.agentVersion,
+        resumeAgentVersion(other),
+        `Continuing a ${agentProduct(other)} chat`,
+        409,
+      )
     )
       return;
     if (outdated(reply, s.device.agentVersion, RESUME_MIN_AGENT_VERSION, 'Continuing a session', 409)) return;

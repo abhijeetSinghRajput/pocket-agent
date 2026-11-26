@@ -108,6 +108,18 @@ export function providerAgentVersion(provider: string): string {
 /** First Local Agent version that applies a mode chosen for a Codex chat (Manual / Auto / Plan). */
 export const CODEX_MODES_AGENT_VERSION = '2.7.0';
 
+/** First Local Agent version that continues an ended Antigravity chat. */
+export const ANTIGRAVITY_RESUME_AGENT_VERSION = '2.9.0';
+
+/** First Local Agent version that continues an ended chat of this agent. */
+export function resumeAgentVersion(provider: string): string {
+  return provider === 'antigravity'
+    ? ANTIGRAVITY_RESUME_AGENT_VERSION
+    : provider === 'codex'
+      ? CODEX_RESUME_AGENT_VERSION
+      : RESUME_MIN_AGENT_VERSION;
+}
+
 /** First Local Agent version that continues an ended Codex chat (Claude's: RESUME_MIN_AGENT_VERSION). */
 export const CODEX_RESUME_AGENT_VERSION = '2.6.0';
 

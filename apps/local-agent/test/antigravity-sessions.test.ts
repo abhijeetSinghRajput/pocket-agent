@@ -224,6 +224,24 @@ describe('Antigravity chats', () => {
     expect(h.registry.get('s-1')).toBeUndefined();
   });
 
+  it('continues an ended chat: Antigravity reopens the session (no history sent again)', async () => {
+    const h = harness();
+    const id = await h.agy.start({
+      projectPath: h.project,
+      prompt: 'and now',
+      commandId: 'c9',
+      resumeSessionId: 's-old',
+    });
+    expect(id).toBe('s-old');
+    expect(h.server.requests('session/new')).toHaveLength(0);
+    expect(h.server.requests('session/resume')[0]!['params']).toEqual({
+      sessionId: 's-old',
+      cwd: path.resolve(h.project),
+      mcpServers: [],
+    });
+    expect(h.registry.get('s-old')).toMatchObject({ provider: 'antigravity', mode: 'managed' });
+  });
+
   it('names a tool by what it does, paths cleaned', () => {
     expect(describeTool({ kind: 'read', locations: [{ path: '/D:/x/y.md' }] })).toEqual({
       toolName: 'Read',

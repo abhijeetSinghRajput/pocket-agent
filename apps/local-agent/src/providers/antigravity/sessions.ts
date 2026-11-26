@@ -112,16 +112,22 @@ export class AntigravitySessions implements ManagedRuntime {
     resumeSessionId?: string;
     files?: LocalFile[];
   }): Promise<string> {
-    if (input.resumeSessionId) throw new Error('not_supported');
     const projectPath = path.resolve(input.projectPath);
     const st = await stat(projectPath).catch(() => null);
     if (!st?.isDirectory()) throw new Error(`Not a directory: ${projectPath}`);
     const client = await this.ensureClient();
-    const created = await client.request<{ sessionId: string; models?: { currentModelId?: string } }>(
-      'session/new',
-      { cwd: projectPath, mcpServers: [] },
+    // An ended chat continues: Antigravity reopens the session (its whole conversation) from its
+    // own history on this PC, without sending it again.
+    const created = await client.request<{ sessionId?: string; models?: { currentModelId?: string } }>(
+      input.resumeSessionId ? 'session/resume' : 'session/new',
+      {
+        ...(input.resumeSessionId ? { sessionId: input.resumeSessionId } : {}),
+        cwd: projectPath,
+        mcpServers: [],
+      },
     );
-    const id = created.sessionId;
+    const id = created.sessionId ?? input.resumeSessionId;
+    if (!id) throw new Error('Antigravity did not start a session');
     const c: Chat = {
       id,
       inbox: [],

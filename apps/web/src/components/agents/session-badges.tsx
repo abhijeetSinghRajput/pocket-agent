@@ -105,6 +105,12 @@ export function sessionKind(s: Pick<AgentSessionDto, 'mode' | 'metadata' | 'capa
       : s.metadata?.['entrypoint'] === 'cli'
         ? 'Terminal'
         : 'Claude Code';
+  if (s.metadata?.['watch'] === 'status') {
+    return {
+      label: `${where} · status only`,
+      hint: 'Started by you in the terminal. Antigravity keeps its conversation to itself, so only whether it is working shows here.',
+    };
+  }
   if (s.metadata?.['transcript'] === 'watched') {
     return {
       label: `${where} · watch only`,

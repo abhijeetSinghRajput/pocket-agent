@@ -101,6 +101,9 @@ export class AntigravitySessions implements ManagedRuntime {
   }
 
   isManaged = (id: string) => this.chats.has(id);
+  /** Chats this PC agent ran (or runs): never shown as ones started in the terminal. */
+  private readonly ours = new Set<string>();
+  isOurs = (id: string) => this.chats.has(id) || this.ours.has(id);
 
   async start(input: {
     projectPath: string;
@@ -140,6 +143,7 @@ export class AntigravitySessions implements ManagedRuntime {
       waiting: new Set(),
     };
     this.chats.set(id, c);
+    this.ours.add(id);
     const model = input.model ?? created.models?.currentModelId;
     this.registry.announce(
       {

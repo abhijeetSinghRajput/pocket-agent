@@ -157,6 +157,25 @@ export type CapabilityRow = { label: string; state: 'yes' | 'soon' | 'no'; detai
 export function capabilityRows(s: AgentSessionDto): CapabilityRow[] {
   const c = s.capabilities;
   const managed = s.mode === 'managed';
+  if (!managed && s.metadata?.['watch'] === 'status') {
+    // An Antigravity chat started in the terminal: Antigravity shares only whether it works.
+    const why =
+      'Antigravity runs this chat in the terminal by itself: answer it there, or continue it here once it has ended.';
+    return [
+      {
+        label: 'Live status',
+        state: 'yes',
+        detail: 'Working or waiting, a few seconds late. Its messages stay on the PC.',
+      },
+      { label: 'Send instructions', state: 'no', detail: why },
+      { label: 'Stop / interrupt', state: 'no', detail: why },
+      {
+        label: 'Approve permissions remotely',
+        state: 'no',
+        detail: 'Antigravity asks in the terminal for this chat.',
+      },
+    ];
+  }
   if (!managed && s.metadata?.['transcript'] === 'watched') {
     // A Codex chat started on the PC, followed from Codex's own session file.
     const why =

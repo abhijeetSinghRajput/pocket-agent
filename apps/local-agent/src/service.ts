@@ -28,6 +28,11 @@ import type { ClaudeUsage, ModelOption, OtherAgent } from '@pocket-agent/protoco
 import { detectCodex } from './providers/codex/detect.js';
 import { detectAntigravity } from './providers/antigravity/detect.js';
 import { AntigravitySessions, spawnAcp } from './providers/antigravity/sessions.js';
+import {
+  antigravityConversations,
+  AntigravityWatcher,
+  listAntigravitySessions,
+} from './providers/antigravity/watch.js';
 import { spawnAppServer, type Transport } from './providers/codex/rpc.js';
 import { CodexSessions } from './providers/codex/sessions.js';
 import { readUsage } from './providers/claude-code/usage.js';
@@ -78,6 +83,8 @@ export class AgentService {
   private readonly discovery: ClaudeDiscovery;
   /** Codex chats the user runs in the terminal or VS Code, followed from Codex's session files. */
   private readonly codexWatch: CodexWatcher;
+  /** Antigravity chats the user runs in the terminal, by status only. */
+  private readonly antigravityWatch: AntigravityWatcher;
   private readonly router: CommandRouter;
   private hooksInstalled = false;
   private policy: Policy = {
@@ -167,6 +174,11 @@ export class AgentService {
     this.codexWatch = new CodexWatcher(this.registry, {
       dir: path.join(opts.codexDir ?? codexHome(), 'sessions'),
       isManaged: this.codex.isManaged,
+    });
+    this.antigravityWatch = new AntigravityWatcher(this.registry, {
+      dir: antigravityConversations(),
+      isOurs: this.antigravity.isOurs,
+      list: () => listAntigravitySessions(opts.acp ?? spawnAcp),
     });
     this.discovery = new ClaudeDiscovery(path.join(claudeDir, 'sessions'), this.registry, {
       // Neither the app's own sessions nor the agent's short helper sessions are "discovered".
@@ -356,6 +368,7 @@ export class AgentService {
     await this.ingest.start();
     this.discovery.start();
     this.codexWatch.start();
+    if (this.opts.antigravity !== false) this.antigravityWatch.start();
     this.expiryTimer = setInterval(() => this.observed.expire(), 5_000);
     this.link.start();
     if (this.opts.loadModels !== false) {
@@ -379,6 +392,7 @@ export class AgentService {
   async stop(): Promise<void> {
     this.discovery.stop();
     this.codexWatch.stop();
+    this.antigravityWatch.stop();
     if (this.expiryTimer) clearInterval(this.expiryTimer);
     if (this.usageTimer) clearInterval(this.usageTimer);
     if (this.agentsTimer) clearInterval(this.agentsTimer);

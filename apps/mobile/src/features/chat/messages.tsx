@@ -305,29 +305,6 @@ function UserMessage({ item }: { item: Of<'user'> }) {
       testID={cmd ? 'command-row' : undefined}
       accessibilityLabel={status && !err ? status : undefined}
     >
-      {/* As in Claude Code: the time above, the prompt in a quiet box. */}
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-        <Device
-          size={12}
-          color={c.mutedForeground}
-          strokeWidth={2}
-          accessibilityLabel={cmd ? 'Sent from Pocket Agent' : 'Typed on the PC'}
-        />
-        <T variant="caption" tone="muted" style={{ fontSize: 11, fontVariant: ['tabular-nums'] }}>
-          {clockTime(item.at)}
-        </T>
-        {tick && (
-          <Animated.View
-            key={cmd?.status ?? item.local}
-            entering={
-              cmd && cmd.status !== firstStatus ? enter.pop : item.local === 'failed' ? enter.pop : undefined
-            }
-            accessibilityLabel={status ?? (item.local === 'failed' ? 'Not sent' : 'Sending')}
-          >
-            <tick.Icon size={14} color={tick.color(c)} strokeWidth={2.2} />
-          </Animated.View>
-        )}
-      </View>
       {/* Long-press for the message's menu (Copy, Select text). */}
       <Pressable
         ref={bubble}
@@ -340,7 +317,7 @@ function UserMessage({ item }: { item: Of<'user'> }) {
           maxWidth: '88%',
           backgroundColor: c.bubbleOut,
           borderRadius: 16,
-          borderTopRightRadius: 6,
+          borderBottomRightRadius: 6,
           paddingHorizontal: 14,
           paddingVertical: 8,
         }}
@@ -378,6 +355,29 @@ function UserMessage({ item }: { item: Of<'user'> }) {
           </Press>
         )}
       </Pressable>
+      {/* Under the message, as in a messenger: where it came from, the time, its tick. */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+        <Device
+          size={12}
+          color={c.mutedForeground}
+          strokeWidth={2}
+          accessibilityLabel={cmd ? 'Sent from Pocket Agent' : 'Typed on the PC'}
+        />
+        <T variant="caption" tone="muted" style={{ fontSize: 11, fontVariant: ['tabular-nums'] }}>
+          {clockTime(item.at)}
+        </T>
+        {tick && (
+          <Animated.View
+            key={cmd?.status ?? item.local}
+            entering={
+              cmd && cmd.status !== firstStatus ? enter.pop : item.local === 'failed' ? enter.pop : undefined
+            }
+            accessibilityLabel={status ?? (item.local === 'failed' ? 'Not sent' : 'Sending')}
+          >
+            <tick.Icon size={14} color={tick.color(c)} strokeWidth={2.2} />
+          </Animated.View>
+        )}
+      </View>
       <BubbleMenu
         anchor={menu}
         text={item.text}
@@ -494,33 +494,34 @@ type Join = { joinAbove: boolean; joinBelow: boolean };
 function AssistantMessage({ item, ...join }: { item: Of<'assistant'> } & Join) {
   const { c } = useTheme();
   return (
-    <Step dot={alpha(c.mutedForeground, 0.45)} dotTop={16 + 7} {...join}>
-      <View style={{ paddingTop: 16 }}>
-        <T
-          variant="caption"
-          tone="muted"
-          style={{
-            position: 'absolute',
-            top: 0,
-            right: 0,
-            fontSize: 11,
-            lineHeight: 16,
-            fontVariant: ['tabular-nums'],
-          }}
-        >
-          {clockTime(item.at)}
-        </T>
+    <Step dot={alpha(c.mutedForeground, 0.45)} dotTop={7} {...join}>
+      <View>
         {/* No long-press on a reply: a press held on a table must stay free to scroll it. Copying
             is the button under the reply; your own messages keep their long-press menu. */}
         <View accessibilityLabel="Claude:">
           <Markdown text={item.text} />
         </View>
-        {/* As in the editor: the reply that ends a turn can be copied whole. */}
-        {!join.joinBelow && (
-          <View style={{ flexDirection: 'row', marginTop: 4, marginLeft: -8 }}>
+        {/* Under the reply: Copy (on the reply that ends a turn, as in the editor) and the time. */}
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 2,
+            marginTop: join.joinBelow ? 2 : 4,
+            marginLeft: join.joinBelow ? 0 : -8,
+          }}
+        >
+          {!join.joinBelow && (
             <CopyIconButton value={item.text} label="Copy response" size={40} testID="copy-response" />
-          </View>
-        )}
+          )}
+          <T
+            variant="caption"
+            tone="muted"
+            style={{ fontSize: 11, lineHeight: 16, fontVariant: ['tabular-nums'] }}
+          >
+            {clockTime(item.at)}
+          </T>
+        </View>
       </View>
     </Step>
   );

@@ -376,7 +376,13 @@ export function ApprovalCard({
             ) : (
               <>
                 {purpose && (
-                  <T variant="small" style={{ color: alpha(c.foreground, 0.85) }} testID="approval-purpose">
+                  <T
+                    variant="small"
+                    // A long reason never pushes Deny / Allow out of the sheet.
+                    numberOfLines={inSheet ? 4 : undefined}
+                    style={{ color: alpha(c.foreground, 0.85) }}
+                    testID="approval-purpose"
+                  >
                     {purpose}
                   </T>
                 )}

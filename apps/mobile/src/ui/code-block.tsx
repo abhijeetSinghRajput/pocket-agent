@@ -95,14 +95,19 @@ export function CodeBlock({
   };
   if (shell) {
     return (
-      <View style={[surface, style]} testID={testID}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-          contentContainerStyle={{ paddingHorizontal: 14, paddingVertical: 11 }}
-        >
-          <ShellText command={text} />
+      // A long script (many lines) scrolls down inside the block too, past `maxHeight`: whatever
+      // sits under it (Deny / Allow) stays in view.
+      <View style={[surface, { maxHeight }, style]} testID={testID}>
+        <ScrollView nestedScrollEnabled showsVerticalScrollIndicator keyboardShouldPersistTaps="handled">
+          <ScrollView
+            horizontal
+            nestedScrollEnabled
+            showsHorizontalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={{ paddingHorizontal: 14, paddingVertical: 11 }}
+          >
+            <ShellText command={text} />
+          </ScrollView>
         </ScrollView>
       </View>
     );

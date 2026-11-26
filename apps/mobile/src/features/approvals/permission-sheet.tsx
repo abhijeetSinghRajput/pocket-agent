@@ -63,7 +63,7 @@ export function PermissionSheet({
           {what.label} · {approval.toolName}
         </T>
         {purpose && (
-          <T variant="small" style={{ marginTop: 8 }}>
+          <T variant="small" numberOfLines={4} style={{ marginTop: 8 }}>
             {purpose}
           </T>
         )}

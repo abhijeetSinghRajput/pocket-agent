@@ -34,11 +34,10 @@ describe('OpenCode on the PC', () => {
   });
 
   it('its modes are its own agents (Build, Plan), set as the session’s mode option', () => {
-    expect(OPENCODE_PROFILE.mode('s', 'plan')).toEqual({
-      method: 'session/set_config_option',
-      params: { sessionId: 's', configId: 'mode', value: 'plan' },
-    });
-    expect(OPENCODE_PROFILE.mode('s', 'auto')?.params).toMatchObject({ value: 'build' });
+    expect(OPENCODE_PROFILE.mode('s', 'plan')).toEqual([
+      { method: 'session/set_config_option', params: { sessionId: 's', configId: 'mode', value: 'plan' } },
+    ]);
+    expect(OPENCODE_PROFILE.mode('s', 'auto')[0]?.params).toMatchObject({ value: 'build' });
     expect(OPENCODE_PROFILE.toAgentModel?.('opencode::big-pickle')).toBe('opencode/big-pickle');
   });
 });

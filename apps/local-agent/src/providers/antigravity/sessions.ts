@@ -67,6 +67,8 @@ interface Chat {
   closed: boolean;
   /** Antigravity's reply so far, in pieces (said as one message). */
   text: string;
+  /** What is known of each tool call so far (its details come in pieces). */
+  calls: Map<string, Json>;
   /** Tool calls started, with what the chat showed for them. */
   tools: Map<string, { toolName: string; input: string }>;
   /** Permission requests waiting for the phone. */
@@ -78,11 +80,16 @@ interface Chat {
 
 /** What differs between the coding agents spoken to over ACP (Antigravity, OpenCode). */
 export interface AcpProfile {
-  provider: 'antigravity' | 'opencode';
+  provider: 'antigravity' | 'opencode' | 'copilot';
   /** In a sentence: "Antigravity asked…". */
   name: string;
-  /** The request that switches a session's mode (null: this mode isn't offered). */
-  mode: (sessionId: string, mode: TurnMode) => { method: string; params: Json } | null;
+  /** The requests that switch a session to a mode (none: this mode isn't offered). */
+  mode: (sessionId: string, mode: TurnMode) => Array<{ method: string; params: Json }>;
+  /**
+   * How an ended chat is reopened: 'load' replays its history to us (ignored: the phone has it),
+   * the default 'resume' doesn't.
+   */
+  resume?: 'load';
   /** The app's model id → the agent's own, and back (ids the protocol can't carry are encoded). */
   toAgentModel?: (id: string) => string;
   toAppModel?: (id: string) => string;
@@ -91,10 +98,9 @@ export interface AcpProfile {
 export const ANTIGRAVITY_PROFILE: AcpProfile = {
   provider: 'antigravity',
   name: 'Antigravity',
-  mode: (sessionId, mode) => ({
-    method: 'session/set_mode',
-    params: { sessionId, modeId: ANTIGRAVITY_MODE[mode] },
-  }),
+  mode: (sessionId, mode) => [
+    { method: 'session/set_mode', params: { sessionId, modeId: ANTIGRAVITY_MODE[mode] } },
+  ],
 };
 
 /**
@@ -148,7 +154,12 @@ export class AcpSessions implements ManagedRuntime {
     // An ended chat continues: Antigravity reopens the session (its whole conversation) from its
     // own history on this PC, without sending it again.
     const created = await client.request<{ sessionId?: string; models?: { currentModelId?: string } }>(
-      input.resumeSessionId ? 'session/resume' : 'session/new',
+      !input.resumeSessionId
+        ? 'session/new'
+        : this.profile.resume === 'load'
+          ? // The history it replays arrives before the chat is known here, so it is dropped.
+            'session/load'
+          : 'session/resume',
       {
         ...(input.resumeSessionId ? { sessionId: input.resumeSessionId } : {}),
         cwd: projectPath,
@@ -165,6 +176,7 @@ export class AcpSessions implements ManagedRuntime {
       interrupted: false,
       closed: false,
       text: '',
+      calls: new Map(),
       tools: new Map(),
       waiting: new Set(),
     };
@@ -317,8 +329,9 @@ export class AcpSessions implements ManagedRuntime {
       this.registry.setMetadata(c.id, { model });
     }
     if (mode && mode !== c.mode) {
-      const change = this.profile.mode(c.id, mode);
-      if (change) await client.request(change.method, change.params);
+      for (const change of this.profile.mode(c.id, mode)) {
+        await client.request(change.method, change.params);
+      }
       c.mode = mode;
     }
   }
@@ -386,6 +399,7 @@ export class AcpSessions implements ManagedRuntime {
     c.current = null;
     c.busy = false;
     c.tools.clear();
+    c.calls.clear();
     this.cancelWaiting(c);
     void this.pump(c);
   }
@@ -437,11 +451,15 @@ export class AcpSessions implements ManagedRuntime {
     if (!id) return;
     const status = String(u['status'] ?? '');
     let shown = c.tools.get(id);
-    // Announced before its details (OpenCode first says only "bash"): shown once it runs.
-    if (!shown && status === 'pending') return;
+    // Its details come in pieces (OpenCode first says only "bash"; Copilot says all at once and
+    // then only the status): what is known is kept together.
+    const call = mergeCall(c.calls.get(id), u);
+    c.calls.set(id, call);
+    // Shown once it runs, or as soon as it says what it is (a permission request may follow).
+    if (!shown && status === 'pending' && !hasDetail(call)) return;
     if (!shown) {
       this.flushText(c);
-      shown = describeTool(u);
+      shown = describeTool(call);
       c.tools.set(id, shown);
       this.registry.event(c.id, 'agent.tool.started', { toolUseId: id, ...shown });
     }
@@ -469,9 +487,17 @@ export class AcpSessions implements ManagedRuntime {
     if (method !== 'session/request_permission' || !c || c.closed)
       throw new Error(`${method} is not supported by Pocket Agent`);
     const options = Array.isArray(params['options']) ? (params['options'] as Json[]) : [];
-    const call = (params['toolCall'] ?? {}) as Json;
-    const what = describeTool(call);
-    const toolCallId = String(call['toolCallId'] ?? '');
+    const toolCallId = String(((params['toolCall'] ?? {}) as Json)['toolCallId'] ?? '');
+    // The request says most about the call (Copilot's later updates say only its status).
+    const call = mergeCall(c.calls.get(toolCallId), (params['toolCall'] ?? {}) as Json);
+    if (toolCallId) c.calls.set(toolCallId, call);
+    const what = c.tools.get(toolCallId) ?? describeTool(call);
+    if (toolCallId && !c.tools.has(toolCallId)) {
+      // The step shows in the chat as what was asked about (it runs once allowed).
+      this.flushText(c);
+      c.tools.set(toolCallId, what);
+      this.registry.event(c.id, 'agent.tool.started', { toolUseId: toolCallId, ...what });
+    }
     // Unique on this PC: the chat's id, then the tool call's.
     const requestId = truncate(`${c.id}:${toolCallId || this.now()}`, 200);
     const remembers = options.some((o) => o['kind'] === 'allow_always');
@@ -562,7 +588,7 @@ export function describeTool(u: Json): { toolName: string; input: string } {
   const locations = Array.isArray(u['locations']) ? (u['locations'] as Json[]) : [];
   const file =
     cleanPath(locations[0]?.['path']) ??
-    cleanPath(raw['Path'] ?? raw['AbsolutePath'] ?? raw['TargetFile'] ?? raw['filePath']);
+    cleanPath(raw['Path'] ?? raw['AbsolutePath'] ?? raw['TargetFile'] ?? raw['filePath'] ?? raw['path']);
   const name = String(u['name'] ?? u['title'] ?? '');
   switch (u['kind']) {
     case 'execute':
@@ -571,7 +597,7 @@ export function describeTool(u: Json): { toolName: string; input: string } {
         input: summarizeToolInput('Bash', { command: raw['CommandLine'] ?? raw['command'] ?? u['title'] }),
       };
     case 'edit': {
-      const toolName = name === 'write_file' || name === 'write' ? 'Write' : 'Edit';
+      const toolName = /^(write|create)/i.test(name) ? 'Write' : 'Edit';
       return { toolName, input: summarizeToolInput(toolName, { file_path: file }) };
     }
     case 'read':
@@ -588,10 +614,32 @@ export function describeTool(u: Json): { toolName: string; input: string } {
   }
 }
 
+/** A tool call's details so far, with what an update adds (empty values never replace known ones). */
+function mergeCall(known: Json | undefined, u: Json): Json {
+  const out: Json = { ...(known ?? {}) };
+  for (const key of ['kind', 'title', 'name', 'status'] as const) {
+    if (typeof u[key] === 'string' && u[key]) out[key] = u[key];
+  }
+  const raw = u['rawInput'];
+  if (raw && typeof raw === 'object' && Object.keys(raw).length) {
+    out['rawInput'] = { ...((out['rawInput'] as Json | undefined) ?? {}), ...(raw as Json) };
+  }
+  if (Array.isArray(u['locations']) && u['locations'].length) out['locations'] = u['locations'];
+  return out;
+}
+
+/** Does the call say what it is about yet (the command, the file, the page…). */
+function hasDetail(call: Json): boolean {
+  const raw = (call['rawInput'] ?? {}) as Json;
+  if (call['kind'] === 'execute') return typeof (raw['command'] ?? raw['CommandLine']) === 'string';
+  return Object.keys(raw).some((k) => k !== 'cwd');
+}
+
 /** What a finished tool said (its output, or why it failed). */
 function toolOutput(u: Json): string {
   if (typeof u['rawOutput'] === 'string') return u['rawOutput'];
-  const out = (u['rawOutput'] as Json | undefined)?.['output'];
+  const rawOutput = u['rawOutput'] as Json | undefined;
+  const out = rawOutput?.['output'] ?? rawOutput?.['content'];
   if (typeof out === 'string') return out;
   const content = Array.isArray(u['content']) ? (u['content'] as Json[]) : [];
   return content

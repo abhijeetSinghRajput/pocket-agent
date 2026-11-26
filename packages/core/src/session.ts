@@ -56,7 +56,12 @@ export function deliveryHint(s: AgentSessionDto): string {
 export function resumeBlocker(s: AgentSessionDto, device: DeviceDto | undefined): string | null {
   const ended = 'This session has ended.';
   if (!device || device.status === 'Revoked') return ended;
-  if (s.provider === 'codex' || s.provider === 'antigravity' || s.provider === 'opencode') {
+  if (
+    s.provider === 'codex' ||
+    s.provider === 'antigravity' ||
+    s.provider === 'opencode' ||
+    s.provider === 'copilot'
+  ) {
     // Continued by the PC's own agent (a PC agent that knows how), still there and signed in.
     const name = agentProduct(s.provider);
     if (versionBelow(device.agentVersion, resumeAgentVersion(s.provider)))
@@ -109,8 +114,19 @@ export const OPENCODE_MODES: readonly { id: TurnMode; name: string; description:
   { id: 'plan', name: MODE_NAME.plan, description: 'Plans, changes nothing' },
 ];
 
+/**
+ * Copilot's modes: it asks before commands and changes (Manual), lets its own review pass what it
+ * judges safe (Auto), or plans. "Allow all" and Autopilot are never offered here.
+ */
+export const COPILOT_MODES: readonly { id: TurnMode; name: string; description: string }[] = [
+  { id: 'default', name: MODE_NAME.default, description: 'Asks before commands and changes' },
+  { id: 'auto', name: MODE_NAME.auto, description: 'Safe actions run, the rest ask' },
+  { id: 'plan', name: MODE_NAME.plan, description: 'Plans the work first' },
+];
+
 /** What signs in to an agent on the PC. */
 export function signInCommand(provider: string): string {
+  if (provider === 'copilot') return 'copilot login';
   return provider === 'codex' ? 'codex login' : provider === 'opencode' ? 'opencode auth login' : 'agy';
 }
 
@@ -118,6 +134,7 @@ export function signInCommand(provider: string): string {
 export function modesFor(
   provider: string | null | undefined,
 ): readonly { id: TurnMode; name: string; description: string }[] {
+  if (provider === 'copilot') return COPILOT_MODES;
   return provider === 'codex' ? CODEX_MODES : provider === 'opencode' ? OPENCODE_MODES : MODES;
 }
 

@@ -10,10 +10,12 @@ import { opencodeCommand, toAppModel, toOpencodeModel } from './detect.js';
 export const OPENCODE_PROFILE: AcpProfile = {
   provider: 'opencode',
   name: 'OpenCode',
-  mode: (sessionId, mode) => ({
-    method: 'session/set_config_option',
-    params: { sessionId, configId: 'mode', value: mode === 'plan' ? 'plan' : 'build' },
-  }),
+  mode: (sessionId, mode) => [
+    {
+      method: 'session/set_config_option',
+      params: { sessionId, configId: 'mode', value: mode === 'plan' ? 'plan' : 'build' },
+    },
+  ],
   toAgentModel: toOpencodeModel,
   toAppModel,
 };

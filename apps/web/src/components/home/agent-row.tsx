@@ -1,22 +1,21 @@
 import Image from 'next/image';
+import { AgentLogo } from '@/components/agents/agent-logos';
 import './agent-row.css';
 
 /**
  * The agents Pocket Agent connects to: Claude Code in the middle, working today, and other coding
  * agents around it, faded, marked coming soon. Lines run from each down to Pocket Agent; Claude
- * Code's is live. Only `claude-code` is implemented (packages/protocol ProviderId), so the others
- * must stay marked as coming soon until they are.
+ * Code and Codex are live.
  */
 
 type Agent = { name: string; light: string; dark?: string };
 
 const LEFT: Agent[] = [
-  { name: 'Codex', light: 'codex_light', dark: 'codex_dark' },
   { name: 'Gemini CLI', light: 'gemini' },
   { name: 'Cursor', light: 'cursor_light', dark: 'cursor_dark' },
+  { name: 'GitHub Copilot', light: 'copilot', dark: 'copilot_dark' },
 ];
 const RIGHT: Agent[] = [
-  { name: 'GitHub Copilot', light: 'copilot', dark: 'copilot_dark' },
   { name: 'OpenCode', light: 'opencode', dark: 'opencode-dark' },
   { name: 'Qwen Code', light: 'qwen_light', dark: 'qwen_dark' },
 ];
@@ -53,13 +52,13 @@ export function AgentRow() {
   return (
     <figure
       className="agents"
-      aria-label="Works with Claude Code today. Codex, Gemini CLI, Cursor, GitHub Copilot, OpenCode and Qwen Code are coming soon."
+      aria-label="Works with Claude Code and Codex today. Gemini CLI, Cursor, GitHub Copilot, OpenCode and Qwen Code are coming soon."
     >
       <svg className="agents__lines" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden>
         {X.map((x, i) => (
           <path
             key={i}
-            className={i === 3 ? 'agents__line agents__line--live' : 'agents__line'}
+            className={i === 3 || i === 4 ? 'agents__line agents__line--live' : 'agents__line'}
             d={`M ${x} 46 C ${x} 74, ${HUB.x} 66, ${HUB.x} ${HUB.y}`}
             vectorEffect="non-scaling-stroke"
           />
@@ -67,14 +66,14 @@ export function AgentRow() {
       </svg>
 
       <ul className="agents__row">
-        {tiles.slice(0, 3).map((a, i) => (
+        {tiles.map((a, i) => (
           <li
             key={a!.name}
             className="agents__tile agents__tile--soon"
             style={{ left: `${X[i]}%` }}
-            title={`${a!.name}: coming soon`}
+            title={`${a.name}: coming soon`}
           >
-            <Logo a={a!} size={30} />
+            <Logo a={a} size={30} />
           </li>
         ))}
         <li
@@ -82,17 +81,20 @@ export function AgentRow() {
           style={{ left: `${X[3]}%` }}
           title="Claude Code: works today"
         >
-          <svg className="agents__scribble" viewBox="0 0 100 100" aria-hidden>
-            <path d="M14 22c18-12 52-14 70-4 10 10 8 46 4 62-6 12-48 14-66 8-12-8-14-44-8-64" />
-            <path d="M82 10l6-8M90 18l9-4M88 4l2-4" />
-          </svg>
           <Image src="/logos/agents/claude-code.svg" alt="Claude Code" width={40} height={40} />
+        </li>
+        <li
+          className="agents__tile agents__tile--codex"
+          style={{ left: `${X[4]}%` }}
+          title="Codex: works today"
+        >
+          <AgentLogo provider="codex" className="agents__codex-mark" />
         </li>
         {RIGHT.map((a, i) => (
           <li
             key={a.name}
             className="agents__tile agents__tile--soon"
-            style={{ left: `${X[4 + i]}%` }}
+            style={{ left: `${X[5 + i]}%` }}
             title={`${a.name}: coming soon`}
           >
             <Logo a={a} size={30} />
@@ -114,7 +116,11 @@ export function AgentRow() {
       </span>
 
       <span className="agents__hub" style={{ left: `${HUB.x}%`, top: `${HUB.y}%` }}>
-        <Image src="/icons/logo-64.png" alt="Pocket Agent" width={36} height={36} />
+        <svg className="agents__scribble" viewBox="0 0 100 100" aria-hidden>
+          <path d="M14 22c18-12 52-14 70-4 10 10 8 46 4 62-6 12-48 14-66 8-12-8-14-44-8-64" />
+          <path d="M82 10l6-8M90 18l9-4M88 4l2-4" />
+        </svg>
+        <Image src="/icons/hero-pocket-agent.png" alt="Pocket Agent" width={46} height={46} />
       </span>
     </figure>
   );

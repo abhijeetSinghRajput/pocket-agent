@@ -24,7 +24,7 @@
   stroke-linecap: round;
 }
 
-/* Claude Code's line is the live one: solid brand colour, a pulse running down it */
+/* Connected agents get a solid brand colour and a pulse running down the line */
 .agents__line--live {
   stroke: var(--primary);
   stroke-width: 2;
@@ -95,9 +95,25 @@
   background: color-mix(in oklab, var(--card) 70%, transparent);
 }
 
-/* Claude Code: bigger, on the marker colour, circled by a hand-drawn scribble */
+/* Connected agent tiles use the same dark treatment. */
 .agents__row .agents__tile--claude {
   rotate: -7deg;
+}
+
+.agents__tile--codex {
+  top: 58px;
+  width: 60px;
+  height: 60px;
+  border: 2px solid #1c1712;
+  border-radius: 17px;
+  background: #1c1712;
+  z-index: 1;
+  animation: agents-in 600ms var(--ease-out) both, agents-bob 3.2s ease-in-out 800ms infinite;
+}
+
+.agents__tile--codex svg {
+  width: 36px;
+  height: 36px;
 }
 
 .agents__tile--claude {
@@ -113,7 +129,8 @@
     agents-bob 3.2s ease-in-out 800ms infinite;
 }
 
-:where(.dark) .agents__tile--claude {
+:where(.dark) .agents__tile--claude,
+:where(.dark) .agents__tile--codex {
   border-color: color-mix(in oklab, var(--primary) 60%, #fff);
   background: #0f0c0a;
 }
@@ -191,7 +208,7 @@
   width: 46px;
   height: 46px;
   border-radius: 14px;
-  background: var(--card);
+  background: transparent;
   box-shadow:
     0 0 0 6px color-mix(in oklab, var(--primary) 14%, transparent),
     0 8px 18px -8px rgba(30, 20, 10, 0.4);
@@ -325,6 +342,13 @@
     top: 46px;
     width: 58px;
     height: 58px;
+  }
+
+  .agents__tile--codex {
+    top: 50px;
+    width: 48px;
+    height: 48px;
+    border-radius: 14px;
   }
 
   .agents__tile--claude img {

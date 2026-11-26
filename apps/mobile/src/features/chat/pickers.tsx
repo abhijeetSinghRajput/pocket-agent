@@ -1,5 +1,5 @@
 import { EFFORTS, MODES } from '@pocket-agent/core';
-import type { ModelOption } from '@pocket-agent/protocol';
+import type { ModelOption, TurnMode } from '@pocket-agent/protocol';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import {
@@ -169,15 +169,18 @@ export function ModePicker({
   onChange,
   locked,
   live = false,
+  modes = MODES,
 }: {
   value: string;
   onChange: (v: string) => void;
   locked: string | null;
+  /** The agent's own modes (Codex has its own). */
+  modes?: readonly { id: TurnMode; name: string; description: string }[];
   /** The choice applies at once, to the turn that is running too. */
   live?: boolean;
 }) {
   const [open, setOpen] = useState(false);
-  const current = MODES.find((m) => m.id === value);
+  const current = modes.find((m) => m.id === value);
   const choose = (v: string) => {
     if (v !== value) tap();
     onChange(v);
@@ -217,7 +220,7 @@ export function ModePicker({
             disabled={!!locked}
             onPress={() => choose('')}
           />
-          {MODES.map((m) => (
+          {modes.map((m) => (
             <ChoiceRow
               key={m.id}
               name={m.name}

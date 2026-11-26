@@ -4,6 +4,7 @@ import {
   buildChat,
   commandError,
   NEW_CHAT_MODE,
+  modesFor,
   newChatModel,
   waitForSession,
 } from '@pocket-agent/core';
@@ -11,6 +12,7 @@ import {
   attachmentLimit,
   CommandResponse,
   PROVIDERS_AGENT_VERSION,
+  CODEX_MODES_AGENT_VERSION,
   RESUME_FILES_AGENT_VERSION,
   versionBelow,
   type CommandDto,
@@ -90,6 +92,7 @@ export function NewChatScreen({ deviceId, path, name }: { deviceId: string; path
   const codex = device?.agents.find((a) => a.provider === 'codex');
   const codexUsable = !!codex && !versionBelow(device?.agentVersion ?? '0', PROVIDERS_AGENT_VERSION);
   const isCodex = provider === 'codex' && codexUsable;
+  const codexModes = !versionBelow(device?.agentVersion ?? '0', CODEX_MODES_AGENT_VERSION);
   const agent = isCodex ? 'codex' : 'claude-code';
   // The first message once sent: shown as sent while the PC starts Claude.
   const [command, setCommand] = useState<CommandDto | null>(null);
@@ -158,7 +161,7 @@ export function NewChatScreen({ deviceId, path, name }: { deviceId: string; path
           idempotencyKey: key.current,
           ...(chosenModel ? { model: chosenModel } : {}),
           // Codex's approval settings come with approvals from the phone; it keeps its own for now.
-          ...(mode && !isCodex ? { permissionMode: mode as TurnMode } : {}),
+          ...(mode && (!isCodex || codexModes) ? { permissionMode: mode as TurnMode } : {}),
           ...(effort ? { effort: effort as TurnEffort } : {}),
           ...(files.ready.length ? { attachmentIds: files.ids } : {}),
         },
@@ -369,7 +372,9 @@ export function NewChatScreen({ deviceId, path, name }: { deviceId: string; path
                 {canAttach && <AttachButton disabled={files.room <= 0} onPress={() => setAttachOpen(true)} />}
                 {!locked && (
                   <>
-                    {!isCodex && <ModePicker value={mode} onChange={setMode} locked={null} />}
+                    {(!isCodex || codexModes) && (
+                      <ModePicker value={mode} onChange={setMode} locked={null} modes={modesFor(agent)} />
+                    )}
                     <ModelPicker
                       models={models}
                       value={chosenModel}

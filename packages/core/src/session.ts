@@ -90,6 +90,23 @@ export const MODES: readonly { id: TurnMode; name: string; description: string }
   { id: 'auto', name: MODE_NAME.auto, description: 'Safe actions run, risky ones ask' },
 ];
 
+/**
+ * Codex's modes, as its own approval and sandbox settings (applied from the next message). "Full
+ * access" is never offered here, like Claude's "Bypass permissions".
+ */
+export const CODEX_MODES: readonly { id: TurnMode; name: string; description: string }[] = [
+  { id: 'default', name: MODE_NAME.default, description: 'Asks before most commands' },
+  { id: 'auto', name: MODE_NAME.auto, description: 'Works in this folder, asks for anything more' },
+  { id: 'plan', name: MODE_NAME.plan, description: 'Reads and plans, asks before any change' },
+];
+
+/** The modes an agent offers: Claude Code's, or Codex's own. */
+export function modesFor(
+  provider: string | null | undefined,
+): readonly { id: TurnMode; name: string; description: string }[] {
+  return provider === 'codex' ? CODEX_MODES : MODES;
+}
+
 /** How much Claude thinks before answering. */
 export const EFFORTS = [
   { id: 'low', name: 'Low' },

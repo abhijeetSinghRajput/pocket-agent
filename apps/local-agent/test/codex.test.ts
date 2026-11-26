@@ -169,6 +169,39 @@ describe('Codex chats', () => {
     expect(h.statuses('c1')).toEqual(['Completed']);
   });
 
+  it('a chosen mode becomes Codex’s own settings, every turn; never full access', async () => {
+    const h = harness();
+    await h.codex.start({
+      projectPath: h.project,
+      prompt: 'look around',
+      commandId: 'c1',
+      permissionMode: 'plan',
+    });
+    expect(h.server.requests('thread/start')[0]!['params']).toMatchObject({
+      approvalPolicy: 'on-request',
+      sandbox: 'read-only',
+    });
+    await h.tick();
+    expect(h.server.requests('turn/start')[0]!['params']).toMatchObject({
+      approvalPolicy: 'on-request',
+      sandboxPolicy: { type: 'readOnly', networkAccess: false },
+    });
+    h.server.emit({ method: 'turn/started', params: { threadId: 'th-1', turn: { id: 'tu-1' } } });
+    // Switched to Manual for the next message: Codex asks before most commands.
+    expect(await h.codex.configure('th-1', { permissionMode: 'default' })).toBe(true);
+    h.codex.send('th-1', 'now fix it', { commandId: 'c2', expiresAt: Infinity });
+    h.server.emit({
+      method: 'turn/completed',
+      params: { threadId: 'th-1', turn: { id: 'tu-1', status: 'completed' } },
+    });
+    await h.tick();
+    expect(h.server.requests('turn/start')[1]!['params']).toMatchObject({
+      approvalPolicy: 'untrusted',
+      sandboxPolicy: { type: 'workspaceWrite', networkAccess: false },
+    });
+    expect(JSON.stringify(h.server.sent)).not.toMatch(/never|dangerFullAccess|danger-full-access/);
+  });
+
   it('runs queued messages one turn at a time, in order', async () => {
     const h = harness();
     await h.codex.start({ projectPath: h.project, prompt: 'first', commandId: 'c1' });

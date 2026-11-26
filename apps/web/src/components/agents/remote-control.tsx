@@ -10,6 +10,7 @@ import {
   END_TEXT,
   isBusy,
   MODES,
+  modesFor,
   modelLock,
   resumeBlocker,
 } from '@pocket-agent/core';
@@ -19,6 +20,7 @@ import {
   attachmentLimit,
   DeviceListResponse,
   RESUME_FILES_AGENT_VERSION,
+  CODEX_MODES_AGENT_VERSION,
   versionBelow,
   type AgentSessionDto,
   type DeviceDto,
@@ -128,12 +130,14 @@ function ModePicker({
   value,
   onChange,
   locked,
+  modes = MODES,
 }: {
   value: string;
   onChange: (v: string) => void;
   locked: string | null;
+  modes?: readonly (typeof MODES)[number][];
 }) {
-  const current = MODES.find((m) => m.id === value);
+  const current = modes.find((m) => m.id === value);
   return (
     <DropdownMenu.Root modal={false}>
       <DropdownMenu.Trigger
@@ -155,7 +159,7 @@ function ModePicker({
             <DropdownMenu.RadioItem value="" className={item}>
               <Choice name="Keep the session’s mode" />
             </DropdownMenu.RadioItem>
-            {MODES.map((m) => (
+            {modes.map((m) => (
               <DropdownMenu.RadioItem key={m.id} value={m.id} className={item}>
                 <Choice name={m.name} description={m.description} />
               </DropdownMenu.RadioItem>
@@ -357,6 +361,7 @@ export function Composer({
   const canInterrupt = showStop && session.capabilities.interrupt;
   // Codex keeps its approval settings for now (no Mode), and has its own models.
   const isCodex = session.provider === 'codex';
+  const codexModes = isCodex && !versionBelow(device?.agentVersion ?? '0', CODEX_MODES_AGENT_VERSION);
   const models =
     (isCodex ? device?.agents.find((a) => a.provider === 'codex')?.models : device?.models) ?? [];
   const [model, setModel] = useChosenModel(session.id, models);
@@ -366,7 +371,7 @@ export function Composer({
 
   // A session Pocket Agent runs switches mode or model at once, mid-task too (the chat shows
   // "You switched to …"); any other takes the choice with the next message sent from here.
-  const live = canConfigureLive(session, device);
+  const live = canConfigureLive(session, device) && !isCodex;
   async function applyNow(change: { permissionMode: string } | { model: string }) {
     if (!live) return;
     setError(null);
@@ -452,7 +457,7 @@ export function Composer({
     try {
       const choices = {
         ...(model && !modelLocked ? { model } : {}),
-        ...(mode && !modelLocked && !isCodex ? { permissionMode: mode } : {}),
+        ...(mode && !modelLocked && (!isCodex || codexModes) ? { permissionMode: mode } : {}),
         ...(effort && !modelLocked ? { effort } : {}),
       };
       const { command } = resuming
@@ -627,7 +632,14 @@ export function Composer({
             )}
             {!locked && (
               <>
-                {!isCodex && <ModePicker value={mode} onChange={chooseMode} locked={modelLocked} />}
+                {(!isCodex || codexModes) && (
+                  <ModePicker
+                    value={mode}
+                    onChange={chooseMode}
+                    locked={modelLocked}
+                    modes={modesFor(session.provider)}
+                  />
+                )}
                 <ModelPicker
                   models={models}
                   value={model}

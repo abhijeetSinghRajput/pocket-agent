@@ -1,6 +1,7 @@
 import {
   agentName,
   canConfigureLive,
+  modesFor,
   canInstruct,
   capabilityRows,
   commandError,
@@ -16,6 +17,7 @@ import {
   attachmentLimit,
   CommandResponse,
   RESUME_FILES_AGENT_VERSION,
+  CODEX_MODES_AGENT_VERSION,
   versionBelow,
   type AgentSessionDto,
   type ModelOption,
@@ -323,8 +325,9 @@ export function Composer({
   }, [canAttach]);
   const showStop = !session.endedAt && isBusy(session);
   const canInterrupt = showStop && session.capabilities.interrupt;
-  // Codex keeps its approval settings for now (no Mode), and has its own models.
+  // Codex has its own models and modes (a mode reaches PCs that apply it; it takes it per message).
   const isCodex = session.provider === 'codex';
+  const codexModes = isCodex && !versionBelow(device?.agentVersion ?? '0', CODEX_MODES_AGENT_VERSION);
   const models =
     (isCodex ? device?.agents.find((a) => a.provider === 'codex')?.models : device?.models) ?? [];
   const [model, setModel] = useChosenModel(session.id, models);
@@ -334,7 +337,7 @@ export function Composer({
 
   // A session Pocket Agent runs switches mode or model at once, mid-task too (the chat shows
   // "You switched to …"); any other takes the choice with the next message sent from here.
-  const live = canConfigureLive(session, device);
+  const live = canConfigureLive(session, device) && !isCodex;
   async function applyNow(change: { permissionMode: string } | { model: string }) {
     if (!live) return;
     setError(null);
@@ -389,7 +392,7 @@ export function Composer({
     onSending?.();
     const choices = {
       ...(model && !modelLocked ? { model } : {}),
-      ...(mode && !modelLocked && !isCodex ? { permissionMode: mode } : {}),
+      ...(mode && !modelLocked && (!isCodex || codexModes) ? { permissionMode: mode } : {}),
       ...(effort && !modelLocked ? { effort } : {}),
     };
     submit({
@@ -572,7 +575,15 @@ export function Composer({
           {canAttach && <AttachButton disabled={files.room <= 0} onPress={() => setAttachOpen(true)} />}
           {!locked && (
             <>
-              {!isCodex && <ModePicker value={mode} onChange={chooseMode} locked={modelLocked} live={live} />}
+              {(!isCodex || codexModes) && (
+                <ModePicker
+                  value={mode}
+                  onChange={chooseMode}
+                  locked={modelLocked}
+                  live={live}
+                  modes={modesFor(session.provider)}
+                />
+              )}
               <ModelPicker
                 models={models}
                 value={model}

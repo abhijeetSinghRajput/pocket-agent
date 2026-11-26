@@ -46,6 +46,33 @@ export const CODEX_APP_CONTEXT = `The user is talking to you through Pocket Agen
 
 type Json = Record<string, unknown>;
 
+/**
+ * A mode chosen in the app as Codex's own settings. Auto is Codex's default (work in the
+ * project, ask for anything more); Manual asks before most commands; Plan only reads and asks
+ * before any change. Never "full access": nothing runs with less protection than Codex's default.
+ */
+export function codexPolicy(mode: TurnMode | undefined): {
+  approvalPolicy: 'untrusted' | 'on-request';
+  sandbox: 'read-only' | 'workspace-write';
+  sandboxPolicy: Json;
+} {
+  const sandbox = mode === 'plan' ? 'read-only' : 'workspace-write';
+  return {
+    approvalPolicy: mode === 'default' ? 'untrusted' : 'on-request',
+    sandbox,
+    sandboxPolicy:
+      sandbox === 'read-only'
+        ? { type: 'readOnly', networkAccess: false }
+        : {
+            type: 'workspaceWrite',
+            writableRoots: [],
+            networkAccess: false,
+            excludeTmpdirEnvVar: false,
+            excludeSlashTmp: false,
+          },
+  };
+}
+
 interface Instruction {
   text: string;
   commandId?: string;
@@ -53,6 +80,7 @@ interface Instruction {
   expiresAt?: number;
   model?: string;
   effort?: TurnEffort;
+  permissionMode?: TurnMode;
   files?: LocalFile[];
 }
 
@@ -68,9 +96,10 @@ interface Thread {
   closed: boolean;
   /** The error already shown for the running turn (its end repeats it). */
   lastError?: string;
-  /** Model and effort for the next turns (the last ones chosen). */
+  /** Model, effort and mode for the next turns (the last ones chosen). */
   model?: string;
   effort?: TurnEffort;
+  mode?: TurnMode;
   /** Files of the running turn's file changes, by item (a file change request names only its item). */
   files: Map<string, string[]>;
   /** Approval requests waiting for the phone. */
@@ -109,10 +138,11 @@ export class CodexSessions implements ManagedRuntime {
     files?: LocalFile[];
   }): Promise<string> {
     const client = await this.ensureClient();
-    // Codex's own default protection: it asks before anything outside the project's sandbox.
+    // Codex's own default protection (Auto) unless another mode was chosen: never less.
+    const { approvalPolicy, sandbox } = codexPolicy(input.permissionMode);
     const settings = {
-      approvalPolicy: 'on-request',
-      sandbox: 'workspace-write',
+      approvalPolicy,
+      sandbox,
       ...(input.model ? { model: input.model } : {}),
       developerInstructions: CODEX_APP_CONTEXT,
     };
@@ -146,6 +176,7 @@ export class CodexSessions implements ManagedRuntime {
       waiting: new Set(),
       ...(input.model ? { model: input.model } : {}),
       ...(input.effort ? { effort: input.effort } : {}),
+      ...(input.permissionMode ? { mode: input.permissionMode } : {}),
     };
     this.threads.set(id, t);
     this.registry.announce(
@@ -187,18 +218,18 @@ export class CodexSessions implements ManagedRuntime {
   ): boolean {
     const t = this.threads.get(id);
     if (!t || t.closed) return false;
-    const { permissionMode: _mode, ...rest } = command ?? {};
-    t.inbox.push({ text, ...rest });
+    t.inbox.push({ text, ...(command ?? {}) });
     if (command?.commandId) this.ack(command.commandId, 'Accepted');
     void this.pump(t);
     return true;
   }
 
-  /** A new model applies from the next turn (a mode is Codex's approval setting: not yet). */
+  /** A new model or mode applies from the next turn (Codex takes its settings per turn). */
   async configure(id: string, change: { permissionMode?: TurnMode; model?: string }): Promise<boolean> {
     const t = this.threads.get(id);
     if (!t || t.closed) return false;
     if (change.model) t.model = change.model;
+    if (change.permissionMode) t.mode = change.permissionMode;
     return true;
   }
 
@@ -287,6 +318,7 @@ export class CodexSessions implements ManagedRuntime {
       t.lastError = undefined;
       if (item.model) t.model = item.model;
       if (item.effort) t.effort = item.effort;
+      if (item.permissionMode) t.mode = item.permissionMode;
       // session.start was already reported Executing; plain instructions are reported now.
       if (item.commandId && item.expiresAt !== undefined) this.ack(item.commandId, 'Executing');
       this.registry.event(t.id, 'agent.output', { role: 'user', text: truncate(item.text) });
@@ -298,6 +330,12 @@ export class CodexSessions implements ManagedRuntime {
           input: codexInput(item.text, item.files),
           ...(t.model ? { model: t.model } : {}),
           ...(t.effort ? { effort: t.effort } : {}),
+          // The chat's mode, every turn (a chat that never chose one keeps Codex's default).
+          ...(t.mode
+            ? (({ approvalPolicy, sandboxPolicy }) => ({ approvalPolicy, sandboxPolicy }))(
+                codexPolicy(t.mode),
+              )
+            : {}),
         });
         t.turnId ??= res.turn.id;
       } catch (err) {

@@ -6,8 +6,9 @@ import Animated, { useAnimatedStyle, useSharedValue, withSpring, withTiming } fr
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useUser } from '@/lib/auth';
 import { useApprovals, useNotifications } from '@/lib/data';
-import { dur, ease, settleSpring } from '@/lib/motion';
+import { dur, ease, enter, settleSpring } from '@/lib/motion';
 import { alpha, fonts, useTheme } from '@/lib/theme';
+import { useUpdateWaiting } from '@/features/shell/app-update';
 import { Avatar, CountBubble, T, tap } from '@/ui/core';
 import { TAB_BAR_HEIGHT } from '@/ui/screen';
 
@@ -31,6 +32,7 @@ export function TabBar({ state, emitter, navigateToTab }: TabBarProps) {
   const user = useUser();
   const waiting = useApprovals('pending').state.data?.length ?? 0;
   const unread = useNotifications().state.data?.unread ?? 0;
+  const updateWaiting = useUpdateWaiting();
   const [width, setWidth] = useState(0);
   const count = state.routes.length;
   const slot = width / count;
@@ -101,6 +103,25 @@ export function TabBar({ state, emitter, navigateToTab }: TabBarProps) {
                     }}
                   >
                     <Avatar name={user.name} url={user.avatarUrl} size={24} />
+                    {updateWaiting && (
+                      // An update is waiting (in Profile): a red dot on the avatar's corner.
+                      <Animated.View
+                        entering={enter.pop}
+                        pointerEvents="none"
+                        testID="update-dot"
+                        style={{
+                          position: 'absolute',
+                          top: -1,
+                          right: -1,
+                          width: 12,
+                          height: 12,
+                          borderRadius: 6,
+                          backgroundColor: c.destructive,
+                          borderWidth: 2,
+                          borderColor: c.bar,
+                        }}
+                      />
+                    )}
                   </View>
                 )}
                 {badge > 0 && (

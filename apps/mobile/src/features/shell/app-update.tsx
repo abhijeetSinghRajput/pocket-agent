@@ -4,7 +4,7 @@ import * as IntentLauncher from 'expo-intent-launcher';
 import { useRouter } from 'expo-router';
 import * as Updates from 'expo-updates';
 import { ArrowDownToLine, RefreshCw, Rocket } from 'lucide-react-native';
-import { useEffect, useEffectEvent, useRef, useState } from 'react';
+import { useEffect, useEffectEvent, useRef, useState, useSyncExternalStore } from 'react';
 import { Platform, View } from 'react-native';
 import { z } from 'zod';
 import { radius, useTheme } from '@/lib/theme';
@@ -39,6 +39,26 @@ const LatestApkSchema = z.object({
 });
 export type LatestApk = z.infer<typeof LatestApkSchema>;
 
+// The newest APK when it is newer than this app (null: none; undefined: not checked yet), shared
+// so the tab bar and Profile can show that an update is waiting.
+let apkState: LatestApk | null | undefined = undefined;
+const apkListeners = new Set<() => void>();
+function setApk(next: LatestApk | null | undefined) {
+  apkState = next;
+  for (const l of apkListeners) l();
+}
+const subscribeApk = (l: () => void) => {
+  apkListeners.add(l);
+  return () => void apkListeners.delete(l);
+};
+
+/** Is an update waiting: a newer APK to install, or a downloaded code update to restart into. */
+export function useUpdateWaiting(): boolean {
+  const apk = useSyncExternalStore(subscribeApk, () => apkState);
+  const { isUpdatePending } = Updates.useUpdates();
+  return !!apk || isUpdatePending;
+}
+
 const installedCode = () => Number(Application.nativeBuildVersion ?? '0') || 0;
 
 /** The newest APK, when it is newer than this app; null when this one is the newest. */
@@ -47,7 +67,9 @@ export async function newerApk(): Promise<LatestApk | null> {
   const res = await fetch(`${LATEST_URL}?t=${Date.now()}`, { cache: 'no-store' });
   if (!res.ok) throw new Error('Couldn’t check for updates right now.');
   const latest = LatestApkSchema.parse(await res.json());
-  return latest.versionCode > installedCode() ? latest : null;
+  const newer = latest.versionCode > installedCode() ? latest : null;
+  setApk(newer);
+  return newer;
 }
 
 /**
@@ -140,17 +162,20 @@ export function UpdateNotice() {
   return null;
 }
 
-/** Profile: this app's version, and its update (code or a new build), with what to do. */
-export function AppUpdateCard() {
+/**
+ * Profile: this app's version, and its update (code or a new build), with what to do. Each time
+ * `startSignal` goes up (the floating "update waiting" button), it starts the update by itself.
+ */
+export function AppUpdateCard({ startSignal = 0 }: { startSignal?: number }) {
   const { c } = useTheme();
   const { isUpdatePending, isChecking, isDownloading } = Updates.useUpdates();
-  const [latest, setLatest] = useState<LatestApk | null | undefined>(undefined);
+  const latest = useSyncExternalStore(subscribeApk, () => apkState);
+  const setLatest = setApk;
   const [progress, setProgress] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const check = async () => {
     setError(null);
-    setLatest(undefined);
     try {
       setLatest(await newerApk());
       // A code update made since the app started is fetched now (it is used from the restart).
@@ -184,6 +209,17 @@ export function AppUpdateCard() {
       setProgress(null);
     }
   };
+
+  const onStart = useEffectEvent(() => {
+    if (latest && progress === null) void update();
+    else if (!latest && isUpdatePending) restart();
+  });
+  useEffect(() => {
+    if (startSignal <= 0) return;
+    // After the page has started scrolling down to this card.
+    const t = setTimeout(onStart, 350);
+    return () => clearTimeout(t);
+  }, [startSignal]);
 
   const version = `${Application.nativeApplicationVersion ?? '—'} (${Application.nativeBuildVersion ?? '—'})`;
   const busy = progress !== null;

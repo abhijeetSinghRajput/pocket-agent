@@ -1,20 +1,21 @@
 import { formatDate } from '@pocket-agent/core';
 import * as Application from 'expo-application';
-import { LogOut, Moon, Smartphone, Sun } from 'lucide-react-native';
-import { useState } from 'react';
-import { View } from 'react-native';
+import { ArrowDown, LogOut, Moon, Smartphone, Sun } from 'lucide-react-native';
+import { useRef, useState, type ComponentRef } from 'react';
+import { ScrollView, useWindowDimensions, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 import { HealthCheckCard } from '@/features/profile/health-check';
-import { AppUpdateCard } from '@/features/shell/app-update';
+import { AppUpdateCard, useUpdateWaiting } from '@/features/shell/app-update';
 import { ApiStatus } from '@/features/profile/api-status';
 import { ClaudeUsageCard } from '@/features/profile/claude-usage';
 import { NotificationSettings } from '@/features/profile/notification-settings';
 import { setThemePreference, useThemePreference, type ThemePreference } from '@/lib/appearance';
 import { useAuth, useUser } from '@/lib/auth';
-import { enter } from '@/lib/motion';
-import { useTheme } from '@/lib/theme';
-import { Avatar, Button, Card, Press, T } from '@/ui/core';
-import { Screen } from '@/ui/screen';
+import { enter, exit } from '@/lib/motion';
+import { alpha, useTheme } from '@/lib/theme';
+import { Avatar, Button, Card, Press, T, thud } from '@/ui/core';
+import { Screen, TAB_BAR_HEIGHT } from '@/ui/screen';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Segmented } from '@/ui/form';
 import { Sheet } from '@/ui/sheet';
 
@@ -151,12 +152,90 @@ function SignOut() {
   );
 }
 
+/** A small round button floating over the page: an update is waiting further down. */
+function UpdateWaitingButton({ onPress }: { onPress: () => void }) {
+  const { c } = useTheme();
+  const insets = useSafeAreaInsets();
+  return (
+    <Animated.View
+      entering={enter.pop}
+      exiting={exit.fade}
+      pointerEvents="box-none"
+      style={{
+        position: 'absolute',
+        left: 0,
+        right: 0,
+        bottom: insets.bottom + TAB_BAR_HEIGHT + 16,
+        alignItems: 'center',
+      }}
+    >
+      <Press
+        accessibilityRole="button"
+        accessibilityLabel="An update is waiting. Go to it and install"
+        testID="update-waiting"
+        onPress={onPress}
+        scale={0.92}
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 8,
+          height: 44,
+          paddingLeft: 8,
+          paddingRight: 16,
+          borderRadius: 22,
+          backgroundColor: c.primary,
+          shadowColor: '#000',
+          shadowOpacity: 0.25,
+          shadowRadius: 10,
+          shadowOffset: { width: 0, height: 4 },
+          elevation: 6,
+        }}
+      >
+        <View
+          style={{
+            width: 28,
+            height: 28,
+            borderRadius: 14,
+            backgroundColor: alpha('#ffffff', 0.22),
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <ArrowDown size={16} color="#ffffff" strokeWidth={2.6} />
+        </View>
+        <T variant="smallMedium" style={{ color: '#ffffff' }}>
+          Update waiting
+        </T>
+      </Press>
+    </Animated.View>
+  );
+}
+
 /** Who is signed in, their Claude plan usage, and the few settings there are. */
 export function ProfileScreen() {
   const version = Application.nativeApplicationVersion;
   const build = Application.nativeBuildVersion;
+  const updateWaiting = useUpdateWaiting();
+  const { height } = useWindowDimensions();
+  const scroll = useRef<ComponentRef<typeof ScrollView>>(null);
+  const [cardY, setCardY] = useState<number | null>(null);
+  const [scrollY, setScrollY] = useState(0);
+  const [start, setStart] = useState(0);
+  // Shown while the update card is still below what is on screen.
+  const cardBelow = cardY !== null && cardY > scrollY + height - TAB_BAR_HEIGHT - 160;
+  const goToUpdate = () => {
+    thud();
+    scroll.current?.scrollTo({ y: Math.max(0, (cardY ?? 0) - 120), animated: true });
+    setStart((n) => n + 1);
+  };
   return (
-    <Screen title="Profile" contentStyle={{ paddingHorizontal: 16, gap: 12 }}>
+    <Screen
+      title="Profile"
+      contentStyle={{ paddingHorizontal: 16, gap: 12 }}
+      scrollRef={scroll}
+      onScroll={(e) => setScrollY(e.nativeEvent.contentOffset.y)}
+      overlay={updateWaiting && cardBelow ? <UpdateWaitingButton onPress={goToUpdate} /> : null}
+    >
       <Animated.View entering={enter.rise(0)}>
         <ProfileHeader />
       </Animated.View>
@@ -180,8 +259,8 @@ export function ProfileScreen() {
       <Animated.View entering={enter.rise(4)}>
         <ApiStatus />
       </Animated.View>
-      <Animated.View entering={enter.rise(5)}>
-        <AppUpdateCard />
+      <Animated.View entering={enter.rise(5)} onLayout={(e) => setCardY(e.nativeEvent.layout.y)}>
+        <AppUpdateCard startSignal={start} />
       </Animated.View>
       <Animated.View entering={enter.rise(5)}>
         <SignOut />

@@ -1,7 +1,15 @@
 import { useRouter } from 'expo-router';
 import { ArrowLeft } from 'lucide-react-native';
-import { type ReactNode } from 'react';
-import { RefreshControl, ScrollView, View, type StyleProp, type ViewStyle } from 'react-native';
+import { type ComponentRef, type ReactNode, type Ref } from 'react';
+import {
+  RefreshControl,
+  ScrollView,
+  View,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
+  type StyleProp,
+  type ViewStyle,
+} from 'react-native';
 import Animated from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { enter } from '@/lib/motion';
@@ -24,6 +32,9 @@ export function Screen({
   tabBar = true,
   contentStyle,
   pinned,
+  scrollRef,
+  onScroll,
+  overlay,
 }: {
   title: string;
   subtitle?: string;
@@ -41,6 +52,10 @@ export function Screen({
    * the title stays too.
    */
   pinned?: ReactNode;
+  scrollRef?: Ref<ComponentRef<typeof ScrollView>>;
+  onScroll?: (e: NativeSyntheticEvent<NativeScrollEvent>) => void;
+  /** Floats over the content, above the tab bar (e.g. a button that jumps down the page). */
+  overlay?: ReactNode;
 }) {
   const { c } = useTheme();
   const insets = useSafeAreaInsets();
@@ -82,6 +97,9 @@ export function Screen({
       )}
       {scroll ? (
         <ScrollView
+          ref={scrollRef}
+          onScroll={onScroll}
+          scrollEventThrottle={onScroll ? 32 : undefined}
           contentContainerStyle={[{ paddingBottom: bottom }, contentStyle]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
@@ -106,6 +124,7 @@ export function Screen({
           <View style={[{ flex: 1 }, contentStyle]}>{children}</View>
         </>
       )}
+      {overlay}
     </View>
   );
 }

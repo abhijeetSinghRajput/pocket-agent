@@ -75,7 +75,6 @@ import Animated, {
   type SharedValue,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Path, Svg } from 'react-native-svg';
 import { MatchAnchor, SearchQuery, useMark } from '@/features/chat/search-mark';
 import { Markdown } from '@/features/chat/markdown';
 import { SelectTextSheet } from '@/features/chat/select-text-sheet';
@@ -83,6 +82,7 @@ import { SentAttachments } from '@/features/chat/sent-attachments';
 import { dur, ease, enter, exit, STAGGER } from '@/lib/motion';
 import { alpha, fonts, radius, useTheme, type Colors } from '@/lib/theme';
 import { CopyIconButton } from '@/ui/copy';
+import { LabelSeparator } from '@/ui/separator';
 import { Divider, Dot, Press, T, thud } from '@/ui/core';
 
 type Of<K extends ChatItem['kind']> = Extract<ChatItem, { kind: K }>;
@@ -912,34 +912,8 @@ function Pill({ children, tone = 'muted' }: { children: ReactNode; tone?: 'muted
   );
 }
 
-/** The wavy hairline of a day separator (the web's .wavy-rule). */
-function WavyRule() {
-  const { c } = useTheme();
-  const waves = 80;
-  let d = 'M0 3';
-  for (let i = 0; i < waves; i++) d += ` Q${i * 12 + 3} 0 ${i * 12 + 6} 3 T${i * 12 + 12} 3`;
-  return (
-    <View aria-hidden style={{ flex: 1, height: 6, overflow: 'hidden' }}>
-      <Svg width={waves * 12} height={6} viewBox={`0 0 ${waves * 12} 6`}>
-        <Path d={d} fill="none" stroke={c.mutedForeground} strokeOpacity={0.35} strokeWidth={1.2} />
-      </Svg>
-    </View>
-  );
-}
-
 function DaySeparator({ at }: { at: string }) {
-  return (
-    <View
-      accessibilityLabel={dayLabel(at)}
-      style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 4 }}
-    >
-      <WavyRule />
-      <T variant="captionMedium" tone="muted">
-        {dayLabel(at)}
-      </T>
-      <WavyRule />
-    </View>
-  );
+  return <LabelSeparator label={dayLabel(at)} />;
 }
 
 // ── Typing indicator ─────────────────────────────────────────────────────────

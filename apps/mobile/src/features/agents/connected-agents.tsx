@@ -9,14 +9,12 @@ import { alpha, fonts, radius, useTheme } from '@/lib/theme';
 import { Badge, Card, Divider, T, type Tone } from '@/ui/core';
 import { CopyIconButton } from '@/ui/copy';
 import { EmptyState, Notice, Skeleton } from '@/ui/feedback';
+import { LabelSeparator } from '@/ui/separator';
 
-const TONE: Record<PcAgent['state'], Tone> = {
-  ready: 'success',
-  'signed-out': 'warning',
-  update: 'warning',
-  missing: 'muted',
-};
-// Ready ones first, then the ones a sign-in or update away, then the ones not on the PC.
+// Only a state that needs something gets a pill (no dot); ready says nothing, so the name and
+// account get the room, and "Not installed" is the separator above those agents.
+const TONE: Partial<Record<PcAgent['state'], Tone>> = { 'signed-out': 'warning', update: 'warning' };
+// Ready ones first, then the ones a sign-in or update away.
 const ORDER: Record<PcAgent['state'], number> = { ready: 0, 'signed-out': 1, update: 2, missing: 3 };
 
 /** One agent on a PC: its mark, name, where it stands, and the command that fixes it. */
@@ -27,48 +25,55 @@ function AgentRow({ agent: a }: { agent: PcAgent }) {
     <View
       testID={`connected-${a.provider}`}
       accessibilityLabel={`${name}: ${a.label}.${a.account ? ` Signed in as ${a.account}.` : ''} ${a.detail}`}
-      style={{
-        paddingHorizontal: 16,
-        paddingVertical: 14,
-        gap: 10,
-        opacity: a.state === 'missing' ? 0.6 : 1,
-      }}
+      style={{ paddingHorizontal: 16, paddingVertical: 14, gap: 10 }}
     >
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+        {/* An agent you can't chat with right now is muted; its pill and fix stay readable. */}
         <View
           style={{
-            width: 40,
-            height: 40,
-            borderRadius: 20,
-            backgroundColor: alpha(agentColor(a.provider, dark), 0.14),
+            flex: 1,
+            minWidth: 0,
+            flexDirection: 'row',
             alignItems: 'center',
-            justifyContent: 'center',
+            gap: 12,
+            opacity: a.state === 'ready' ? 1 : 0.5,
           }}
         >
-          <AgentLogo provider={a.provider} size={22} />
+          <View
+            style={{
+              width: 40,
+              height: 40,
+              borderRadius: 20,
+              backgroundColor: alpha(agentColor(a.provider, dark), 0.14),
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <AgentLogo provider={a.provider} size={22} />
+          </View>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <T variant="subheading" numberOfLines={1}>
+              {name}
+            </T>
+            {a.account && (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 1 }}>
+                <UserRound size={12} color={c.mutedForeground} strokeWidth={2.4} />
+                <T
+                  variant="smallMedium"
+                  numberOfLines={1}
+                  style={{ flexShrink: 1 }}
+                  testID={`account-${a.provider}`}
+                >
+                  {a.account}
+                </T>
+              </View>
+            )}
+            <T variant="caption" tone="muted" numberOfLines={2}>
+              {a.detail}
+            </T>
+          </View>
         </View>
-        <View style={{ flex: 1, minWidth: 0 }}>
-          <T variant="subheading" numberOfLines={1}>
-            {name}
-          </T>
-          {a.account && (
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 1 }}>
-              <UserRound size={12} color={c.mutedForeground} strokeWidth={2.4} />
-              <T
-                variant="smallMedium"
-                numberOfLines={1}
-                style={{ flexShrink: 1 }}
-                testID={`account-${a.provider}`}
-              >
-                {a.account}
-              </T>
-            </View>
-          )}
-          <T variant="caption" tone="muted" numberOfLines={2}>
-            {a.detail}
-          </T>
-        </View>
-        <Badge label={a.label} tone={TONE[a.state]} dot={a.state !== 'missing'} />
+        {TONE[a.state] && <Badge label={a.label} tone={TONE[a.state]} />}
       </View>
       {a.command && (
         <View
@@ -92,12 +97,30 @@ function AgentRow({ agent: a }: { agent: PcAgent }) {
   );
 }
 
-/** One PC: its name and whether it is online, then every agent as that PC last reported it. */
+function AgentList({ agents }: { agents: PcAgent[] }) {
+  return (
+    <Card>
+      {agents.map((a, i) => (
+        <View key={a.provider}>
+          {i > 0 && <Divider inset={16} />}
+          <AgentRow agent={a} />
+        </View>
+      ))}
+    </Card>
+  );
+}
+
+/**
+ * One PC: its name and whether it is online, then its agents as it last reported them: the ones
+ * on it, and under a separator, the ones it doesn't have.
+ */
 function PcCard({ device: d, index }: { device: DeviceDto; index: number }) {
   const { c } = useTheme();
   const online = d.status === 'Online';
-  const agents = [...pcAgents(d)].sort((x, y) => ORDER[x.state] - ORDER[y.state]);
-  const ready = agents.filter((a) => a.state === 'ready').length;
+  const all = pcAgents(d);
+  const agents = all.filter((a) => a.state !== 'missing').sort((x, y) => ORDER[x.state] - ORDER[y.state]);
+  const missing = all.filter((a) => a.state === 'missing');
+  const ready = all.filter((a) => a.state === 'ready').length;
   return (
     <Animated.View entering={enter.rise(index)} layout={layout} style={{ gap: 10 }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 4 }}>
@@ -113,7 +136,7 @@ function PcCard({ device: d, index }: { device: DeviceDto; index: number }) {
         </T>
         <View style={{ flex: 1 }} />
         <T variant="caption" tone="muted">
-          {ready} of {agents.length} ready
+          {ready} of {all.length} ready
         </T>
       </View>
       {!online && (
@@ -121,14 +144,15 @@ function PcCard({ device: d, index }: { device: DeviceDto; index: number }) {
           {`This PC is offline${d.lastHeartbeatAt ? ` (last seen ${timeAgo(d.lastHeartbeatAt)})` : ''}. This is what it reported last.`}
         </Notice>
       )}
-      <Card>
-        {agents.map((a, i) => (
-          <View key={a.provider}>
-            {i > 0 && <Divider inset={16} />}
-            <AgentRow agent={a} />
+      {agents.length > 0 && <AgentList agents={agents} />}
+      {missing.length > 0 && (
+        <>
+          <View style={{ marginTop: 6 }}>
+            <LabelSeparator label="Not installed" />
           </View>
-        ))}
-      </Card>
+          <AgentList agents={missing} />
+        </>
+      )}
     </Animated.View>
   );
 }

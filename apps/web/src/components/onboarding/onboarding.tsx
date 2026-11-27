@@ -160,7 +160,7 @@ function Welcome({ firstName, onStart }: { firstName: string | undefined; onStar
 
 /** The PC is online: a big tick that draws itself, then the way into the app. */
 function Connected({ device, onDone }: { device: DeviceDto; onDone: () => void }) {
-  useEffect(() => playSound('landed'), []);
+  useEffect(() => playSound('success'), []);
   return (
     <div
       className="flex min-h-dvh flex-col items-center justify-center px-6 text-center"

@@ -21,9 +21,9 @@ export function AddDeviceDialog({
 }) {
   const { step, now, regenerate: createCode } = usePairing({ active: open, knownDeviceIds, onPaired });
   const paired = step.kind === 'paired';
-  // The PC is in: the same sound as the app.
+  // The PC is in.
   useEffect(() => {
-    if (open && paired) playSound('landed');
+    if (open && paired) playSound('success');
   }, [open, paired]);
 
   return (

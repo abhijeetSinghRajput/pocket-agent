@@ -105,7 +105,7 @@ function ThemeRow() {
 
 function Sidebar({ pathname, user }: { pathname: string; user: UserDto }) {
   const nav = useRef<HTMLElement>(null);
-  const { rect, moving } = useFollow(nav, '[aria-current="page"]', pathname);
+  const { rect, last, moving } = useFollow(nav, '[aria-current="page"]', pathname);
   return (
     <aside className="sticky top-0 hidden h-dvh w-60 shrink-0 flex-col border-r bg-sidebar lg:flex">
       <div className="flex h-14 items-center justify-between px-4">
@@ -120,7 +120,7 @@ function Sidebar({ pathname, user }: { pathname: string; user: UserDto }) {
         <span
           aria-hidden
           className="pointer-events-none absolute top-0 left-0 rounded-md bg-accent"
-          style={followStyle(rect, moving)}
+          style={followStyle(rect, moving, last)}
         />
         {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
           const active = isActive(pathname, href);
@@ -215,7 +215,8 @@ function BottomNav({ pathname, user }: { pathname: string; user: UserDto }) {
   const profileActive = PROFILE_ROUTES.some((h) => isActive(pathname, h));
   const unread = useNotifications(1).state.data?.unread ?? 0;
   const nav = useRef<HTMLElement>(null);
-  const { rect, moving } = useFollow(nav, '[aria-current="page"]', pathname);
+  const { rect, last, moving } = useFollow(nav, '[aria-current="page"]', pathname);
+  const at = rect ?? last;
   const PILL = 58;
 
   return (
@@ -234,8 +235,8 @@ function BottomNav({ pathname, user }: { pathname: string; user: UserDto }) {
         style={{
           width: PILL,
           opacity: rect && !profileActive ? 1 : 0,
-          transform: `translateX(${rect ? rect.x + rect.w / 2 - PILL / 2 : 0}px)`,
-          transition: moving ? 'transform 320ms var(--ease-move), opacity 160ms' : 'none',
+          transform: `translateX(${at ? at.x + at.w / 2 - PILL / 2 : 0}px)`,
+          transition: moving ? 'transform 320ms var(--ease-move), opacity 160ms' : 'opacity 160ms',
         }}
       />
       {/* Notifications sit in the middle of the bar on phones. */}

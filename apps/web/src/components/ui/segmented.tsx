@@ -16,38 +16,55 @@ interface Rect {
  * (and keeps its momentum when the target changes mid-way).
  */
 export function useFollow(container: RefObject<HTMLElement | null>, selector: string, dep: unknown) {
-  const [rect, setRect] = useState<Rect | null>(null);
+  // `rect` is where the highlight last sat (kept while nothing is selected, so it fades out in
+  // place); `shown` is whether something is selected now; `moving` whether a change may slide.
+  const [state, setState] = useState<{ rect: Rect | null; shown: boolean; moving: boolean }>({
+    rect: null,
+    shown: false,
+    moving: false,
+  });
   // No slide on the first paint: the highlight is simply there.
-  const [moving, setMoving] = useState(false);
+  const ready = useRef(false);
+  useLayoutEffect(() => {
+    const t = setTimeout(() => (ready.current = true), 50);
+    return () => clearTimeout(t);
+  }, []);
   useLayoutEffect(() => {
     const box = container.current;
     if (!box) return;
     const measure = () => {
       const el = box.querySelector<HTMLElement>(selector);
-      setRect(el ? { x: el.offsetLeft, y: el.offsetTop, w: el.offsetWidth, h: el.offsetHeight } : null);
+      setState((s) =>
+        el
+          ? {
+              rect: { x: el.offsetLeft, y: el.offsetTop, w: el.offsetWidth, h: el.offsetHeight },
+              shown: true,
+              // Slide only from one item to another. Appearing after nothing was selected, it
+              // is simply there (fading in) instead of flying in from the corner.
+              moving: ready.current && s.shown,
+            }
+          : { ...s, shown: false, moving: true },
+      );
     };
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(box);
-    const t = setTimeout(() => setMoving(true), 50);
-    return () => {
-      ro.disconnect();
-      clearTimeout(t);
-    };
+    return () => ro.disconnect();
   }, [container, selector, dep]);
-  return { rect, moving };
+  return { rect: state.shown ? state.rect : null, last: state.rect, moving: state.moving };
 }
 
-/** Style for a highlight that follows `rect`. */
-export function followStyle(rect: Rect | null, moving: boolean) {
+/** Style for a highlight that follows `rect` (`last` is where it sat, to fade out there). */
+export function followStyle(rect: Rect | null, moving: boolean, last: Rect | null = rect) {
+  const at = rect ?? last;
   return {
     opacity: rect ? 1 : 0,
-    width: rect?.w ?? 0,
-    height: rect?.h ?? 0,
-    transform: `translate(${rect?.x ?? 0}px, ${rect?.y ?? 0}px)`,
+    width: at?.w ?? 0,
+    height: at?.h ?? 0,
+    transform: `translate(${at?.x ?? 0}px, ${at?.y ?? 0}px)`,
     transition: moving
       ? 'transform 280ms var(--ease-move), width 280ms var(--ease-move), height 280ms var(--ease-move), opacity 160ms'
-      : 'none',
+      : 'opacity 160ms',
   } as const;
 }
 
@@ -78,7 +95,7 @@ export function Segmented<T extends string>({
   className?: string;
 }) {
   const box = useRef<HTMLDivElement>(null);
-  const { rect, moving } = useFollow(box, '[data-selected="true"]', value);
+  const { rect, last, moving } = useFollow(box, '[data-selected="true"]', value);
   return (
     <div
       ref={box}
@@ -89,7 +106,7 @@ export function Segmented<T extends string>({
       <span
         aria-hidden
         className="pointer-events-none absolute top-0 left-0 rounded-lg bg-white shadow-sm ring-1 ring-black/5 dark:bg-white/15 dark:ring-white/10"
-        style={followStyle(rect, moving)}
+        style={followStyle(rect, moving, last)}
       />
       {options.map(({ value: v, label: text, icon: Icon }) => {
         const selected = value === v;

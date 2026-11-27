@@ -104,7 +104,7 @@ const run: RunFn = (command, args) =>
 
 /**
  * Null when Cursor CLI isn't installed. Signed in when `agent status` says so; its models then come
- * from `agent models` (they depend on the account). Pocket Agent never sees the account.
+ * from `agent models` (they depend on the account). The account is the email `status` prints.
  */
 export async function detectCursor(
   opts: {
@@ -122,7 +122,10 @@ export async function detectCursor(
   ]);
   const signedIn = status.ok && /logged in/i.test(status.stdout) && !/not logged in/i.test(status.stdout);
   const models = signedIn ? await (opts.listModels ?? listCursorModels)(program) : [];
+  // "✓ Logged in as you@example.com": the email Cursor itself prints.
+  const email = signedIn ? /logged in as\s+(\S+@\S+)/i.exec(status.stdout)?.[1]?.slice(0, 254) : undefined;
   return {
+    account: email ? { email, plan: null } : null,
     provider: 'cursor',
     version: /\d{4}\.\d+\.\d+[^\s]*/.exec(version.stdout)?.[0]?.slice(0, 40) ?? 'unknown',
     signedIn,

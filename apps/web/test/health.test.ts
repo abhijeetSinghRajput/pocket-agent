@@ -19,6 +19,7 @@ const pc = (over: Partial<DeviceDto>): DeviceDto => ({
   awayMode: true,
   health: { hooks: true },
   agents: [],
+  claudeAccount: null,
   ...over,
 });
 
@@ -107,7 +108,36 @@ describe('pcAgents', () => {
     expect(agents['codex']).toMatchObject({ state: 'ready', detail: 'Version 0.172.0 · 1 model' });
     expect(agents['cursor']).toMatchObject({ state: 'signed-out', command: 'agent login' });
     expect(agents['opencode']).toMatchObject({ state: 'missing' });
-    expect(agents['opencode']!.command).toBeUndefined();
+    expect(agents['opencode']!.command).toBe('pocket-agent doctor');
+  });
+
+  it('names the account each agent is signed in with, where the PC knows it', () => {
+    const agents = by(
+      pc({
+        claudeAccount: { email: 'me@example.com', plan: null },
+        agents: [
+          {
+            provider: 'codex',
+            version: '1',
+            signedIn: true,
+            models: [],
+            account: { email: 'me@example.com', plan: 'ChatGPT Plus' },
+          },
+          {
+            provider: 'cursor',
+            version: '1',
+            signedIn: true,
+            models: [],
+            account: { email: null, plan: 'API key' },
+          },
+          { provider: 'copilot', version: '1', signedIn: true, models: [] },
+        ],
+      }),
+    );
+    expect(agents['claude-code']!.account).toBe('me@example.com');
+    expect(agents['codex']).toMatchObject({ account: 'me@example.com', detail: 'ChatGPT Plus · Version 1' });
+    expect(agents['cursor']).toMatchObject({ account: 'API key', detail: 'Version 1' });
+    expect(agents['copilot']!.account).toBeUndefined();
   });
 
   it('asks for a Pocket Agent update before anything else on an old PC', () => {

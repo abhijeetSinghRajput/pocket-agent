@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react';
 import type { ProviderId } from '@pocket-agent/protocol';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
@@ -12,6 +13,8 @@ export const AGENT_LOGOS: Record<
   {
     title: string;
     hex: string;
+    /** The original colour on a dark background, when it differs (monochrome marks). */
+    darkHex?: string;
     path: string;
     /** top, middle, bottom */ gradient?: [string, string, string];
     /** The original logo's file, drawn instead of the path. */ src?: string;
@@ -43,29 +46,43 @@ export const AGENT_LOGOS: Record<
     path: 'M21.751 22.607c1.34 1.005 3.35.335 1.508-1.508C17.73 15.74 18.904 1 12.037 1 5.17 1 6.342 15.74.815 21.1c-2.01 2.009.167 2.511 1.507 1.506 5.192-3.517 4.857-9.714 9.715-9.714 4.857 0 4.522 6.197 9.714 9.715z',
   },
   // OpenCode's own mark (same shapes as apps/web/public/logos/agents/opencode.svg, SVGL), one
-  // colour: the frame, and the block in its lower half.
+  // colour: the frame, and the block in its lower half. Its original ink: near-black on light,
+  // near-white on dark (opencode.svg / opencode-dark.svg).
   opencode: {
     title: 'OpenCode',
-    hex: '#64748B',
+    hex: '#17181C',
+    darkHex: '#F1ECEC',
     path: 'M18 19.5H6V4.5H18V19.5ZM15 7.5H9V16.5H15V7.5ZM15 10.5V16.5H9V10.5H15Z',
     evenOdd: true,
   },
   // GitHub Copilot's own mark (the path of apps/web/public/logos/agents/copilot.svg, SVGL), in
-  // its own proportions.
+  // its own proportions and GitHub's own ink: black on light, white on dark (copilot_dark.svg).
   copilot: {
     title: 'Copilot',
-    hex: '#8B949E',
+    hex: '#1F2328',
+    darkHex: '#F0F6FC',
     viewBox: '0 0 256 208',
     path: 'M205.3 31.4c14 14.8 20 35.2 22.5 63.6 6.6 0 12.8 1.5 17 7.2l7.8 10.6c2.2 3 3.4 6.6 3.4 10.4v28.7a12 12 0 0 1-4.8 9.5C215.9 187.2 172.3 208 128 208c-49 0-98.2-28.3-123.2-46.6a12 12 0 0 1-4.8-9.5v-28.7c0-3.8 1.2-7.4 3.4-10.5l7.8-10.5c4.2-5.7 10.4-7.2 17-7.2 2.5-28.4 8.4-48.8 22.5-63.6C77.3 3.2 112.6 0 127.6 0h.4c14.7 0 50.4 2.9 77.3 31.4ZM128 78.7c-3 0-6.5.2-10.3.6a27.1 27.1 0 0 1-6 12.1 45 45 0 0 1-32 13c-6.8 0-13.9-1.5-19.7-5.2-5.5 1.9-10.8 4.5-11.2 11-.5 12.2-.6 24.5-.6 36.8 0 6.1 0 12.3-.2 18.5 0 3.6 2.2 6.9 5.5 8.4C79.9 185.9 105 192 128 192s48-6 74.5-18.1a9.4 9.4 0 0 0 5.5-8.4c.3-18.4 0-37-.8-55.3-.4-6.6-5.7-9.1-11.2-11-5.8 3.7-13 5.1-19.7 5.1a45 45 0 0 1-32-12.9 27.1 27.1 0 0 1-6-12.1c-3.4-.4-6.9-.5-10.3-.6Zm-27 44c5.8 0 10.5 4.6 10.5 10.4v19.2a10.4 10.4 0 0 1-20.8 0V133c0-5.8 4.6-10.4 10.4-10.4Zm53.4 0c5.8 0 10.4 4.6 10.4 10.4v19.2a10.4 10.4 0 0 1-20.8 0V133c0-5.8 4.7-10.4 10.4-10.4Zm-73-94.4c-11.2 1.1-20.6 4.8-25.4 10-10.4 11.3-8.2 40.1-2.2 46.2A31.2 31.2 0 0 0 75 91.7c6.8 0 19.6-1.5 30.1-12.2 4.7-4.5 7.5-15.7 7.2-27-.3-9.1-2.9-16.7-6.7-19.9-4.2-3.6-13.6-5.2-24.2-4.3Zm69 4.3c-3.8 3.2-6.4 10.8-6.7 19.9-.3 11.3 2.5 22.5 7.2 27a41.7 41.7 0 0 0 30 12.2c8.9 0 17-2.9 21.3-7.2 6-6.1 8.2-34.9-2.2-46.3-4.8-5-14.2-8.8-25.4-9.9-10.6-1-20 .7-24.2 4.3ZM128 56c-2.6 0-5.6.2-9 .5.4 1.7.5 3.7.7 5.7 0 1.5 0 3-.2 4.5 3.2-.3 6-.3 8.5-.3 2.6 0 5.3 0 8.5.3-.2-1.6-.2-3-.2-4.5.2-2 .3-4 .7-5.7-3.4-.3-6.4-.5-9-.5Z',
   },
-  // Cursor's own mark (public/logos/agents/cursor_light.svg, SVGL), in one colour.
+  // Cursor's own mark in its original colours: #26251E on light (cursor_light.svg), #EDECEC on
+  // dark (cursor_dark.svg), both SVGL.
   cursor: {
     title: 'Cursor',
-    hex: '#8B8B8B',
+    hex: '#26251E',
+    darkHex: '#EDECEC',
     viewBox: '0 0 466.73 532.09',
     path: 'M457.43,125.94L244.42,2.96c-6.84-3.95-15.28-3.95-22.12,0L9.3,125.94c-5.75,3.32-9.3,9.46-9.3,16.11v247.99c0,6.65,3.55,12.79,9.3,16.11l213.01,122.98c6.84,3.95,15.28,3.95,22.12,0l213.01-122.98c5.75-3.32,9.3-9.46,9.3-16.11v-247.99c0-6.65-3.55-12.79-9.3-16.11h-.01ZM444.05,151.99l-205.63,356.16c-1.39,2.4-5.06,1.42-5.06-1.36v-233.21c0-4.66-2.49-8.97-6.53-11.31L24.87,145.67c-2.4-1.39-1.42-5.06,1.36-5.06h411.26c5.84,0,9.49,6.33,6.57,11.39h-.01Z',
   },
 };
+
+/**
+ * An agent's ink as CSS variables: `--agent-ink` is its colour in the current theme (monochrome
+ * marks switch to their light ink in dark mode, via the `.agent-ink` rule in globals.css).
+ */
+export function agentInk(provider: ProviderId): CSSProperties {
+  const logo = AGENT_LOGOS[provider];
+  return { '--agent-ink-light': logo.hex, '--agent-ink-dark': logo.darkHex ?? logo.hex } as CSSProperties;
+}
 
 export function AgentLogo({ provider, className }: { provider: ProviderId; className?: string }) {
   const logo = AGENT_LOGOS[provider];
@@ -83,7 +100,12 @@ export function AgentLogo({ provider, className }: { provider: ProviderId; class
     );
   }
   return (
-    <svg viewBox={logo.viewBox ?? '0 0 24 24'} aria-hidden className={cn('shrink-0', className)}>
+    <svg
+      viewBox={logo.viewBox ?? '0 0 24 24'}
+      aria-hidden
+      className={cn('agent-ink shrink-0', className)}
+      style={agentInk(provider)}
+    >
       {logo.gradient && (
         <defs>
           <linearGradient id={id} x1="12" y1="0" x2="12" y2="24" gradientUnits="userSpaceOnUse">
@@ -95,7 +117,7 @@ export function AgentLogo({ provider, className }: { provider: ProviderId; class
       )}
       <path
         d={logo.path}
-        fill={logo.gradient ? `url(#${id})` : logo.hex}
+        fill={logo.gradient ? `url(#${id})` : 'var(--agent-ink)'}
         fillRule={logo.gradient || logo.evenOdd ? 'evenodd' : 'nonzero'}
       />
     </svg>

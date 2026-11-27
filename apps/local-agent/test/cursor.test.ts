@@ -37,7 +37,10 @@ describe('Cursor CLI on the PC', () => {
     const run = (status: string) => async (_c: string, args: string[]) =>
       args[1] === '--version' ? { ok: true, stdout: '2026.11.22-e9042b2\n' } : { ok: true, stdout: status };
     const models = async () => [{ id: 'auto', name: 'Auto', description: '' }];
-    expect(await detectCursor({ program, run: run('✓ Logged in as someone'), listModels: models })).toEqual({
+    expect(
+      await detectCursor({ program, run: run('✓ Logged in as me@example.com'), listModels: models }),
+    ).toEqual({
+      account: { email: 'me@example.com', plan: null },
       provider: 'cursor',
       version: '2026.11.22-e9042b2',
       signedIn: true,
@@ -46,6 +49,7 @@ describe('Cursor CLI on the PC', () => {
     expect(await detectCursor({ program, run: run('Not logged in'), listModels: models })).toMatchObject({
       signedIn: false,
       models: [],
+      account: null,
     });
     expect(await detectCursor({ program: null })).toBeNull();
   });

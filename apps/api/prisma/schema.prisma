@@ -181,6 +181,9 @@ model Device {
   /// Other coding agents on the PC ([{provider, version, signedIn, models}]), reported by PCs from
   /// 2.5.0. Display and checks only; the PC decides what runs.
   agents                Json?
+  /// The account Claude Code is signed in with on the PC ({email, plan}), reported by PCs from
+  /// 2.14.0. Display only; the sign-in itself stays on the PC.
+  claudeAccount         Json?
   lastHeartbeatAt       DateTime?
   revokedAt             DateTime?
   createdAt             DateTime     @default(now())

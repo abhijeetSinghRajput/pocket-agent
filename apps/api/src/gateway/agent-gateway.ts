@@ -254,6 +254,10 @@ export async function agentGateway(app: FastifyInstance, ctx: GatewayServices): 
               ...(msg.payload.health ? { health: msg.payload.health } : {}),
               // Only PCs from 2.5.0 report other agents; an older one leaves the stored value alone.
               ...(msg.payload.agents ? { agents: msg.payload.agents } : {}),
+              // PCs from 2.14.0 say which account Claude Code uses; older ones leave it alone.
+              ...(msg.payload.claudeAccount !== undefined
+                ? { claudeAccount: msg.payload.claudeAccount ?? Prisma.DbNull }
+                : {}),
               observedInstructions: msg.payload.observedInstructions,
               remoteApprovalEnabled: msg.payload.remoteApproval,
             },

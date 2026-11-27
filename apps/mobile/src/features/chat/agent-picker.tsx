@@ -9,7 +9,7 @@ import Animated, {
   useSharedValue,
   withTiming,
 } from 'react-native-reanimated';
-import { AgentLogo, AGENT_LOGOS } from '@/features/sessions/badges';
+import { AgentLogo, agentColor } from '@/features/sessions/badges';
 import { dur, ease, enter, exit } from '@/lib/motion';
 import { alpha, radius, useTheme } from '@/lib/theme';
 import { Press, T, tap } from '@/ui/core';
@@ -27,7 +27,7 @@ function AgentTile({
   index: number;
   onPress: () => void;
 }) {
-  const { c } = useTheme();
+  const { c, dark } = useTheme();
   // The picked tile eases into its orange edge and wash; the one it left eases out.
   const on = useSharedValue(selected ? 1 : 0);
   useEffect(() => {
@@ -70,7 +70,7 @@ function AgentTile({
               width: 36,
               height: 36,
               borderRadius: radius.md,
-              backgroundColor: alpha(AGENT_LOGOS[provider].hex, 0.14),
+              backgroundColor: alpha(agentColor(provider, dark), 0.14),
               alignItems: 'center',
               justifyContent: 'center',
             }}

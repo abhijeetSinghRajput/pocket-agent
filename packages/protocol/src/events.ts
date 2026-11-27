@@ -193,6 +193,17 @@ export const DeviceHealth = z.object({ hooks: z.boolean() });
 export type DeviceHealth = z.infer<typeof DeviceHealth>;
 
 /**
+ * Which account an agent on the PC is signed in with, as far as the agent itself says (PCs from
+ * 2.14.0): the email and the plan or sign-in kind ("ChatGPT Plus", "API key"). Only shown to the
+ * owner; tokens and passwords never leave the PC. Null fields: the agent doesn't say.
+ */
+export const AgentAccount = z.object({
+  email: z.string().max(254).nullable(),
+  plan: z.string().max(60).nullable(),
+});
+export type AgentAccount = z.infer<typeof AgentAccount>;
+
+/**
  * A coding agent besides Claude Code found on the PC (Codex): whether chats can be started with it
  * (installed and signed in) and the models it offers. Claude Code itself is reported by `models`.
  */
@@ -203,6 +214,8 @@ export const OtherAgent = z.object({
   /** Signed in on this PC (its own sign-in; Pocket Agent never sees it). */
   signedIn: z.boolean(),
   models: z.array(ModelOption).max(40).default([]),
+  /** The account it is signed in with, when the agent says (PCs from 2.14.0). */
+  account: AgentAccount.nullable().optional(),
 });
 export type OtherAgent = z.infer<typeof OtherAgent>;
 
@@ -227,6 +240,8 @@ export const DeviceSettings = defineEvent(
     health: DeviceHealth.optional(),
     /** Other coding agents found on the PC (PCs from 2.5.0; older ones leave it out). */
     agents: z.array(OtherAgent).max(8).optional(),
+    /** The account Claude Code is signed in with on this PC (PCs from 2.14.0; null: not known). */
+    claudeAccount: AgentAccount.nullable().optional(),
     /**
      * A folder the owner just added (or that was already allowed) with `pocket-agent projects add`:
      * an open "Add a workspace" on the phone goes to it. Sent once, with that change (PCs 2.4.2+).

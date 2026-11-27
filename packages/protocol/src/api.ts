@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { ClaudeUsage, DeviceHealth, ModelOption, OtherAgent } from './events.js';
+import { AgentAccount, ClaudeUsage, DeviceHealth, ModelOption, OtherAgent } from './events.js';
 import { DeviceStatus, Platform } from './enums.js';
 
 // ── Errors ───────────────────────────────────────────────────────────────────
@@ -98,6 +98,8 @@ export const DeviceDto = z.object({
   health: DeviceHealth.nullable().default(null),
   /** Other coding agents on the PC (Codex), as it reports them (PCs from 2.5.0). */
   agents: z.array(OtherAgent).default([]),
+  /** The account Claude Code is signed in with on the PC, when it reported one (PCs from 2.14.0). */
+  claudeAccount: AgentAccount.nullable().default(null),
 });
 export type DeviceDto = z.infer<typeof DeviceDto>;
 
@@ -105,7 +107,7 @@ export type DeviceDto = z.infer<typeof DeviceDto>;
  * The newest Local Agent released. The app's health check compares each PC with it (bumped with
  * every agent release).
  */
-export const LATEST_AGENT_VERSION = '2.13.0';
+export const LATEST_AGENT_VERSION = '2.14.0';
 /** Where the agent's releases are downloaded (the newest is "latest"). */
 export const AGENT_RELEASES_URL = 'https://github.com/abhijeetSinghRajput/pocket-agent/releases/latest';
 

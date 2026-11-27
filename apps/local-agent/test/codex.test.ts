@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { ApprovalBroker } from '../src/approvals.js';
-import { codexVersion, detectCodex } from '../src/providers/codex/detect.js';
+import { codexAccount, codexVersion, detectCodex } from '../src/providers/codex/detect.js';
 import type { Transport } from '../src/providers/codex/rpc.js';
 import { CodexSessions, codexInput } from '../src/providers/codex/sessions.js';
 import { SessionRegistry } from '../src/sessions/registry.js';
@@ -43,7 +43,11 @@ function fakeAppServer(opts: { signedIn?: boolean; resumeCwd?: string } = {}) {
               : method === 'turn/start'
                 ? { turn: { id: `tu-${++turn}` } }
                 : method === 'account/read'
-                  ? { account: opts.signedIn ? { type: 'chatgpt' } : null }
+                  ? {
+                      account: opts.signedIn
+                        ? { type: 'chatgpt', email: 'me@example.com', planType: 'plus' }
+                        : null,
+                    }
                   : method === 'model/list'
                     ? {
                         data: [
@@ -487,16 +491,27 @@ describe('Codex approvals from the phone', () => {
 });
 
 describe('finding Codex on the PC', () => {
-  it('reports version, sign-in and visible models (never the account)', async () => {
+  it('reports version, sign-in, the account Codex names, and visible models', async () => {
     const signedIn = fakeAppServer({ signedIn: true });
     expect(await detectCodex(() => signedIn.transport, '2.5.0')).toEqual({
       provider: 'codex',
       version: '0.172.0',
       signedIn: true,
       models: [{ id: 'gpt-6.2-sol', name: 'GPT-6.2-Sol', description: 'Fast' }],
+      account: { email: 'me@example.com', plan: 'ChatGPT Plus' },
     });
     const out = fakeAppServer({ signedIn: false });
-    expect((await detectCodex(() => out.transport, '2.5.0'))?.signedIn).toBe(false);
+    expect(await detectCodex(() => out.transport, '2.5.0')).toMatchObject({ signedIn: false, account: null });
+  });
+
+  it('names the account kind: ChatGPT with its plan, an API key, or nothing', () => {
+    expect(codexAccount({ type: 'chatgpt', email: null, planType: 'unknown' })).toEqual({
+      email: null,
+      plan: 'ChatGPT',
+    });
+    expect(codexAccount({ type: 'apiKey' })).toEqual({ email: null, plan: 'API key' });
+    expect(codexAccount({ type: 'gcp' })).toBeNull();
+    expect(codexAccount(null)).toBeNull();
   });
 
   it('is null when Codex isn’t installed', async () => {

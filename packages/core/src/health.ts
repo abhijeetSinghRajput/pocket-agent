@@ -111,6 +111,11 @@ export interface PcAgent {
   state: 'ready' | 'signed-out' | 'update' | 'missing';
   /** The state in a word or two, as the list shows it. */
   label: string;
+  /**
+   * The account it is signed in with, as the agent itself names it (an email, or "API key"); absent
+   * when the PC doesn't know (older PC agents, or an agent that doesn't say).
+   */
+  account?: string;
   /** One line under the name: the plan or version when ready, otherwise what to do. */
   detail: string;
   /** Run on the PC to fix it. */
@@ -120,7 +125,7 @@ export interface PcAgent {
 /**
  * Every coding agent Pocket Agent works with, as one PC has it: Claude Code first, then the
  * others in the order the app lists them. Only what the PC reports: whether each is installed and
- * signed in (never the account itself), its version and models, and Claude's plan.
+ * signed in, the account where the agent names it, its version and models, and Claude's plan.
  */
 export function pcAgents(d: DeviceDto): PcAgent[] {
   const plan = d.usage?.plan;
@@ -128,6 +133,7 @@ export function pcAgents(d: DeviceDto): PcAgent[] {
     provider: 'claude-code',
     state: 'ready',
     label: 'Ready',
+    ...(d.claudeAccount?.email ? { account: d.claudeAccount.email } : {}),
     detail: [
       plan ? `Claude ${plan}` : 'Your Claude Code sign-in',
       d.models.length ? models(d.models.length) : null,
@@ -153,7 +159,8 @@ export function pcAgents(d: DeviceDto): PcAgent[] {
           provider,
           state: 'missing',
           label: 'Not installed',
-          detail: `${name} isn’t on this PC. Install it there and it shows up here.`,
+          detail: `${name} isn’t found on this PC. Installed it already? This shows why, on the PC:`,
+          command: 'pocket-agent doctor',
         };
       if (!found.signedIn)
         return {
@@ -163,11 +170,21 @@ export function pcAgents(d: DeviceDto): PcAgent[] {
           detail: `Sign in to ${name} on the PC to chat with it from here.`,
           command: signInCommand(provider),
         };
+      // "me@example.com" with "ChatGPT Plus" in the detail; or just "API key" when there's no email.
+      const acc = found.account;
+      const account = acc?.email ?? acc?.plan ?? undefined;
       return {
         provider,
         state: 'ready',
         label: 'Ready',
-        detail: `Version ${found.version}${found.models.length ? ` · ${models(found.models.length)}` : ''}`,
+        ...(account ? { account } : {}),
+        detail: [
+          acc?.email && acc.plan ? acc.plan : null,
+          `Version ${found.version}`,
+          found.models.length ? models(found.models.length) : null,
+        ]
+          .filter(Boolean)
+          .join(' · '),
       };
     });
   return [claude, ...others];

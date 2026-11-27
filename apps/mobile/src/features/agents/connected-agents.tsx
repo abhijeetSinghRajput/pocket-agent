@@ -1,9 +1,9 @@
 import { agentProduct, pcAgents, timeAgo, type PcAgent } from '@pocket-agent/core';
 import type { DeviceDto } from '@pocket-agent/protocol';
-import { Laptop } from 'lucide-react-native';
+import { Laptop, UserRound } from 'lucide-react-native';
 import { View } from 'react-native';
 import Animated from 'react-native-reanimated';
-import { AgentLogo, AGENT_LOGOS } from '@/features/sessions/badges';
+import { AgentLogo, agentColor } from '@/features/sessions/badges';
 import { enter, layout } from '@/lib/motion';
 import { alpha, fonts, radius, useTheme } from '@/lib/theme';
 import { Badge, Card, Divider, T, type Tone } from '@/ui/core';
@@ -21,12 +21,12 @@ const ORDER: Record<PcAgent['state'], number> = { ready: 0, 'signed-out': 1, upd
 
 /** One agent on a PC: its mark, name, where it stands, and the command that fixes it. */
 function AgentRow({ agent: a }: { agent: PcAgent }) {
-  const { c } = useTheme();
+  const { c, dark } = useTheme();
   const name = agentProduct(a.provider);
   return (
     <View
       testID={`connected-${a.provider}`}
-      accessibilityLabel={`${name}: ${a.label}. ${a.detail}`}
+      accessibilityLabel={`${name}: ${a.label}.${a.account ? ` Signed in as ${a.account}.` : ''} ${a.detail}`}
       style={{
         paddingHorizontal: 16,
         paddingVertical: 14,
@@ -40,7 +40,7 @@ function AgentRow({ agent: a }: { agent: PcAgent }) {
             width: 40,
             height: 40,
             borderRadius: 20,
-            backgroundColor: alpha(AGENT_LOGOS[a.provider].hex, 0.14),
+            backgroundColor: alpha(agentColor(a.provider, dark), 0.14),
             alignItems: 'center',
             justifyContent: 'center',
           }}
@@ -51,6 +51,19 @@ function AgentRow({ agent: a }: { agent: PcAgent }) {
           <T variant="subheading" numberOfLines={1}>
             {name}
           </T>
+          {a.account && (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 1 }}>
+              <UserRound size={12} color={c.mutedForeground} strokeWidth={2.4} />
+              <T
+                variant="smallMedium"
+                numberOfLines={1}
+                style={{ flexShrink: 1 }}
+                testID={`account-${a.provider}`}
+              >
+                {a.account}
+              </T>
+            </View>
+          )}
           <T variant="caption" tone="muted" numberOfLines={2}>
             {a.detail}
           </T>
@@ -122,8 +135,8 @@ function PcCard({ device: d, index }: { device: DeviceDto; index: number }) {
 
 /**
  * The coding agents on your PCs: which are ready to chat, which are signed out or need an update
- * (with the command that fixes it, to run on the PC), and which aren't installed. Sign-ins stay on
- * the PC; Pocket Agent only knows whether each agent is signed in.
+ * (with the command that fixes it, to run on the PC), and which aren't installed, with the account
+ * each is signed in with where the agent names it. Signing in and out stays on the PC.
  */
 export function ConnectedAgents({
   devices,

@@ -714,3 +714,13 @@
     }
   }
 }
+
+/* An agent's own colour for the theme (set by agentInk() in components/agents/agent-logos.tsx):
+   monochrome marks (Cursor, Copilot, OpenCode) use their light ink on dark. */
+.agent-ink {
+  --agent-ink: var(--agent-ink-light);
+}
+
+.dark .agent-ink {
+  --agent-ink: var(--agent-ink-dark);
+}

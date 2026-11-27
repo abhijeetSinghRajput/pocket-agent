@@ -25,7 +25,7 @@ import { IdleWake } from './providers/claude-code/wake.js';
 import { listModels } from './providers/claude-code/models.js';
 import { AttachmentClient, safeFileName } from './attachments.js';
 import { readSubagents } from './providers/claude-code/subagents.js';
-import type { ClaudeUsage, ModelOption, OtherAgent } from '@pocket-agent/protocol';
+import type { AgentAccount, ClaudeUsage, ModelOption, OtherAgent } from '@pocket-agent/protocol';
 import { detectCodex } from './providers/codex/detect.js';
 import { detectAntigravity } from './providers/antigravity/detect.js';
 import { AntigravitySessions, spawnAcp } from './providers/antigravity/sessions.js';
@@ -43,9 +43,10 @@ import {
   AntigravityWatcher,
   listAntigravitySessions,
 } from './providers/antigravity/watch.js';
-import { spawnAppServer, type Transport } from './providers/codex/rpc.js';
+import { findCodex, spawnAppServer, type Transport } from './providers/codex/rpc.js';
 import { CodexSessions } from './providers/codex/sessions.js';
 import { readUsage } from './providers/claude-code/usage.js';
+import { readClaudeAccount } from './providers/claude-code/account.js';
 import os from 'node:os';
 import { SessionRegistry, type SessionEventOut } from './sessions/registry.js';
 
@@ -125,6 +126,8 @@ export class AgentService {
   private usage: ClaudeUsage | null = null;
   /** Other coding agents found on this PC (Codex), re-checked every few minutes. */
   private agents: OtherAgent[] = [];
+  /** The account Claude Code is signed in with on this PC (null: not known). */
+  private claudeAccount: AgentAccount | null = null;
   private agentsTimer: NodeJS.Timeout | null = null;
 
   constructor(private readonly opts: ServiceOptions) {
@@ -397,6 +400,7 @@ export class AgentService {
       // For the app's health check: is Claude Code linked to this PC.
       health: { hooks: this.hooksInstalled },
       agents: this.agents,
+      claudeAccount: this.claudeAccount,
     });
   }
 
@@ -412,15 +416,24 @@ export class AgentService {
   /** Are Codex and Antigravity here and signed in, with which models; tells the backend when that changed. */
   private async loadAgents(): Promise<void> {
     const [codex, antigravity, opencode, copilot, cursor] = await Promise.all([
-      detectCodex(this.opts.codex ?? spawnAppServer, this.opts.agentVersion, this.opts.log),
+      // Only when a Codex program is here at all (a PC without Codex logs nothing).
+      this.opts.codex || findCodex()
+        ? detectCodex(this.opts.codex ?? spawnAppServer, this.opts.agentVersion, this.opts.log)
+        : null,
       this.opts.antigravity === false ? null : detectAntigravity().catch(() => null),
       this.opts.opencode === false ? null : detectOpencode().catch(() => null),
       this.opts.copilot === false ? null : detectCopilot().catch(() => null),
       this.opts.cursor === false ? null : detectCursor().catch(() => null),
     ]);
     const agents = [codex, antigravity, opencode, copilot, cursor].filter((a) => a !== null);
-    if (JSON.stringify(agents) === JSON.stringify(this.agents)) return;
+    const claudeAccount = await readClaudeAccount(os.homedir());
+    if (
+      JSON.stringify(agents) === JSON.stringify(this.agents) &&
+      JSON.stringify(claudeAccount) === JSON.stringify(this.claudeAccount)
+    )
+      return;
     this.agents = agents;
+    this.claudeAccount = claudeAccount;
     this.link.send(this.settingsEvent());
   }
 

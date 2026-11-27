@@ -1,14 +1,15 @@
-import type { ModelOption, OtherAgent } from '@pocket-agent/protocol';
+import type { AgentAccount, ModelOption, OtherAgent } from '@pocket-agent/protocol';
 import { AppServerClient, type Transport } from './rpc.js';
 
 type Json = Record<string, unknown>;
 
-const DETECT_TIMEOUT_MS = 20_000;
+// Codex's first start on a PC can be slow (unpacking, a virus scan), so it gets a while.
+const DETECT_TIMEOUT_MS = 45_000;
 
 /**
- * Is Codex on this PC, signed in, and with which models: asked of a short-lived `codex
- * app-server` (closed right after). Null when Codex isn't installed or doesn't answer. Pocket Agent
- * only learns whether it is signed in, never the account or its tokens.
+ * Is Codex on this PC, signed in, with which account and which models: asked of a short-lived
+ * `codex app-server` (closed right after). Null when Codex isn't installed or doesn't answer. The
+ * account is what Codex itself reports (email and plan); its tokens are never seen.
  */
 export async function detectCodex(
   connect: () => Transport,
@@ -18,7 +19,8 @@ export async function detectCodex(
   let transport: Transport;
   try {
     transport = connect();
-  } catch {
+  } catch (err) {
+    log('info', `Codex not found: ${(err as Error).message}`);
     return null;
   }
   const client = new AppServerClient(
@@ -30,7 +32,14 @@ export async function detectCodex(
     },
     log,
   );
-  const timeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), DETECT_TIMEOUT_MS));
+  // Why a check came back empty goes to the log: the app can only say "not installed".
+  let timer: NodeJS.Timeout | undefined;
+  const timeout = new Promise<null>((resolve) => {
+    timer = setTimeout(() => {
+      log('warn', `Codex didn't answer within ${DETECT_TIMEOUT_MS / 1000} s`);
+      resolve(null);
+    }, DETECT_TIMEOUT_MS);
+  });
   const ask = (async (): Promise<OtherAgent | null> => {
     const init = await client.request<{ userAgent?: string }>('initialize', {
       clientInfo: { name: 'pocket-agent', title: 'Pocket Agent', version },
@@ -41,18 +50,37 @@ export async function detectCodex(
       client.request<Json>('account/read', {}).catch(() => null),
       client.request<{ data?: Json[] }>('model/list', {}).catch(() => null),
     ]);
+    const signedIn = !!account && account['account'] !== null && account['account'] !== undefined;
     return {
       provider: 'codex',
       version: codexVersion(init.userAgent),
-      signedIn: !!account && account['account'] !== null && account['account'] !== undefined,
+      signedIn,
       models: (models?.data ?? []).flatMap(toModelOption).slice(0, 40),
+      account: signedIn ? codexAccount(account['account']) : null,
     };
-  })().catch(() => null);
+  })().catch((err: Error) => {
+    log('warn', `Codex check failed: ${err.message}`);
+    return null;
+  });
   try {
     return await Promise.race([ask, timeout]);
   } finally {
+    clearTimeout(timer);
     client.close();
   }
+}
+
+/** Codex's account/read `account`: ChatGPT (email and plan), an API key, or another provider. */
+export function codexAccount(a: unknown): AgentAccount | null {
+  if (!a || typeof a !== 'object') return null;
+  const acc = a as Json;
+  if (acc['type'] === 'apiKey') return { email: null, plan: 'API key' };
+  if (acc['type'] !== 'chatgpt') return null;
+  const email = typeof acc['email'] === 'string' && acc['email'].length <= 254 ? acc['email'] : null;
+  const raw = typeof acc['planType'] === 'string' ? acc['planType'] : '';
+  const plan =
+    raw && raw !== 'unknown' ? `ChatGPT ${raw[0]!.toUpperCase()}${raw.slice(1)}`.slice(0, 60) : 'ChatGPT';
+  return { email, plan };
 }
 
 /** "pocket-agent/0.172.0 (Windows …)" → "0.172.0". */

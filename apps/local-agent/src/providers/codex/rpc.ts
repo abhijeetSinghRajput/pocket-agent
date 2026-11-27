@@ -1,4 +1,7 @@
 import { spawn } from 'node:child_process';
+import { existsSync } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 
 /**
  * Talks to `codex app-server`: Codex's own interface for rich clients (its VS Code extension uses
@@ -136,15 +139,55 @@ export class AppServerClient {
   }
 }
 
-/** The command that runs Codex on this PC (`codex`, or CODEX_PATH). */
-export const codexCommand = () => process.env['CODEX_PATH'] || 'codex';
+/**
+ * Where Codex is on this PC: CODEX_PATH, else the first Codex program in the PATH folders or in
+ * the folders installers put it (npm's global folder, Homebrew, ~/.local/bin). Those extra folders
+ * matter for a PC agent started at sign-in: its PATH can be older or shorter than a terminal's
+ * (Codex installed after it started; launchd's short PATH on macOS). Null when there is none.
+ */
+export function findCodex(
+  env: NodeJS.ProcessEnv = process.env,
+  platform: NodeJS.Platform = process.platform,
+  home = os.homedir(),
+  exists: (file: string) => boolean = existsSync,
+): string | null {
+  if (env['CODEX_PATH']) return env['CODEX_PATH'];
+  const win = platform === 'win32';
+  const p = win ? path.win32 : path.posix;
+  const names = win ? ['codex.cmd', 'codex.exe'] : ['codex'];
+  const dirs = [
+    ...(env['PATH'] ?? env['Path'] ?? '').split(win ? ';' : ':'),
+    ...(win
+      ? [env['APPDATA'] ? p.join(env['APPDATA'], 'npm') : '']
+      : [
+          '/opt/homebrew/bin',
+          '/usr/local/bin',
+          p.join(home, '.local', 'bin'),
+          p.join(home, '.npm-global', 'bin'),
+        ]),
+    // npm's global programs sit next to node itself with nvm, Homebrew and the Linux packages.
+    win ? '' : p.dirname(process.execPath),
+  ].filter(Boolean);
+  for (const dir of dirs)
+    for (const name of names) {
+      const file = p.join(dir, name);
+      if (exists(file)) return file;
+    }
+  return null;
+}
+
+/** The command that runs Codex on this PC: its full path when found, else plain `codex`. */
+export const codexCommand = () => findCodex() ?? 'codex';
 
 /**
  * Starts `codex app-server` as a child process. On Windows the npm shim is a .cmd file, which only
- * a shell can run; the arguments are fixed, so nothing from outside reaches that shell.
+ * a shell can run; the arguments are fixed, so nothing from outside reaches that shell (the path is
+ * quoted, for folders with spaces).
  */
 export function spawnAppServer(): Transport {
-  return spawnLines(codexCommand(), ['app-server'], process.platform === 'win32');
+  const win = process.platform === 'win32';
+  const command = codexCommand();
+  return spawnLines(win && /\s/.test(command) ? `"${command}"` : command, ['app-server'], win);
 }
 
 /**

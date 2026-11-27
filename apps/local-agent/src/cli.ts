@@ -51,6 +51,8 @@ import {
   uninstallHooks,
 } from './providers/claude-code/install.js';
 import type { QueryFn } from './providers/claude-code/managed.js';
+import { detectCodex } from './providers/codex/detect.js';
+import { findCodex, spawnAppServer } from './providers/codex/rpc.js';
 import { createSecretStore } from './secret-store.js';
 import { AgentService } from './service.js';
 import {
@@ -537,6 +539,36 @@ interface Check {
 }
 
 /** Every piece of the setup, checked; used by `status` (no repairs) and `doctor`. */
+/**
+ * Codex as the background service will see it: where its program is, and whether it answers and
+ * is signed in. The app only says "not installed" when this fails, so the reason is spelled out here.
+ */
+async function codexCheck(): Promise<Check> {
+  const program = findCodex();
+  if (!program)
+    return {
+      label: 'Codex',
+      mark: 'info',
+      detail: 'not found',
+      hint: 'Optional. To chat with Codex: npm install -g @openai/codex, then codex login. Installed some other way? Set CODEX_PATH to its program.',
+    };
+  const found = await withSpinner('Asking Codex…', () => detectCodex(spawnAppServer, version));
+  if (!found)
+    return {
+      label: 'Codex',
+      mark: 'warn',
+      detail: `found at ${program} but it didn't answer`,
+      hint: 'Run "codex --version" here. Update Codex (npm install -g @openai/codex@latest), then restart Pocket Agent: pocket-agent stop, then pocket-agent start --background.',
+    };
+  return found.signedIn
+    ? {
+        label: 'Codex',
+        mark: 'ok',
+        detail: `${found.version}, signed in${found.account?.email ? ` as ${found.account.email}` : ''}`,
+      }
+    : { label: 'Codex', mark: 'warn', detail: `${found.version}, signed out`, hint: 'Sign in: codex login' };
+}
+
 async function runChecks(full: boolean): Promise<Check[]> {
   const ctx = setupContext();
   const checks: Check[] = [];
@@ -570,6 +602,7 @@ async function runChecks(full: boolean): Promise<Check[]> {
             hint: 'Install Claude Code (https://claude.com/claude-code)',
           },
     );
+    checks.push(await codexCheck());
   }
 
   checks.push(

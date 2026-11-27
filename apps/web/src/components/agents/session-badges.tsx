@@ -3,7 +3,7 @@ import type { AgentSessionDto, AgentStatus } from '@pocket-agent/protocol';
 import { Bot, Code, EyeOff, SquareTerminal } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Badge } from '@/components/ui/badge';
-import { AGENT_LOGOS, AgentLogo } from '@/components/agents/agent-logos';
+import { AGENT_LOGOS, AgentLogo, agentInk } from '@/components/agents/agent-logos';
 import { cn } from '@/lib/utils';
 
 const STATUS: Record<
@@ -42,9 +42,12 @@ export function SessionAvatar({
     <span
       aria-hidden
       title={logo.title}
-      style={{ backgroundColor: `color-mix(in oklab, ${logo.hex} 14%, transparent)` }}
+      style={{
+        ...agentInk(session.provider),
+        backgroundColor: 'color-mix(in oklab, var(--agent-ink) 14%, transparent)',
+      }}
       className={cn(
-        'relative grid shrink-0 place-items-center rounded-full',
+        'agent-ink relative grid shrink-0 place-items-center rounded-full',
         size === 'sm' ? 'size-9' : size === 'lg' ? 'size-16' : 'size-12',
       )}
     >

@@ -90,6 +90,8 @@ test('in the app, a new notification shows as a toast, except on the page it poi
   // Tapping it opens where it points (the test notification: the history) and marks it read.
   await toast.getByRole('button').first().click();
   await expect(page).toHaveURL(/\/notifications$/);
+  // Already read, so it is under All (Unread is the first tab).
+  await page.getByRole('tab', { name: 'All' }).click();
   await expect(page.getByTestId('notification').first()).not.toHaveAttribute('data-unread');
 
   // Already on that page: no toast, the list itself updates.

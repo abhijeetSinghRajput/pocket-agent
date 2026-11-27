@@ -5,6 +5,7 @@ import { Bell, X } from 'lucide-react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { apiRequest } from '@/lib/api';
+import { webPath } from '@/lib/nav';
 import { useLiveEvents } from '@/lib/live';
 import { markRead } from '@/lib/use-notifications';
 
@@ -34,7 +35,7 @@ export function InAppToasts() {
       .then(({ notifications }) => {
         const n = notifications.find((x) => x.id === id);
         // Already on that page (e.g. the chat that finished): it's in front of you.
-        if (!n || n.readAt || (n.link && n.link === where.current)) return;
+        if (!n || n.readAt || (n.link && webPath(n.link) === where.current)) return;
         // A permission request or question is already on screen while the app is open: in its
         // chat, as the pop-up sheet anywhere else, listed on Approvals. A toast would repeat it.
         if (n.category === 'permission_required') return;
@@ -63,7 +64,7 @@ export function InAppToasts() {
             onClick={() => {
               dismiss(n.id);
               void markRead([n.id]).catch(() => undefined);
-              if (n.link) router.push(n.link);
+              if (n.link) router.push(webPath(n.link));
             }}
           >
             <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-primary/12 text-primary">

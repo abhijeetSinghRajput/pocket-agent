@@ -7,7 +7,7 @@ import { useState } from 'react';
 import { ApprovalCard } from '@/components/approvals/approval-card';
 import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/dialog';
-import { openChatId } from '@/lib/nav';
+import { openChatId, routes } from '@/lib/nav';
 import { useApprovals } from '@/lib/use-approvals';
 
 /**
@@ -53,7 +53,7 @@ export function ApprovalPrompt() {
               Later
             </Button>
             <Button asChild variant="outline">
-              <Link href={`/agents/${next.sessionId}`} onClick={() => dismiss(next.id)}>
+              <Link href={routes.chat(next.sessionId)} onClick={() => dismiss(next.id)}>
                 <MessageSquare aria-hidden /> Open chat
               </Link>
             </Button>

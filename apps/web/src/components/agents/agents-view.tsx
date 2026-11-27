@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Segmented } from '@/components/ui/segmented';
 import { TerminalGuide } from '@/components/ui/terminal-guide';
 import { apiRequest } from '@/lib/api';
+import { routes } from '@/lib/nav';
 import { chatList, type ChatScope } from '@/lib/chat';
 import { chatListTime } from '@/lib/format';
 import { useLiveRefresh } from '@/lib/live';
@@ -44,7 +45,7 @@ function SessionRow({ s, active, waiting }: { s: AgentSessionDto; active: boolea
   return (
     <li>
       <Link
-        href={`/agents/${s.id}`}
+        href={routes.chat(s.id)}
         data-testid="session-card"
         data-session-id={s.externalSessionId}
         aria-current={active ? 'page' : undefined}

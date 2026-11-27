@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/dialog';
 import { TerminalGuide } from '@/components/ui/terminal-guide';
 import { apiRequest } from '@/lib/api';
+import { routes } from '@/lib/nav';
 import { commandError, NEW_CHAT_MODE, newChatModel, waitForSession } from '@/lib/commands';
 
 const fetchCommand = (id: string) => apiRequest(`/commands/${id}`, CommandResponse).then((r) => r.command);
@@ -79,7 +80,7 @@ export function NewSessionDialog({
       if (command.sessionId) {
         onOpenChange(false);
         setText('');
-        router.push(`/agents/${command.sessionId}`);
+        router.push(routes.chat(command.sessionId));
         return;
       }
       setError(commandError(command) ?? 'Your PC did not start the session in time.');

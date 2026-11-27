@@ -16,16 +16,39 @@ export const NAV_ITEMS: readonly NavItem[] = [
 ];
 
 /**
- * The session whose chat is open (`/agents/<id>`), if any. A sub-agent's page and its transcript
- * (`/agents/<id>/sub/<toolUseId>[/transcript]`) belong to that chat too.
+ * The web app's addresses, in one place:
+ *   /chat                                       the chat list (Chats)
+ *   /chat/<id>                                  a chat
+ *   /chat/<id>/agents/<toolUseId>               one of its sub-agents
+ *   /chat/<id>/agents/<toolUseId>/transcript    that sub-agent's whole transcript
+ *   /agents                                     the Agents page (Connected, Sub-agents, Finished)
+ * Old `/agents/<id>` links redirect to `/chat/<id>` (next.config.ts).
  */
-export function openChatId(pathname: string): string | null {
-  return /^\/agents\/([^/]+)(?:\/sub\/[^/]+(?:\/transcript)?)?\/?$/.exec(pathname)?.[1] ?? null;
+export const routes = {
+  chats: '/chat',
+  chat: (id: string) => `/chat/${id}`,
+  subagent: (id: string, toolUseId: string) => `/chat/${id}/agents/${encodeURIComponent(toolUseId)}`,
+  transcript: (id: string, toolUseId: string) =>
+    `/chat/${id}/agents/${encodeURIComponent(toolUseId)}/transcript`,
+  agents: '/agents',
+};
+
+/**
+ * A link a notification or approval carries (the API writes `/agents/<id>` for a chat, which the
+ * app reads too), as the web app's own address.
+ */
+export function webPath(link: string): string {
+  return link.replace(/^\/agents\/([^/?#]+)/, '/chat/$1');
 }
 
-/** The chat list (`/`) or an open chat (`/agents/<id>`). */
+/** The session whose chat is open (a chat, one of its sub-agents or a transcript), if any. */
+export function openChatId(pathname: string): string | null {
+  return /^\/chat\/([^/]+)(?:\/agents\/[^/]+(?:\/transcript)?)?\/?$/.exec(pathname)?.[1] ?? null;
+}
+
+/** The chat list or anything inside a chat. */
 export function isChatsRoute(pathname: string): boolean {
-  return pathname === '/chat' || pathname.startsWith('/agents/');
+  return pathname === '/chat' || pathname.startsWith('/chat/');
 }
 
 export function isActive(pathname: string, href: string): boolean {

@@ -5,7 +5,7 @@ import { typeOver } from '@/components/agents/chat-messages';
 import { resetLabel } from '@/components/claude-usage';
 import { buildChat, cleanPrompt, isQueued, readAnswer, summaryParts } from '@/lib/chat';
 import { chatListTime, dayLabel, daysAgo, recentSections } from '@/lib/format';
-import { openChatId } from '@/lib/nav';
+import { isActive, openChatId, webPath } from '@/lib/nav';
 
 let n = 0;
 const at = (sec: number) => new Date(Date.UTC(2026, 10, 20, 10, 0, sec)).toISOString();
@@ -325,12 +325,24 @@ describe('chat time labels', () => {
 
 describe('openChatId', () => {
   it('finds the open chat only on a session page', () => {
-    expect(openChatId('/agents/abc')).toBe('abc');
+    expect(openChatId('/chat/abc')).toBe('abc');
+    expect(openChatId('/chat')).toBeNull();
     expect(openChatId('/agents')).toBeNull();
-    expect(openChatId('/agents/abc/x')).toBeNull();
-    expect(openChatId('/agents/abc/sub/toolu_1')).toBe('abc');
-    expect(openChatId('/agents/abc/sub/toolu_1/transcript')).toBe('abc');
+    expect(openChatId('/agents/abc')).toBeNull();
+    expect(openChatId('/chat/abc/x')).toBeNull();
+    expect(openChatId('/chat/abc/agents/toolu_1')).toBe('abc');
+    expect(openChatId('/chat/abc/agents/toolu_1/transcript')).toBe('abc');
     expect(openChatId('/approvals')).toBeNull();
+  });
+
+  it('keeps Chats and Agents apart in the nav', () => {
+    expect(isActive('/chat/abc', '/chat')).toBe(true);
+    expect(isActive('/chat/abc/agents/t', '/chat')).toBe(true);
+    expect(isActive('/chat/abc', '/agents')).toBe(false);
+    expect(isActive('/agents', '/agents')).toBe(true);
+    expect(isActive('/agents', '/chat')).toBe(false);
+    expect(webPath('/agents/abc')).toBe('/chat/abc');
+    expect(webPath('/approvals')).toBe('/approvals');
   });
 });
 

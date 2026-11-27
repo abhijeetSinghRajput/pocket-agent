@@ -35,6 +35,7 @@ const READ_EVENT = 'pocket-agent:notifications-read';
  * seen: they are marked read when it opens, when the app comes back to it, and as new ones arrive.
  */
 export function useMarkChatRead(sessionId: string) {
+  // As the API writes a chat's link (see webPath in lib/nav.ts).
   const link = `/agents/${sessionId}`;
   const mark = useCallback(() => {
     if (document.visibilityState !== 'visible') return;

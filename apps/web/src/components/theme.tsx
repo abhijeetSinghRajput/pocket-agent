@@ -4,6 +4,7 @@ import { Monitor, Moon, Sun } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import { ThemeProvider as NextThemes, useTheme } from 'next-themes';
 import { useCallback, useEffect, useSyncExternalStore, type ReactNode } from 'react';
+import { ThemeIcon } from '@/components/ui/theme-icon';
 import { Button } from '@/components/ui/button';
 import { Segmented } from '@/components/ui/segmented';
 
@@ -109,7 +110,9 @@ export function ThemeToggle({ className }: { className?: string }) {
       data-testid="theme-toggle"
       onClick={() => setTheme(dark ? 'light' : 'dark')}
     >
-      {dark ? <Sun /> : <Moon />}
+      {/* What a click turns it to: the sun in the dark, the moon in the light. It morphs (Kobra's
+          ThemeIcon) and only appears once the theme is known, so the first paint doesn't morph. */}
+      {mounted ? <ThemeIcon dark={!dark} /> : <span className="size-4" />}
     </Button>
   );
 }

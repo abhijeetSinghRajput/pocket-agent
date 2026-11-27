@@ -5,6 +5,7 @@ import { Check, CheckCheck, Clock, MessageCircleQuestion, Send, ShieldAlert, X }
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { agentName, parseQuestions, requestTarget, type AskedQuestion } from '@/lib/chat';
+import { routes } from '@/lib/nav';
 import { Button } from '@/components/ui/button';
 import { shellTokens } from '@/components/ui/command-line';
 import { apiRequest } from '@/lib/api';
@@ -260,7 +261,7 @@ export function ApprovalCard({ approval, onDecided }: { approval: ApprovalDto; o
           </h3>
           <p className="mt-0.5 truncate text-xs text-muted-foreground">
             <Link
-              href={`/agents/${approval.sessionId}`}
+              href={routes.chat(approval.sessionId)}
               className="font-medium text-foreground underline-offset-4 hover:underline"
             >
               {approval.projectName}

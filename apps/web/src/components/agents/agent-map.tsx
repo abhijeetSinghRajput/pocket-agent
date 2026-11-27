@@ -8,6 +8,7 @@ import type { ReactNode } from 'react';
 import { AgentLogo, agentBackdrop, agentInk } from '@/components/agents/agent-logos';
 import { duration } from '@/components/agents/agents-view';
 import { timeAgo } from '@/lib/format';
+import { routes } from '@/lib/nav';
 import { useSubagent } from '@/lib/use-workers';
 import { cn } from '@/lib/utils';
 
@@ -49,7 +50,7 @@ const whenOf = (status: WorkerStatus, startedAt: string, endedAt: string | null)
 
 /** A sub-agent's page in a chat, and its whole transcript. */
 export const subagentHref = (sessionId: string, toolUseId: string) =>
-  `/agents/${sessionId}/sub/${encodeURIComponent(toolUseId)}`;
+  routes.subagent(sessionId, toolUseId);
 
 /** A worker's status as a pill; a running one breathes. */
 export function WorkerBadge({ status }: { status: WorkerStatus }) {
@@ -130,7 +131,7 @@ function WorkerRow({ w, now }: { w: WorkerDto; now: string | null }) {
   const sub = w.kind === 'subagent';
   return (
     <AgentRow
-      href={sub ? subagentHref(w.sessionId, w.id) : `/agents/${w.sessionId}`}
+      href={sub ? routes.subagent(w.sessionId, w.id) : routes.chat(w.sessionId)}
       title={w.title}
       meta={meta}
       time={whenOf(w.status, w.startedAt, w.finishedAt)}
@@ -216,7 +217,7 @@ function byChat(workers: readonly WorkerDto[]): Chat[] {
 function ChatNode({ chat }: { chat: Chat }) {
   return (
     <Link
-      href={`/agents/${chat.sessionId}`}
+      href={routes.chat(chat.sessionId)}
       data-testid="agent-map-chat"
       aria-label={`${agentProduct(chat.provider)} chat ${chat.projectName}, ${chat.workers.length} agents. Open chat`}
       className="flex items-center gap-2.5 rounded-lg py-1.5 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"

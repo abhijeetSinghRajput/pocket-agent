@@ -5,12 +5,13 @@ import { isActive, isChatsRoute, NAV_ITEMS } from '@/lib/nav';
 describe('isActive', () => {
   it('treats the chat list and every open chat as Chats (home)', () => {
     expect(isActive('/chat', '/chat')).toBe(true);
-    expect(isActive('/agents/abc', '/chat')).toBe(true);
+    expect(isActive('/chat/abc', '/chat')).toBe(true);
+    expect(isActive('/chat/abc', '/agents')).toBe(false); // a chat is not the Agents page
     expect(isActive('/approvals', '/chat')).toBe(false);
     expect(isChatsRoute('/settings')).toBe(false);
   });
   it('matches nested routes', () => {
-    expect(isActive('/agents/abc', '/agents')).toBe(true);
+    expect(isActive('/devices/abc', '/devices')).toBe(true);
     expect(isActive('/agentsx', '/agents')).toBe(false);
   });
   it('keeps the bottom bar to 3 sections plus the profile button; settings live in the profile', () => {

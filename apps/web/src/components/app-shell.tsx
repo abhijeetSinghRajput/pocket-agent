@@ -1,7 +1,7 @@
 'use client';
 
 import type { UserDto } from '@pocket-agent/protocol';
-import { Bell, Moon, Sun, type LucideProps } from 'lucide-react';
+import { Bell, type LucideProps } from 'lucide-react';
 
 import Image from 'next/image';
 import Link from 'next/link';
@@ -11,36 +11,11 @@ import { ApprovalPrompt } from '@/components/approvals/approval-prompt';
 import { PROFILE_ROUTES, ProfileLink, ProfileRow } from '@/components/user-avatar';
 import { ThemeToggle, useMounted, useSmoothTheme } from '@/components/theme';
 import { SoundToggle } from '@/components/ui/sound';
+import { ThemeIcon } from '@/components/ui/theme-icon';
 import { followStyle, useFollow } from '@/components/ui/segmented';
-import { useLiveState } from '@/lib/live';
 import { useNotifications } from '@/lib/use-notifications';
 import { isActive, isChatsRoute, NAV_ITEMS, openChatId } from '@/lib/nav';
 import { cn } from '@/lib/utils';
-
-function LiveDot() {
-  const state = useLiveState();
-  const label =
-    state === 'live'
-      ? 'Live updates on'
-      : state === 'connecting'
-        ? 'Connecting…'
-        : 'Reconnecting… (data refreshes every 30s)';
-  return (
-    <span
-      role="status"
-      title={label}
-      data-testid="live-indicator"
-      data-state={state}
-      className="grid size-9 place-items-center"
-    >
-      <span
-        aria-hidden
-        className={cn('size-2 rounded-full', state === 'live' ? 'bg-success' : 'animate-pulse bg-warning')}
-      />
-      <span className="sr-only">{label}</span>
-    </span>
-  );
-}
 
 function NotificationBell() {
   const { state } = useNotifications(1);
@@ -87,7 +62,6 @@ function ThemeRow() {
   const { resolvedTheme, setTheme } = useSmoothTheme();
   const mounted = useMounted();
   const dark = mounted && resolvedTheme === 'dark';
-  const Icon = dark ? Sun : Moon;
   return (
     <button
       type="button"
@@ -96,7 +70,11 @@ function ThemeRow() {
       data-testid="theme-toggle"
       className="mt-auto flex h-9 items-center gap-3 rounded-md px-3 text-sm font-medium text-muted-foreground outline-none hover:bg-accent hover:text-accent-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50"
     >
-      <Icon className="size-[18px] text-foreground" aria-hidden />
+      {mounted ? (
+        <ThemeIcon dark={!dark} size={18} className="text-foreground" />
+      ) : (
+        <span className="size-[18px]" />
+      )}
       {dark ? 'Light theme' : 'Dark theme'}
       <kbd className="ml-auto rounded border px-1.5 font-mono text-[11px] text-muted-foreground">D</kbd>
     </button>
@@ -111,7 +89,6 @@ function Sidebar({ pathname, user }: { pathname: string; user: UserDto }) {
       <div className="flex h-14 items-center justify-between px-4">
         <Logo />
         <div className="flex items-center">
-          <LiveDot />
           <NotificationBell />
         </div>
       </div>
@@ -153,7 +130,6 @@ function MobileTopBar() {
     <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b bg-card/90 px-4 backdrop-blur-md lg:hidden">
       <Logo />
       <div className="flex items-center">
-        <LiveDot />
         <SoundToggle className="size-9 rounded-lg" />
         <ThemeToggle />
       </div>

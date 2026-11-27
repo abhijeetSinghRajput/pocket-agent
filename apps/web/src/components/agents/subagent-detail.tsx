@@ -12,6 +12,7 @@ import { ChatMessages } from '@/components/agents/chat-messages';
 import { Markdown } from '@/components/agents/markdown';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { useSubagent, useWorkers } from '@/lib/use-workers';
+import { routes } from '@/lib/nav';
 import { cn } from '@/lib/utils';
 
 // The web port of the app's sub-agent page and transcript (apps/mobile/src/features/agents/
@@ -239,7 +240,7 @@ export function SubagentDetail({ sessionId, toolUseId }: { sessionId: string; to
 
           {data && (
             <Link
-              href={`${subagentHref(sessionId, toolUseId)}/transcript`}
+              href={routes.transcript(sessionId, toolUseId)}
               data-testid="open-transcript"
               className={cn(buttonVariants({ variant: 'secondary', size: 'lg' }), 'w-full')}
             >

@@ -76,6 +76,11 @@ export const AGENT_LOGOS: Record<
     hex: string;
     /** The original colour on a dark background, when it differs (monochrome marks). */
     darkHex?: string;
+    /**
+     * A fixed background the mark always sits on, as in the agent's own app icon (Cursor's black
+     * tile); the mark then always uses its light ink. Otherwise the avatar is a tint of its colour.
+     */
+    tile?: string;
     path: string;
     /** top, middle, bottom */ gradient?: [string, string, string];
     /** The original logo as a picture, drawn instead of the path. */ image?: number;
@@ -129,10 +134,12 @@ export const AGENT_LOGOS: Record<
   },
   // Cursor's own mark in its original colours: #26251E on light (cursor_light.svg), #EDECEC on
   // dark (cursor_dark.svg), both SVGL.
+  // On its own app icon's black tile (#14120B) in both themes, like the icon itself.
   cursor: {
     title: 'Cursor',
     hex: '#26251E',
     darkHex: '#EDECEC',
+    tile: '#14120B',
     viewBox: '0 0 466.73 532.09',
     path: 'M457.43,125.94L244.42,2.96c-6.84-3.95-15.28-3.95-22.12,0L9.3,125.94c-5.75,3.32-9.3,9.46-9.3,16.11v247.99c0,6.65,3.55,12.79,9.3,16.11l213.01,122.98c6.84,3.95,15.28,3.95,22.12,0l213.01-122.98c5.75-3.32,9.3-9.46,9.3-16.11v-247.99c0-6.65-3.55-12.79-9.3-16.11h-.01ZM444.05,151.99l-205.63,356.16c-1.39,2.4-5.06,1.42-5.06-1.36v-233.21c0-4.66-2.49-8.97-6.53-11.31L24.87,145.67c-2.4-1.39-1.42-5.06,1.36-5.06h411.26c5.84,0,9.49,6.33,6.57,11.39h-.01Z',
   },
@@ -141,7 +148,13 @@ export const AGENT_LOGOS: Record<
 /** An agent's own colour for the current theme (monochrome marks flip to their light ink on dark). */
 export function agentColor(provider: ProviderId, dark: boolean): string {
   const logo = AGENT_LOGOS[provider];
-  return dark && logo.darkHex ? logo.darkHex : logo.hex;
+  // On its own tile, a mark is always in its light ink.
+  return (dark || logo.tile) && logo.darkHex ? logo.darkHex : logo.hex;
+}
+
+/** The round backdrop behind an agent's mark: its own tile, or a light tint of its colour. */
+export function agentBackdrop(provider: ProviderId, dark: boolean): string {
+  return AGENT_LOGOS[provider].tile ?? alpha(agentColor(provider, dark), 0.14);
 }
 
 export function AgentLogo({ provider, size = 24 }: { provider: ProviderId; size?: number }) {
@@ -245,7 +258,7 @@ export function SessionAvatar({
         width: d.box,
         height: d.box,
         borderRadius: d.box / 2,
-        backgroundColor: alpha(agentColor(session.provider, dark), 0.14),
+        backgroundColor: agentBackdrop(session.provider, dark),
         alignItems: 'center',
         justifyContent: 'center',
       }}

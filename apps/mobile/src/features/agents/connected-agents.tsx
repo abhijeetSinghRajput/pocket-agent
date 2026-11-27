@@ -3,9 +3,9 @@ import type { DeviceDto } from '@pocket-agent/protocol';
 import { Laptop, UserRound } from 'lucide-react-native';
 import { View } from 'react-native';
 import Animated from 'react-native-reanimated';
-import { AgentLogo, agentColor } from '@/features/sessions/badges';
+import { AgentLogo, agentBackdrop } from '@/features/sessions/badges';
 import { enter, layout } from '@/lib/motion';
-import { alpha, fonts, radius, useTheme } from '@/lib/theme';
+import { fonts, radius, useTheme } from '@/lib/theme';
 import { Badge, Card, Divider, T, type Tone } from '@/ui/core';
 import { CopyIconButton } from '@/ui/copy';
 import { EmptyState, Notice, Skeleton } from '@/ui/feedback';
@@ -44,7 +44,7 @@ function AgentRow({ agent: a }: { agent: PcAgent }) {
               width: 40,
               height: 40,
               borderRadius: 20,
-              backgroundColor: alpha(agentColor(a.provider, dark), 0.14),
+              backgroundColor: agentBackdrop(a.provider, dark),
               alignItems: 'center',
               justifyContent: 'center',
             }}

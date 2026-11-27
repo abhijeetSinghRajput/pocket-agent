@@ -9,7 +9,7 @@ import Animated, {
   useSharedValue,
   withTiming,
 } from 'react-native-reanimated';
-import { AgentLogo, agentColor } from '@/features/sessions/badges';
+import { AgentLogo, agentBackdrop } from '@/features/sessions/badges';
 import { dur, ease, enter, exit } from '@/lib/motion';
 import { alpha, radius, useTheme } from '@/lib/theme';
 import { Press, T, tap } from '@/ui/core';
@@ -70,7 +70,7 @@ function AgentTile({
               width: 36,
               height: 36,
               borderRadius: radius.md,
-              backgroundColor: alpha(agentColor(provider, dark), 0.14),
+              backgroundColor: agentBackdrop(provider, dark),
               alignItems: 'center',
               justifyContent: 'center',
             }}

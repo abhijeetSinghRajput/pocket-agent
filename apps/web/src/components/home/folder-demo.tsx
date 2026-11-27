@@ -301,7 +301,11 @@ function Screen({ s }: { s: F }) {
           <div key={chat.agent} className="pa-f-chat" data-state={chat.state}>
             <span
               className="pa-f-chat-avatar"
-              style={{ background: `color-mix(in srgb, ${AGENT_LOGOS[chat.agent].hex} 16%, #f4efe9)` }}
+              style={{
+                background:
+                  AGENT_LOGOS[chat.agent].tile ??
+                  `color-mix(in srgb, ${AGENT_LOGOS[chat.agent].hex} 16%, #f4efe9)`,
+              }}
             >
               <AgentLogo provider={chat.agent} className="pa-f-chat-logo" />
               <span className="pa-f-chat-dot" />

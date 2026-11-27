@@ -1,6 +1,14 @@
 import type { LucideIcon } from 'lucide-react-native';
 import { useEffect, useState, type ComponentRef, type ReactNode, type Ref } from 'react';
-import { Pressable, TextInput, View, type LayoutChangeEvent, type TextInputProps } from 'react-native';
+import {
+  Platform,
+  Pressable,
+  StyleSheet,
+  TextInput,
+  View,
+  type LayoutChangeEvent,
+  type TextInputProps,
+} from 'react-native';
 import Animated, {
   interpolateColor,
   useAnimatedStyle,
@@ -133,11 +141,15 @@ export function Toggle({
               height: 22,
               borderRadius: 11,
               backgroundColor: '#ffffff',
-              shadowColor: '#000',
-              shadowOpacity: 0.18,
-              shadowRadius: 2,
-              shadowOffset: { width: 0, height: 1 },
-              elevation: 2,
+              // No elevation on Android: it turns into a hard rectangle while a screen fades.
+              ...(Platform.OS === 'android'
+                ? { borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(0,0,0,0.12)' }
+                : {
+                    shadowColor: '#000',
+                    shadowOpacity: 0.18,
+                    shadowRadius: 2,
+                    shadowOffset: { width: 0, height: 1 },
+                  }),
             },
             knob,
           ]}
@@ -214,11 +226,16 @@ export function Segmented<V extends string>({
               height: (large ? 52 : 40) - (strong ? 4 : 6),
               borderRadius: large ? radius.lg : radius.md + 1,
               backgroundColor: strong ? c.primary : c.card,
-              shadowColor: '#000',
-              shadowOpacity: 0.08,
-              shadowRadius: 3,
-              shadowOffset: { width: 0, height: 1 },
-              elevation: 1,
+              // Android draws an elevated view as a stray hard rectangle while a screen fades in or
+              // out (the tab switch), so there the pill gets a hairline edge instead of elevation.
+              ...(Platform.OS === 'android'
+                ? { borderWidth: StyleSheet.hairlineWidth, borderColor: strong ? c.primary : c.border }
+                : {
+                    shadowColor: '#000',
+                    shadowOpacity: 0.08,
+                    shadowRadius: 3,
+                    shadowOffset: { width: 0, height: 1 },
+                  }),
             },
             pill,
           ]}

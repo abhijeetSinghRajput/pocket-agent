@@ -65,6 +65,65 @@ function dotColor(c: Colors, variant: Variant): string {
 }
 
 /**
+ * A mark drawn in coloured layers, bottom first: each a piece of its path (by index of its "M"
+ * sub-paths) or a shape of its own, filled with a top-to-bottom gradient (y1 to y2 in the mark's
+ * own units).
+ */
+export type LogoLayer = {
+  part: number | string;
+  stops: [number, string][];
+  y1: number;
+  y2: number;
+  evenOdd?: boolean;
+};
+
+// GitHub Copilot's own shape (its official path), coloured: a violet-to-blue head, a deep blue face
+// with its goggles, cyan eyes showing through the face's eye cut-outs. Colours chosen by us after
+// the purple Copilot look the owner picked; GitHub itself publishes no coloured Copilot mark.
+const COPILOT_LAYERS: LogoLayer[] = [
+  {
+    part: 0,
+    y1: 20,
+    y2: 208,
+    stops: [
+      [0, '#B169FF'],
+      [0.55, '#6C64FF'],
+      [1, '#295FFF'],
+    ],
+  },
+  {
+    part: 'M60 114H200V176H60Z',
+    y1: 108,
+    y2: 172,
+    stops: [
+      [0, '#20F8FB'],
+      [1, '#20F8FB'],
+    ],
+  },
+  {
+    part: 1,
+    y1: 40,
+    y2: 180,
+    evenOdd: true,
+    stops: [
+      [0, '#7A0FF6'],
+      [0.4, '#1A2FC2'],
+      [0.5, '#062498'],
+      [1, '#051781'],
+    ],
+  },
+  {
+    part: 2,
+    y1: 56,
+    y2: 70,
+    stops: [
+      [0, '#9A67FF'],
+      [1, '#9A67FF'],
+    ],
+  },
+];
+
+/**
  * Original brand marks of the coding agents Pocket Agent integrates with, one per provider (typed,
  * so adding a provider requires its logo). Claude's path from simple-icons 16.38.0 (CC0); the logos
  * themselves are trademarks of their owners and are used only to identify the agent.
@@ -76,6 +135,8 @@ export const AGENT_LOGOS: Record<
     hex: string;
     /** The original colour on a dark background, when it differs (monochrome marks). */
     darkHex?: string;
+    /** Drawn in coloured layers instead of one fill (the same in both themes). */
+    layers?: LogoLayer[];
     /**
      * A fixed background the mark always sits on, as in the agent's own app icon (Cursor's black
      * tile); the mark then always uses its light ink. Otherwise the avatar is a tint of its colour.
@@ -127,8 +188,8 @@ export const AGENT_LOGOS: Record<
   // its own proportions and GitHub's own ink: black on light, white on dark (copilot_dark.svg).
   copilot: {
     title: 'Copilot',
-    hex: '#1F2328',
-    darkHex: '#F0F6FC',
+    hex: '#6C64FF',
+    layers: COPILOT_LAYERS,
     viewBox: '0 0 256 208',
     path: 'M205.3 31.4c14 14.8 20 35.2 22.5 63.6 6.6 0 12.8 1.5 17 7.2l7.8 10.6c2.2 3 3.4 6.6 3.4 10.4v28.7a12 12 0 0 1-4.8 9.5C215.9 187.2 172.3 208 128 208c-49 0-98.2-28.3-123.2-46.6a12 12 0 0 1-4.8-9.5v-28.7c0-3.8 1.2-7.4 3.4-10.5l7.8-10.5c4.2-5.7 10.4-7.2 17-7.2 2.5-28.4 8.4-48.8 22.5-63.6C77.3 3.2 112.6 0 127.6 0h.4c14.7 0 50.4 2.9 77.3 31.4ZM128 78.7c-3 0-6.5.2-10.3.6a27.1 27.1 0 0 1-6 12.1 45 45 0 0 1-32 13c-6.8 0-13.9-1.5-19.7-5.2-5.5 1.9-10.8 4.5-11.2 11-.5 12.2-.6 24.5-.6 36.8 0 6.1 0 12.3-.2 18.5 0 3.6 2.2 6.9 5.5 8.4C79.9 185.9 105 192 128 192s48-6 74.5-18.1a9.4 9.4 0 0 0 5.5-8.4c.3-18.4 0-37-.8-55.3-.4-6.6-5.7-9.1-11.2-11-5.8 3.7-13 5.1-19.7 5.1a45 45 0 0 1-32-12.9 27.1 27.1 0 0 1-6-12.1c-3.4-.4-6.9-.5-10.3-.6Zm-27 44c5.8 0 10.5 4.6 10.5 10.4v19.2a10.4 10.4 0 0 1-20.8 0V133c0-5.8 4.6-10.4 10.4-10.4Zm53.4 0c5.8 0 10.4 4.6 10.4 10.4v19.2a10.4 10.4 0 0 1-20.8 0V133c0-5.8 4.7-10.4 10.4-10.4Zm-73-94.4c-11.2 1.1-20.6 4.8-25.4 10-10.4 11.3-8.2 40.1-2.2 46.2A31.2 31.2 0 0 0 75 91.7c6.8 0 19.6-1.5 30.1-12.2 4.7-4.5 7.5-15.7 7.2-27-.3-9.1-2.9-16.7-6.7-19.9-4.2-3.6-13.6-5.2-24.2-4.3Zm69 4.3c-3.8 3.2-6.4 10.8-6.7 19.9-.3 11.3 2.5 22.5 7.2 27a41.7 41.7 0 0 0 30 12.2c8.9 0 17-2.9 21.3-7.2 6-6.1 8.2-34.9-2.2-46.3-4.8-5-14.2-8.8-25.4-9.9-10.6-1-20 .7-24.2 4.3ZM128 56c-2.6 0-5.6.2-9 .5.4 1.7.5 3.7.7 5.7 0 1.5 0 3-.2 4.5 3.2-.3 6-.3 8.5-.3 2.6 0 5.3 0 8.5.3-.2-1.6-.2-3-.2-4.5.2-2 .3-4 .7-5.7-3.4-.3-6.4-.5-9-.5Z',
   },
@@ -170,6 +231,38 @@ export function AgentLogo({ provider, size = 24 }: { provider: ProviderId; size?
         accessibilityElementsHidden
         importantForAccessibility="no"
       />
+    );
+  }
+  if (logo.layers) {
+    const parts = logo.path.split(/(?=M)/);
+    return (
+      <Svg width={size} height={size} viewBox={logo.viewBox ?? '0 0 24 24'} accessibilityElementsHidden>
+        <Defs>
+          {logo.layers.map((l, i) => (
+            <LinearGradient
+              key={i}
+              id={`${id}-${i}`}
+              x1="0"
+              y1={l.y1}
+              x2="0"
+              y2={l.y2}
+              gradientUnits="userSpaceOnUse"
+            >
+              {l.stops.map(([at, color]) => (
+                <Stop key={at} offset={at} stopColor={color} />
+              ))}
+            </LinearGradient>
+          ))}
+        </Defs>
+        {logo.layers.map((l, i) => (
+          <Path
+            key={i}
+            d={typeof l.part === 'number' ? parts[l.part] : l.part}
+            fill={`url(#${id}-${i})`}
+            fillRule={l.evenOdd ? 'evenodd' : 'nonzero'}
+          />
+        ))}
+      </Svg>
     );
   }
   return (

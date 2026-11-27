@@ -569,7 +569,8 @@ export function ChatMessages({
         }}
         className="relative h-full overflow-y-auto overscroll-contain"
       >
-        <div className="mx-auto flex max-w-3xl flex-col gap-4 px-4 py-4 sm:px-6">
+        {/* pb-14: the last message clears the fade above the message box (h-10) with room to spare. */}
+        <div className="mx-auto flex max-w-3xl flex-col gap-4 px-4 pt-4 pb-14 sm:px-6">
           {header}
           {items.length ? (
             <ol

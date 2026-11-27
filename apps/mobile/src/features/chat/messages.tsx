@@ -1612,8 +1612,9 @@ export function ChatMessages({
           showsVerticalScrollIndicator={false}
           // Inverted, the header sits under the newest message and the footer above the oldest.
           ListHeaderComponent={
-            // Room between the newest message and the floating message box.
-            <View style={{ paddingBottom: bottomInset + 20 }}>
+            // Room between the newest message and the floating message box: clear of the fade above
+            // the box (28) and a breath more, so the last line never sits against the input.
+            <View style={{ paddingBottom: bottomInset + 44 }}>
               {footer ? <View style={{ paddingHorizontal: PAD, paddingBottom: GAP }}>{footer}</View> : null}
             </View>
           }

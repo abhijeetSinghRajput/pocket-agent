@@ -1,12 +1,12 @@
-import { nowDoing } from '@pocket-agent/core';
+import { agentProduct, nowDoing } from '@pocket-agent/core';
 import type { WorkerDto } from '@pocket-agent/protocol';
 import { useRouter } from 'expo-router';
-import { MessagesSquare } from 'lucide-react-native';
 import { View } from 'react-native';
 import Animated from 'react-native-reanimated';
 import { useSubagent } from '@/lib/data';
 import { enter, layout } from '@/lib/motion';
-import { alpha, useTheme } from '@/lib/theme';
+import { useTheme } from '@/lib/theme';
+import { AgentLogo, agentBackdrop } from '@/features/sessions/badges';
 import { Press, T } from '@/ui/core';
 import { useOpenAgent } from './agent-detail';
 import { TreeChildren } from './tree';
@@ -16,6 +16,8 @@ interface Chat {
   sessionId: string;
   projectName: string;
   deviceName: string;
+  /** The chat's agent, shown by its own mark. */
+  provider: WorkerDto['provider'];
   workers: WorkerDto[];
   running: number;
 }
@@ -28,6 +30,7 @@ function byChat(workers: readonly WorkerDto[]): Chat[] {
       sessionId: w.sessionId,
       projectName: w.projectName,
       deviceName: w.deviceName,
+      provider: w.provider,
       workers: [],
       running: 0,
     };
@@ -49,27 +52,30 @@ function byChat(workers: readonly WorkerDto[]): Chat[] {
 
 /** A chat at the root of its branch: where the agents below were started. Tap to open it. */
 function ChatNode({ chat, onPress }: { chat: Chat; onPress: () => void }) {
-  const { c } = useTheme();
+  const { c, dark } = useTheme();
   return (
     <Press
       accessibilityRole="button"
-      accessibilityLabel={`Chat ${chat.projectName}, ${chat.workers.length} agents. Open chat`}
+      accessibilityLabel={`${agentProduct(chat.provider)} chat ${chat.projectName}, ${chat.workers.length} agents. Open chat`}
       onPress={onPress}
       scale={0.99}
       testID="agent-map-chat"
       style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 6 }}
     >
+      {/* The chat's own agent (Claude, Codex, Cursor…); a ring in the accent while its agents run. */}
       <View
         style={{
-          width: 28,
-          height: 28,
-          borderRadius: 9,
+          width: 30,
+          height: 30,
+          borderRadius: 15,
           alignItems: 'center',
           justifyContent: 'center',
-          backgroundColor: chat.running ? alpha(c.primary, 0.13) : c.muted,
+          backgroundColor: agentBackdrop(chat.provider, dark),
+          borderWidth: 1.5,
+          borderColor: chat.running ? c.primary : 'transparent',
         }}
       >
-        <MessagesSquare size={15} color={chat.running ? c.primary : c.mutedForeground} strokeWidth={2.2} />
+        <AgentLogo provider={chat.provider} size={16} />
       </View>
       <View style={{ flex: 1, minWidth: 0 }}>
         <T variant="subheading" numberOfLines={1} style={{ fontSize: 15 }}>

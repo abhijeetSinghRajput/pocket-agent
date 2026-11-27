@@ -21,7 +21,8 @@ import { SwipePages } from '@/ui/pages';
 import { Screen, TAB_BAR_HEIGHT } from '@/ui/screen';
 
 type Page = 'active' | 'finished' | 'connected';
-const PAGES: readonly Page[] = ['active', 'finished', 'connected'];
+// The agents you have come first; then the sub-agents your chats run, and the ones that finished.
+const PAGES: readonly Page[] = ['connected', 'active', 'finished'];
 
 /** How long a decided request stays, showing its result, before the list closes over its place. */
 const SETTLE_MS = 1400;
@@ -146,7 +147,7 @@ export function AgentsScreen() {
   const devices = useDevices();
   const [creating, setCreating] = useState(false);
   // Running agents first; the ones that finished (and decisions made) are a tab away.
-  const [tab, setTab] = useState<Page>('active');
+  const [tab, setTab] = useState<Page>('connected');
   const insets = useSafeAreaInsets();
   const [pulling, setPulling] = useState(false);
 
@@ -303,9 +304,9 @@ export function AgentsScreen() {
       pinned={
         <Segmented
           options={[
-            { value: 'active', label: running.length ? `Active · ${running.length}` : 'Active' },
-            { value: 'finished', label: finished.length ? `Finished · ${finished.length}` : 'Finished' },
             { value: 'connected', label: 'Connected' },
+            { value: 'active', label: running.length ? `Sub-agents · ${running.length}` : 'Sub-agents' },
+            { value: 'finished', label: finished.length ? `Finished · ${finished.length}` : 'Finished' },
           ]}
           value={tab}
           onChange={setTab}

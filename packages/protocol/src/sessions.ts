@@ -94,6 +94,8 @@ export const WorkerDto = z.object({
   sessionId: z.string(),
   projectName: z.string(),
   deviceName: z.string(),
+  /** The agent of the chat that started it (older APIs: Claude Code). */
+  provider: ProviderId.default('claude-code'),
   kind: WorkerKind,
   /** What it was asked to do ("Find the upload code"), or the workflow's description. */
   title: z.string(),

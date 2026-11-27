@@ -244,7 +244,13 @@ export async function sessionRoutes(app: FastifyInstance, ctx: AppContext): Prom
       if (!list) continue;
       for (const w of buildWorkers(list.map((e) => toEventDto(e)))) {
         if (w.status !== 'running' && Date.parse(w.finishedAt ?? w.startedAt) < day.getTime()) continue;
-        workers.push({ ...w, sessionId: s.id, projectName: s.projectName, deviceName: s.device.name });
+        workers.push({
+          ...w,
+          sessionId: s.id,
+          projectName: s.projectName,
+          deviceName: s.device.name,
+          provider: ProviderId.catch('claude-code').parse(s.provider),
+        });
       }
     }
     workers.sort(

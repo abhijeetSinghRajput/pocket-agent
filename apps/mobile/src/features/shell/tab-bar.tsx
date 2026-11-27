@@ -1,6 +1,7 @@
 import { Tabs } from 'expo-router';
-import { Bell, Bot, MessageCircle, MonitorSmartphone, type LucideIcon } from 'lucide-react-native';
-import { useEffect, useState, type ComponentProps } from 'react';
+import { Bell, MessageCircle, MonitorSmartphone } from 'lucide-react-native';
+import { useEffect, useState, type ComponentProps, type ComponentType } from 'react';
+import { AgentsIcon } from '@/ui/agents-icon';
 import { Pressable, View, type LayoutChangeEvent } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -14,9 +15,12 @@ import { TAB_BAR_HEIGHT } from '@/ui/screen';
 
 type TabBarProps = Parameters<NonNullable<ComponentProps<typeof Tabs>['tabBar']>>[0];
 
-const TABS: Record<string, { label: string; icon?: LucideIcon }> = {
+/** A tab's icon: a lucide icon, or one of ours that takes the same props. */
+type TabIconComponent = ComponentType<{ size?: number; color?: string; fill?: string; strokeWidth?: number }>;
+
+const TABS: Record<string, { label: string; icon?: TabIconComponent }> = {
   index: { label: 'Chats', icon: MessageCircle },
-  agents: { label: 'Agents', icon: Bot },
+  agents: { label: 'Agents', icon: AgentsIcon },
   alerts: { label: 'Alerts', icon: Bell },
   devices: { label: 'Devices', icon: MonitorSmartphone },
   profile: { label: 'Profile' },
@@ -186,7 +190,7 @@ export function TabBar({ state, emitter, navigateToTab }: TabBarProps) {
   );
 }
 
-function TabIcon({ icon: Icon, focused }: { icon: LucideIcon; focused: boolean }) {
+function TabIcon({ icon: Icon, focused }: { icon: TabIconComponent; focused: boolean }) {
   const { c } = useTheme();
   const lift = useSharedValue(focused ? 1 : 0);
   useEffect(() => {

@@ -8,9 +8,9 @@ test.describe('mobile navigation', () => {
     const nav = page.getByTestId('bottom-nav');
     await expect(nav).toBeVisible();
 
-    await nav.getByRole('link', { name: 'Approvals' }).click();
-    await expect(page).toHaveURL(/\/approvals$/);
-    await expect(nav.getByRole('link', { name: 'Approvals' })).toHaveAttribute('aria-current', 'page');
+    await nav.getByRole('link', { name: 'Agents' }).click();
+    await expect(page).toHaveURL(/\/agents$/);
+    await expect(nav.getByRole('link', { name: 'Agents' })).toHaveAttribute('aria-current', 'page');
 
     await nav.getByRole('link', { name: 'Profile' }).click();
     await expect(page).toHaveURL(/\/profile$/);
@@ -26,7 +26,7 @@ test.describe('mobile navigation', () => {
       .getByTestId('bottom-nav')
       .locator('a, button')
       .evaluateAll((els) => els.map((e) => e.getBoundingClientRect().height));
-    expect(heights.length).toBe(5); // Chats, Approvals, Alerts, Devices, profile
+    expect(heights.length).toBe(5); // Chats, Agents, Alerts, Devices, profile
     for (const h of heights) expect(h).toBeGreaterThanOrEqual(44);
   });
 

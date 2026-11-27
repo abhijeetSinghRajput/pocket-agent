@@ -1,15 +1,17 @@
-import { MessageCircle, MonitorSmartphone, ShieldCheck, type LucideIcon } from 'lucide-react';
+import { MessageCircle, MonitorSmartphone, type LucideProps } from 'lucide-react';
+import type { ComponentType } from 'react';
+import { AgentsIcon } from '@/components/agents-icon';
 
 export interface NavItem {
   href: string;
   label: string;
-  icon: LucideIcon;
+  icon: ComponentType<LucideProps>;
 }
 
 /** Chats is home. Settings, notifications and sign-out live in the profile menu. Icons as in the app. */
 export const NAV_ITEMS: readonly NavItem[] = [
   { href: '/chat', label: 'Chats', icon: MessageCircle },
-  { href: '/approvals', label: 'Approvals', icon: ShieldCheck },
+  { href: '/agents', label: 'Agents', icon: AgentsIcon },
   { href: '/devices', label: 'Devices', icon: MonitorSmartphone },
 ];
 
@@ -20,7 +22,7 @@ export function openChatId(pathname: string): string | null {
 
 /** The chat list (`/`) or an open chat (`/agents/<id>`). */
 export function isChatsRoute(pathname: string): boolean {
-  return pathname === '/chat' || pathname === '/agents' || pathname.startsWith('/agents/');
+  return pathname === '/chat' || pathname.startsWith('/agents/');
 }
 
 export function isActive(pathname: string, href: string): boolean {

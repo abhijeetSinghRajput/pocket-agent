@@ -2,7 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 
 const ROUTES = [
   { path: '/chat', heading: 'Chats' },
-  { path: '/agents', heading: 'Chats' }, // old link: redirects home
+  { path: '/agents', heading: 'Agents' },
   { path: '/approvals', heading: 'Approvals' },
   { path: '/devices', heading: 'Devices' },
   { path: '/profile', heading: 'Profile' },

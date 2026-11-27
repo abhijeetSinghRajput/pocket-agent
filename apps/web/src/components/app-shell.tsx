@@ -1,12 +1,12 @@
 'use client';
 
 import type { UserDto } from '@pocket-agent/protocol';
-import { Bell, Moon, Sun, type LucideIcon } from 'lucide-react';
+import { Bell, Moon, Sun, type LucideProps } from 'lucide-react';
 
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useRef, type ReactNode } from 'react';
+import { useRef, type ComponentType, type ReactNode } from 'react';
 import { ApprovalPrompt } from '@/components/approvals/approval-prompt';
 import { PROFILE_ROUTES, ProfileLink, ProfileRow } from '@/components/user-avatar';
 import { ThemeToggle, useMounted, useSmoothTheme } from '@/components/theme';
@@ -171,7 +171,7 @@ function Sidebar({ pathname, user }: { pathname: string; user: UserDto }) {
             >
               <NavIcon icon={Icon} active={active} className="size-[18px]" />
               {label}
-              {href === '/approvals' && <PendingBadge />}
+              {href === '/agents' && <PendingBadge />}
             </Link>
           );
         })}
@@ -209,7 +209,7 @@ function NavIcon({
   active,
   className,
 }: {
-  icon: LucideIcon;
+  icon: ComponentType<LucideProps>;
   active: boolean;
   className?: string;
 }) {
@@ -292,7 +292,7 @@ function BottomNav({ pathname, user }: { pathname: string; user: UserDto }) {
           >
             <span className="relative grid h-8 place-items-center">
               <NavIcon icon={Icon} active={active} className="size-[21px]" />
-              {href === '/approvals' && <PendingDot />}
+              {href === '/agents' && <PendingDot />}
               {href === BELL.href && <UnreadDot />}
             </span>
             {label}

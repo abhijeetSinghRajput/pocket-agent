@@ -77,6 +77,47 @@ describe('sessions the user started: PermissionRequest', () => {
     expect(outcomes(t.events)).toEqual(['remote']);
   });
 
+  it('a mode picked in Pocket Agent for an editor session is switched to with the next Allow, once', async () => {
+    const t = observed({ away: true });
+    const perm = (mode: string): Payload => ({ ...hook('PermissionRequest'), permission_mode: mode });
+    const sid = String(perm('default')['session_id']);
+    t.handler.wantMode(sid, 'auto');
+
+    // Denied: nothing switches, the mode stays wanted.
+    const denied = t.handler.handle(perm('default')) as Promise<unknown>;
+    t.broker.decide(t.requestId, { behavior: 'deny', message: 'no' });
+    expect(JSON.stringify(await denied)).not.toContain('setMode');
+
+    // Allowed: allow, plus a session-only switch to Auto.
+    t.handler.handle(hook('PreToolUse'));
+    const allowed = t.handler.handle(perm('default')) as Promise<unknown>;
+    t.broker.decide(t.requestId, { behavior: 'allow' });
+    expect(await allowed).toEqual({
+      hookSpecificOutput: {
+        hookEventName: 'PermissionRequest',
+        decision: {
+          behavior: 'allow',
+          updatedPermissions: [{ type: 'setMode', mode: 'auto', destination: 'session' }],
+        },
+      },
+    });
+
+    // Applied: the next Allow is plain again.
+    t.handler.handle(hook('PreToolUse'));
+    const next = t.handler.handle(perm('auto')) as Promise<unknown>;
+    t.broker.decide(t.requestId, { behavior: 'allow' });
+    expect(await next).toEqual({
+      hookSpecificOutput: { hookEventName: 'PermissionRequest', decision: { behavior: 'allow' } },
+    });
+
+    // Plan (or anything unknown) is never switched to from here.
+    t.handler.wantMode(sid, 'plan');
+    t.handler.handle(hook('PreToolUse'));
+    const plan = t.handler.handle(perm('auto')) as Promise<unknown>;
+    t.broker.decide(t.requestId, { behavior: 'allow' });
+    expect(JSON.stringify(await plan)).not.toContain('setMode');
+  });
+
   it('passes a deny reason to Claude', async () => {
     const t = observed({ away: true });
     const pending = t.handler.handle(hook('PermissionRequest')) as Promise<unknown>;

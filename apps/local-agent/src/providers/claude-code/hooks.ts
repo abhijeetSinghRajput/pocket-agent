@@ -93,6 +93,12 @@ export class ClaudeHookHandler {
   private readonly pendingPermissions = new Map<string, Map<string, string>>();
   /** Per held request: what "Allow for this session" would add. */
   private readonly sessionRulesOf = new Map<string, PermissionUpdate[]>();
+  /**
+   * The mode picked in Pocket Agent for a session running in the editor. Its process isn't ours, so
+   * the mode can't be set directly: it is handed to Claude Code with the next request allowed from
+   * Pocket Agent (a session-only switch, as Claude Code's own "Yes, and…" does), then forgotten.
+   */
+  private readonly wantedMode = new Map<string, SwitchableMode>();
   /** What Claude says between tool calls, read from the session's transcript. */
   readonly transcripts = new TranscriptTail();
 
@@ -235,7 +241,7 @@ export class ClaudeHookHandler {
               }
             : {}),
         });
-        if (hold) return this.awaitRemote(sessionId, toolUseId, waitMs);
+        if (hold) return this.awaitRemote(sessionId, toolUseId, waitMs, s(p['permission_mode']));
         break;
       }
 
@@ -432,6 +438,8 @@ export class ClaudeHookHandler {
     sessionId: string,
     requestId: string,
     waitMs: number,
+    /** The session's mode as Claude Code reported it with the request. */
+    currentMode?: string,
   ): Promise<HookOutput | undefined> {
     const decision = await this.opts.approvals!.wait(requestId, waitMs);
     const rules = this.sessionRulesOf.get(requestId) ?? [];
@@ -446,6 +454,14 @@ export class ClaudeHookHandler {
     }
     this.registry.event(sessionId, 'agent.permission.resolved', { requestId, outcome: 'remote' });
     this.registry.setStatus(sessionId, 'Running');
+    // Allowed, and a mode was picked for this session that it isn't in yet: switch it now.
+    const want = this.wantedMode.get(sessionId);
+    const switchTo = decision.behavior === 'allow' && want && want !== currentMode ? want : undefined;
+    if (decision.behavior === 'allow' || want === currentMode) this.wantedMode.delete(sessionId);
+    const updates: PermissionUpdate[] = [
+      ...(decision.behavior === 'allow' && decision.remember ? rules : []),
+      ...(switchTo ? [{ type: 'setMode' as const, mode: switchTo, destination: 'session' as const }] : []),
+    ];
     return {
       hookSpecificOutput: {
         hookEventName: 'PermissionRequest',
@@ -453,11 +469,19 @@ export class ClaudeHookHandler {
           decision.behavior === 'allow'
             ? {
                 behavior: 'allow',
-                ...(decision.remember && rules.length ? { updatedPermissions: rules } : {}),
+                ...(updates.length ? { updatedPermissions: updates } : {}),
               }
             : { behavior: 'deny', message: decision.message },
       },
     };
+  }
+
+  /**
+   * Remembers the mode picked in Pocket Agent for a session running in the editor (sent with a
+   * message that went into the editor's own turn); applied with the next request allowed from here.
+   */
+  wantMode(sessionId: string, mode: string): void {
+    if (SWITCHABLE.has(mode as SwitchableMode)) this.wantedMode.set(sessionId, mode as SwitchableMode);
   }
 
   private map<V>(m: Map<string, Map<string, V>>, sessionId: string): Map<string, V> {
@@ -471,6 +495,10 @@ export class ClaudeHookHandler {
     this.pendingPermissions.delete(sessionId);
   }
 }
+
+/** Modes Pocket Agent may switch an editor session to (plan stops work, so it is the editor's call). */
+type SwitchableMode = 'default' | 'acceptEdits' | 'auto';
+const SWITCHABLE = new Set<SwitchableMode>(['default', 'acceptEdits', 'auto']);
 
 function firstLine(text: string): string {
   return truncate(text.trim().split(/\r?\n/)[0] ?? '', 200);

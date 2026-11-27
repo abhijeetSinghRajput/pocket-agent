@@ -208,7 +208,7 @@ export function ModePicker({
             ? 'Can’t be changed right now'
             : live
               ? 'Switches at once, mid-task too'
-              : 'Mode for your next message'
+              : 'Sent with your next message. If Claude is busy in your editor then, it switches with the next request you allow here'
         }
       >
         <Body>

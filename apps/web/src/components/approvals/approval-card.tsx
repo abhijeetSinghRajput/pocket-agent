@@ -1,7 +1,7 @@
 'use client';
 
 import { ApprovalResponse, type ApprovalDto } from '@pocket-agent/protocol';
-import { Check, Clock, MessageCircleQuestion, Send, ShieldAlert, X } from 'lucide-react';
+import { Check, CheckCheck, Clock, MessageCircleQuestion, Send, ShieldAlert, X } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { agentName, parseQuestions, requestTarget, type AskedQuestion } from '@/lib/chat';
@@ -196,12 +196,15 @@ export function ApprovalCard({ approval, onDecided }: { approval: ApprovalDto; o
   const [busy, setBusy] = useState<'allow' | 'deny' | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState<'allow' | 'deny' | null>(approval.decision);
+  // Allowed with "don't ask again in this session" (the PC offers it for some requests).
+  const [forSession, setForSession] = useState(false);
   const [picks, setPicks] = useState<Record<string, Pick>>({});
   const target = requestTarget(approval.toolName, approval.input);
   const expired = left <= 0;
 
   async function decide(decision: 'allow' | 'deny', extra: Record<string, unknown> = {}) {
     setBusy(decision);
+    setForSession(extra['remember'] === true);
     setError(null);
     try {
       await apiRequest(`/approvals/${approval.id}/decision`, ApprovalResponse, {
@@ -330,7 +333,7 @@ export function ApprovalCard({ approval, onDecided }: { approval: ApprovalDto; o
               ? sent === 'allow'
                 ? 'Answer sent. Waiting for your PC to confirm…'
                 : 'Skipped. Waiting for your PC to confirm…'
-              : `${sent === 'allow' ? 'Allowed' : 'Denied'} — waiting for your PC to confirm…`}
+              : `${sent === 'allow' ? (forSession ? 'Allowed for this session' : 'Allowed') : 'Denied'} — waiting for your PC to confirm…`}
           </p>
         ) : answering ? (
           <div className="grid grid-cols-[auto_1fr] gap-2">
@@ -362,9 +365,28 @@ export function ApprovalCard({ approval, onDecided }: { approval: ApprovalDto; o
               <X aria-hidden /> {busy === 'deny' ? 'Denying…' : 'Deny'}
             </Button>
             <Button className="h-11" disabled={!!busy || expired} onClick={() => void decide('allow')}>
-              <Check aria-hidden /> {busy === 'allow' ? 'Allowing…' : 'Allow'}
+              <Check aria-hidden /> {busy === 'allow' && !forSession ? 'Allowing…' : 'Allow'}
             </Button>
           </div>
+        )}
+        {/* As in the app: allow it, and Claude Code stops asking for this in the chat. */}
+        {!sent && !answering && approval.remember && (
+          <button
+            type="button"
+            data-testid="allow-session"
+            aria-label={`Allow for this session: ${approval.remember}`}
+            disabled={!!busy || expired}
+            onClick={() => void decide('allow', { remember: true })}
+            className="mt-2 flex w-full flex-col items-start gap-0.5 rounded-xl border border-success/45 px-3.5 py-2.5 text-left outline-none transition-colors hover:bg-success/8 focus-visible:ring-[3px] focus-visible:ring-ring/50 active:scale-[0.98] disabled:opacity-50"
+          >
+            <span className="flex items-center gap-2 text-sm font-medium text-success">
+              <CheckCheck className="size-4" strokeWidth={2.4} aria-hidden />
+              {busy === 'allow' && forSession ? 'Allowing for this session…' : 'Allow for this session'}
+            </span>
+            <span className="line-clamp-2 text-xs text-muted-foreground">
+              Won’t ask again for: {approval.remember}
+            </span>
+          </button>
         )}
         {error && (
           <p role="alert" className="mt-2 text-sm text-destructive">

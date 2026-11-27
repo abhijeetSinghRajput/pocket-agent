@@ -6,7 +6,7 @@ import { Pressable, View, type LayoutChangeEvent } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useUser } from '@/lib/auth';
-import { useApprovals, useNotifications, useWorkers } from '@/lib/data';
+import { useNotifications, useWorkers } from '@/lib/data';
 import { dur, ease, enter, settleSpring } from '@/lib/motion';
 import { alpha, fonts, useTheme } from '@/lib/theme';
 import { useUpdateWaiting } from '@/features/shell/app-update';
@@ -28,13 +28,12 @@ const TABS: Record<string, { label: string; icon?: TabIconComponent }> = {
 
 /**
  * The bottom bar: four sections and your avatar. A soft pill slides (on a spring) to the section
- * you are in; counts sit on Agents (requests waiting for you) and Alerts (unread).
+ * you are in; Alerts shows its unread count (requests waiting for you pop up as a sheet anywhere).
  */
 export function TabBar({ state, emitter, navigateToTab }: TabBarProps) {
   const { c } = useTheme();
   const insets = useSafeAreaInsets();
   const user = useUser();
-  const waiting = useApprovals('pending').state.data?.length ?? 0;
   const unread = useNotifications().state.data?.unread ?? 0;
   // Any agent at work right now: a green dot breathes on Agents.
   const active = (useWorkers().state.data ?? []).some((w) => w.status === 'running');
@@ -79,7 +78,7 @@ export function TabBar({ state, emitter, navigateToTab }: TabBarProps) {
         {state.routes.map((route, i) => {
           const tab = TABS[route.name] ?? { label: route.name };
           const focused = state.index === i;
-          const badge = route.name === 'agents' ? waiting : route.name === 'alerts' ? unread : 0;
+          const badge = route.name === 'alerts' ? unread : 0;
           return (
             <Pressable
               key={route.key}
@@ -87,7 +86,7 @@ export function TabBar({ state, emitter, navigateToTab }: TabBarProps) {
               accessibilityState={{ selected: focused }}
               accessibilityLabel={[
                 tab.label,
-                badge ? `${badge} waiting` : null,
+                badge ? `${badge} unread` : null,
                 route.name === 'agents' && active ? 'agents at work' : null,
               ]
                 .filter(Boolean)

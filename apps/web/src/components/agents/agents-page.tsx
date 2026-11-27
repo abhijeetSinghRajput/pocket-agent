@@ -2,11 +2,11 @@
 
 import type { ApprovalDto } from '@pocket-agent/protocol';
 import { Bot, ChevronDown, Plus } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { AgentMap } from '@/components/agents/agent-map';
 import { ConnectedAgents } from '@/components/agents/connected-agents';
 import { NewSessionDialog } from '@/components/agents/new-session-dialog';
-import { APPROVAL_STATUS, ApprovalCard } from '@/components/approvals/approval-card';
+import { APPROVAL_STATUS } from '@/components/approvals/approval-card';
 import { PageHeader } from '@/components/page';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -18,13 +18,11 @@ import { useDevices, useWorkers } from '@/lib/use-workers';
 import { cn } from '@/lib/utils';
 
 // The web port of the app's Agents tab (apps/mobile/src/features/agents/agents-screen.tsx):
-// Connected (the coding agents on your PCs), Sub-agents (what needs you, then what runs now) and
+// Connected (the coding agents on your PCs), Sub-agents (what runs now; requests pop up as a panel on
+// every page) and
 // Finished (today's, and the decisions made).
 
 type Page = 'connected' | 'active' | 'finished';
-
-/** How long a decided request stays, showing its result, before the list closes over its place. */
-const SETTLE_MS = 1400;
 
 /** Re-renders every `ms`, so "for 12 min" stays true while the page is open. */
 function useTick(ms: number) {
@@ -108,48 +106,21 @@ function RecentDecisions({ items }: { items: ApprovalDto[] }) {
 export function AgentsPage() {
   useTick(30_000);
   const workers = useWorkers();
-  const pending = useApprovals('pending');
   const history = useApprovals('all');
   const devices = useDevices();
   const [creating, setCreating] = useState(false);
   const [tab, setTab] = useState<Page>('connected');
 
-  // Decided requests stay a moment, showing their result, before the refresh takes them away.
-  const [settling, setSettling] = useState<{ approval: ApprovalDto; index: number }[]>([]);
-  const timers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
-  useEffect(() => {
-    const map = timers.current;
-    return () => map.forEach((t) => clearTimeout(t));
-  }, []);
-  const refreshAll = () => void Promise.all([workers.refresh(), pending.refresh(), history.refresh()]);
-  const decided = (a: ApprovalDto, index: number) => {
-    setSettling((s) => (s.some((x) => x.approval.id === a.id) ? s : [...s, { approval: a, index }]));
-    clearTimeout(timers.current.get(a.id));
-    timers.current.set(
-      a.id,
-      setTimeout(() => {
-        setSettling((s) => s.filter((x) => x.approval.id !== a.id));
-        refreshAll();
-      }, SETTLE_MS),
-    );
-  };
-
-  const needs = [...(pending.state.data ?? [])];
-  for (const s of settling) {
-    if (!needs.some((a) => a.id === s.approval.id))
-      needs.splice(Math.min(s.index, needs.length), 0, s.approval);
-  }
   const list = workers.state.data ?? [];
   const running = list.filter((w) => w.status === 'running');
   const finished = list.filter((w) => w.status !== 'running');
   const recent = (history.state.data ?? []).filter((a) => a.status !== 'Pending' || a.decision).slice(0, 20);
 
-  const loading = workers.state.status === 'loading' || pending.state.status === 'loading';
+  const loading = workers.state.status === 'loading';
   const summary = loading
     ? undefined
     : [
         running.length ? `${running.length} running` : null,
-        needs.length ? `${needs.length} need${needs.length === 1 ? 's' : ''} you` : null,
         finished.length ? `${finished.length} finished today` : null,
       ]
         .filter(Boolean)
@@ -166,11 +137,6 @@ export function AgentsPage() {
       {workers.state.status === 'error' && (
         <p role="alert" className="rounded-xl bg-destructive/5 p-4 text-sm text-destructive">
           {workers.state.error}
-        </p>
-      )}
-      {pending.state.status === 'error' && (
-        <p role="alert" className="rounded-xl bg-destructive/5 p-4 text-sm text-destructive">
-          {pending.state.error}
         </p>
       )}
     </>
@@ -213,28 +179,15 @@ export function AgentsPage() {
           <>
             {loadingView}
             {errors}
-            {needs.length > 0 && (
-              <section className="flex flex-col gap-2.5" data-testid="needs-you">
-                <h2 className="flex items-center gap-1.5 px-1 text-xs font-semibold tracking-wider text-warning uppercase">
-                  <span aria-hidden className="size-[7px] rounded-full bg-warning" />
-                  Needs you <span className="opacity-60">{needs.length}</span>
-                </h2>
-                <div className="stagger grid gap-3 md:grid-cols-2" data-enter-new="">
-                  {needs.map((a, i) => (
-                    <ApprovalCard key={a.id} approval={a} onDecided={() => decided(a, i)} />
-                  ))}
-                </div>
-              </section>
-            )}
             {!loading && running.length > 0 && <AgentMap workers={running} />}
-            {!loading && !running.length && !needs.length && (
+            {!loading && !running.length && (
               <Empty
                 testId="no-agents"
                 title="Nothing running"
                 body={
                   finished.length
                     ? 'Sub-agents and workflows your chats start show up here while they run. The ones that finished today are under Finished.'
-                    : 'When a chat sends sub-agents or a workflow to work, they show up here while they run. Anything that needs you shows up here too.'
+                    : 'When a chat sends sub-agents or a workflow to work, they show up here while they run.'
                 }
                 action={() => setCreating(true)}
               />

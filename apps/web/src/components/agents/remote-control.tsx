@@ -142,7 +142,10 @@ function ModePicker({
     <DropdownMenu.Root modal={false}>
       <DropdownMenu.Trigger
         disabled={!!locked}
-        title={locked ?? 'Mode for your next message'}
+        title={
+          locked ??
+          'Sent with your next message. If Claude is busy in your editor then, it switches with the next request you allow here'
+        }
         aria-label={`Mode: ${current?.name ?? 'session’s mode'}`}
         data-testid="mode-picker"
         className={chip}

@@ -43,7 +43,7 @@ test('a Claude Code session streams into the dashboard live, survives a reconnec
   const sid = randomUUID();
   const hooks = hookPayloads(sid, String.raw`C:\work\checkout-service`);
 
-  await page.goto('/agents');
+  await page.goto('/chat');
   await expect(page.getByText('No active chats')).toBeVisible();
 
   // Claude Code starts and receives a prompt → the card appears without reloading.
@@ -113,7 +113,7 @@ test('a Claude Code session streams into the dashboard live, survives a reconnec
   await expect(chatStatus(page)).toHaveAttribute('data-status', 'Stopped', {
     timeout: 10_000,
   });
-  await page.goto('/agents');
+  await page.goto('/chat');
   await expect(page.getByText('No active chats')).toBeVisible();
   await page.getByRole('tab', { name: 'All' }).click();
   await expect(page.getByTestId('session-card').filter({ hasText: 'checkout-service' })).toBeVisible();
@@ -155,7 +155,7 @@ test('sessions found without hooks are shown as status-only, never as controllab
   );
   const agent = startAgent(env);
 
-  await page.goto('/agents');
+  await page.goto('/chat');
   const card = page.getByTestId('session-card').filter({ hasText: 'vs-code-project' });
   await expect(card).toBeVisible({ timeout: 20_000 });
   await expect(card.getByTestId('session-kind')).toHaveText('VS Code · status only');

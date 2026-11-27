@@ -254,6 +254,7 @@ export class AgentService {
       managed: this.managed,
       observed: this.observed,
       wake: this.wake,
+      wantMode: (sessionId, mode) => this.hooks.wantMode(sessionId, mode),
       models: () => this.models,
       // Codex runs only where it is installed and signed in (else: provider_not_available).
       others: {

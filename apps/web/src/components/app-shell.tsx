@@ -13,7 +13,6 @@ import { ThemeToggle, useMounted, useSmoothTheme } from '@/components/theme';
 import { SoundToggle } from '@/components/ui/sound';
 import { followStyle, useFollow } from '@/components/ui/segmented';
 import { useLiveState } from '@/lib/live';
-import { useApprovals } from '@/lib/use-approvals';
 import { useNotifications } from '@/lib/use-notifications';
 import { isActive, isChatsRoute, NAV_ITEMS, openChatId } from '@/lib/nav';
 import { cn } from '@/lib/utils';
@@ -68,40 +67,6 @@ function NotificationBell() {
         </span>
       )}
     </Link>
-  );
-}
-
-/** Number of permission requests waiting for a decision (live). */
-function usePendingCount(): number {
-  const { state } = useApprovals('pending');
-  return state.data?.length ?? 0;
-}
-
-function PendingBadge() {
-  const n = usePendingCount();
-  if (!n) return null;
-  return (
-    <span
-      className="ml-auto grid h-5 min-w-5 place-items-center rounded-full bg-warning px-1.5 text-[11px] font-semibold text-black tabular-nums"
-      aria-label={`${n} waiting`}
-      data-testid="pending-approvals"
-    >
-      {n}
-    </span>
-  );
-}
-
-function PendingDot() {
-  const n = usePendingCount();
-  if (!n) return null;
-  return (
-    <span
-      className="absolute -top-1 -right-2 grid h-4 min-w-4 place-items-center rounded-full bg-warning px-1 text-[10px] font-semibold text-black tabular-nums"
-      aria-label={`${n} waiting`}
-      data-testid="pending-approvals-mobile"
-    >
-      {n}
-    </span>
   );
 }
 
@@ -171,7 +136,6 @@ function Sidebar({ pathname, user }: { pathname: string; user: UserDto }) {
             >
               <NavIcon icon={Icon} active={active} className="size-[18px]" />
               {label}
-              {href === '/agents' && <PendingBadge />}
             </Link>
           );
         })}
@@ -292,7 +256,6 @@ function BottomNav({ pathname, user }: { pathname: string; user: UserDto }) {
           >
             <span className="relative grid h-8 place-items-center">
               <NavIcon icon={Icon} active={active} className="size-[21px]" />
-              {href === '/agents' && <PendingDot />}
               {href === BELL.href && <UnreadDot />}
             </span>
             {label}

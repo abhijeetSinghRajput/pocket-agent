@@ -1,19 +1,17 @@
 import { requestTarget, timeAgo } from '@pocket-agent/core';
 import type { ApprovalDto } from '@pocket-agent/protocol';
 import { Bot, ChevronDown, Plus } from 'lucide-react-native';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { RefreshControl, ScrollView, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { AllowAllButton, allowable } from '@/features/approvals/allow-all';
-import { ApprovalCard } from '@/features/approvals/approval-card';
 import { APPROVAL_STATUS } from '@/features/approvals/shared';
 import { NewChatSheet } from '@/features/sessions/new-chat-sheet';
 import { useApprovals, useDevices, useWorkers } from '@/lib/data';
 import { AgentMap } from './agent-map';
 import { ConnectedAgents } from './connected-agents';
 import { enter, exit, layout } from '@/lib/motion';
-import { alpha, fonts, radius, useTheme } from '@/lib/theme';
+import { alpha, radius, useTheme } from '@/lib/theme';
 import { Button, Card, Divider, Press, T, tap, toneColor } from '@/ui/core';
 import { EmptyState, Notice, Roll, Skeleton } from '@/ui/feedback';
 import { Segmented } from '@/ui/form';
@@ -23,9 +21,6 @@ import { Screen, TAB_BAR_HEIGHT } from '@/ui/screen';
 type Page = 'active' | 'finished' | 'connected';
 // The agents you have come first; then the sub-agents your chats run, and the ones that finished.
 const PAGES: readonly Page[] = ['connected', 'active', 'finished'];
-
-/** How long a decided request stays, showing its result, before the list closes over its place. */
-const SETTLE_MS = 1400;
 
 /** Re-renders every `ms`, so "for 12 min" stays true while the screen is open. */
 function useTick(ms: number) {
@@ -133,8 +128,7 @@ function RecentDecisions({ items }: { items: ApprovalDto[] }) {
 }
 
 /**
- * The agents working for you behind your chats: what needs you first (permission requests and
- * Claude's questions, decided right here), then the background workers (sub-agents and workflows a
+ * The agents working for you behind your chats: the background workers (sub-agents and workflows a
  * chat started) running now, then the ones that finished in the last 24 hours. Chats themselves live
  * on the Chats tab. Tap a worker to open the chat it runs in.
  */
@@ -142,7 +136,6 @@ export function AgentsScreen() {
   const { c } = useTheme();
   useTick(30_000);
   const workers = useWorkers();
-  const pending = useApprovals('pending');
   const history = useApprovals('all');
   const devices = useDevices();
   const [creating, setCreating] = useState(false);
@@ -151,45 +144,21 @@ export function AgentsScreen() {
   const insets = useSafeAreaInsets();
   const [pulling, setPulling] = useState(false);
 
-  // Decided requests stay a moment, showing their result, before the refresh takes them away.
-  const [settling, setSettling] = useState<{ approval: ApprovalDto; index: number }[]>([]);
-  const timers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
-  useEffect(() => {
-    const map = timers.current;
-    return () => map.forEach((t) => clearTimeout(t));
-  }, []);
   const refreshAll = useCallback(
-    () => Promise.all([workers.refresh(), pending.refresh(), history.refresh(), devices.refresh()]),
-    [workers, pending, history, devices],
+    () => Promise.all([workers.refresh(), history.refresh(), devices.refresh()]),
+    [workers, history, devices],
   );
-  const decided = (a: ApprovalDto, index: number) => {
-    setSettling((s) => (s.some((x) => x.approval.id === a.id) ? s : [...s, { approval: a, index }]));
-    clearTimeout(timers.current.get(a.id));
-    timers.current.set(
-      a.id,
-      setTimeout(() => {
-        setSettling((s) => s.filter((x) => x.approval.id !== a.id));
-        void refreshAll();
-      }, SETTLE_MS),
-    );
-  };
 
-  const needs = [...(pending.state.data ?? [])];
-  for (const s of settling) {
-    if (!needs.some((a) => a.id === s.approval.id))
-      needs.splice(Math.min(s.index, needs.length), 0, s.approval);
-  }
   const list = workers.state.data ?? [];
   const running = list.filter((w) => w.status === 'running');
   const finished = list.filter((w) => w.status !== 'running');
   const recent = (history.state.data ?? []).filter((a) => a.status !== 'Pending' || a.decision).slice(0, 20);
 
-  const loading = workers.state.status === 'loading' || pending.state.status === 'loading';
+  const loading = workers.state.status === 'loading';
   const summary = loading
     ? undefined
     : [
         running.length ? `${running.length} running` : null,
-        needs.length ? `${needs.length} need${needs.length === 1 ? 's' : ''} you` : null,
         finished.length ? `${finished.length} finished today` : null,
       ]
         .filter(Boolean)
@@ -212,48 +181,19 @@ export function AgentsScreen() {
       <Skeleton height={168} round={radius.xl} />
     </Animated.View>
   );
-  const errors = (
-    <>
-      {workers.state.status === 'error' && <Notice>{workers.state.error}</Notice>}
-      {pending.state.status === 'error' && <Notice>{pending.state.error}</Notice>}
-    </>
-  );
+  const errors = <>{workers.state.status === 'error' && <Notice>{workers.state.error}</Notice>}</>;
 
-  /** What runs now, and what needs you. */
+  /** What runs now. (Requests that need you pop up as a sheet on every screen.) */
   const activePage = (
     <>
       {loadingView}
       {errors}
-      {needs.length > 0 && (
-        <Animated.View entering={enter.rise(0)} layout={layout} style={{ gap: 10 }} testID="needs-you">
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 4 }}>
-            <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: c.warning }} />
-            <T
-              variant="overline"
-              accessibilityRole="header"
-              style={{ color: c.warning, fontFamily: fonts.semibold }}
-            >
-              NEEDS YOU
-            </T>
-            <T variant="overline" style={{ color: c.warning, opacity: 0.6 }}>
-              {needs.length}
-            </T>
-            <View style={{ flex: 1 }} />
-            <AllowAllButton requests={allowable(needs)} onDone={() => void refreshAll()} />
-          </View>
-          {needs.map((a, i) => (
-            <Animated.View key={a.id} entering={enter.rise(i)} exiting={exit.fade} layout={layout}>
-              <ApprovalCard approval={a} onDecided={() => decided(a, i)} />
-            </Animated.View>
-          ))}
-        </Animated.View>
-      )}
       {!loading && running.length > 0 && (
         <Animated.View entering={enter.rise(1)} layout={layout}>
           <AgentMap workers={running} />
         </Animated.View>
       )}
-      {!loading && !running.length && !needs.length && (
+      {!loading && !running.length && (
         <View testID="no-agents">
           <EmptyState
             icon={Bot}
@@ -261,7 +201,7 @@ export function AgentsScreen() {
             body={
               finished.length
                 ? 'Sub-agents and workflows your chats start show up here while they run. The ones that finished today are under Finished.'
-                : 'When a chat sends sub-agents or a workflow to work, they show up here while they run. Anything that needs you shows up here too.'
+                : 'When a chat sends sub-agents or a workflow to work, they show up here while they run.'
             }
             action="New chat"
             onAction={() => setCreating(true)}

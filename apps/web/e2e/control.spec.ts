@@ -40,7 +40,7 @@ test('an instruction from the dashboard reaches a session the user started, at t
   hook(env, h['SessionStart']!);
   hook(env, h['UserPromptSubmit']!);
 
-  await page.goto('/agents');
+  await page.goto('/chat');
   await page.getByTestId('session-card').filter({ hasText: 'billing' }).click();
   const caps = await openSessionInfo(page);
   await expect(caps.locator('[data-capability="Send instructions"]')).toHaveAttribute('data-state', 'yes');
@@ -109,7 +109,7 @@ test('without the PC owner’s consent, sessions they started cannot be instruct
   const h = hookPayloads(randomUUID(), String.raw`C:\work\payroll`);
   hook(env, h['SessionStart']!);
 
-  await page.goto('/agents');
+  await page.goto('/chat');
   await page.getByTestId('session-card').filter({ hasText: 'payroll' }).click();
   const instruct = (await openSessionInfo(page)).locator('[data-capability="Send instructions"]');
   await expect(instruct).toHaveAttribute('data-state', 'no');

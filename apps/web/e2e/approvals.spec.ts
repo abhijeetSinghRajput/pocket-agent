@@ -62,7 +62,6 @@ function toolCall(h: ReturnType<typeof hookPayloads>, command: string) {
 
 test('in Away mode, a permission request is decided from the dashboard and reaches Claude Code', async ({
   page,
-  isMobile,
 }) => {
   test.setTimeout(120_000);
   const { env, agent } = await setup(page, { approvals: true });
@@ -80,8 +79,7 @@ test('in Away mode, a permission request is decided from the dashboard and reach
   const card = page.getByTestId('approval-card').filter({ hasText: 'npm run deploy' });
   await expect(card).toBeVisible({ timeout: 15_000 });
   await expect(card).toContainText('deploy-scripts');
-  await expect(page.getByTestId(isMobile ? 'pending-approvals-mobile' : 'pending-approvals')).toHaveText('1');
-  await card.getByRole('button', { name: 'Allow' }).click();
+  await card.getByRole('button', { name: 'Allow', exact: true }).click();
 
   // The relay hands exactly "allow" back to Claude Code.
   expect(JSON.parse(await allowed)).toEqual({
@@ -116,6 +114,59 @@ test('in Away mode, a permission request is decided from the dashboard and reach
   expect(await relayAsync(env, localCall.perm)).toBe('');
   await page.goto('/approvals');
   await expect(page.getByTestId('approval-card')).toHaveCount(0);
+
+  agent.kill();
+  await agent.exited;
+});
+
+test('"Allow for this session" from the web hands Claude Code a session-only rule, as in the app', async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const { env, agent } = await setup(page, { approvals: true });
+  const h = hookPayloads(randomUUID(), String.raw`C:\work\session-rules`);
+  relay(env, h['SessionStart']!);
+  await setAway(page, agent, true);
+
+  // Claude Code offers its own "Yes, and don't ask again" rule (it asked to save it to settings).
+  const call = toolCall(h, 'npm test -- --watch=false');
+  relay(env, call.pre);
+  const out = relayAsync(env, {
+    ...call.perm,
+    permission_suggestions: [
+      {
+        type: 'addRules',
+        behavior: 'allow',
+        rules: [{ toolName: 'Bash', ruleContent: 'npm test:*' }],
+        destination: 'localSettings',
+      },
+    ],
+  });
+
+  await page.goto('/approvals');
+  const card = page.getByTestId('approval-card').filter({ hasText: 'npm test' });
+  await expect(card).toBeVisible({ timeout: 15_000 });
+  const forSession = card.getByTestId('allow-session');
+  await expect(forSession).toContainText('Bash(npm test:*)');
+  await forSession.click();
+
+  // Allowed, plus the rule for this session only (never written to settings on disk).
+  expect(JSON.parse(await out)).toEqual({
+    hookSpecificOutput: {
+      hookEventName: 'PermissionRequest',
+      decision: {
+        behavior: 'allow',
+        updatedPermissions: [
+          {
+            type: 'addRules',
+            behavior: 'allow',
+            rules: [{ toolName: 'Bash', ruleContent: 'npm test:*' }],
+            destination: 'session',
+          },
+        ],
+      },
+    },
+  });
 
   agent.kill();
   await agent.exited;

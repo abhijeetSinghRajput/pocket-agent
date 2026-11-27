@@ -1,7 +1,7 @@
 'use client';
 
 import { ApprovalResponse, type ApprovalDto } from '@pocket-agent/protocol';
-import { Check, Clock, X } from 'lucide-react';
+import { Check, CheckCheck, Clock, X } from 'lucide-react';
 import { useState } from 'react';
 import { describeRequest, readableInput, useCountdown } from '@/components/approvals/approval-card';
 import { Button } from '@/components/ui/button';
@@ -28,16 +28,19 @@ export function PermissionSheet({
   const expired = left <= 0;
   const [busy, setBusy] = useState<'allow' | 'deny' | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Allowing with "don't ask again in this session" (the PC offers it for some requests).
+  const [forSession, setForSession] = useState(false);
   const what = describeRequest(approval.toolName);
   const shown = requestTarget(approval.toolName, approval.input) || readableInput(approval.input);
 
-  async function decide(decision: 'allow' | 'deny') {
+  async function decide(decision: 'allow' | 'deny', remember = false) {
     setBusy(decision);
+    setForSession(remember);
     setError(null);
     try {
       await apiRequest(`/approvals/${approval.id}/decision`, ApprovalResponse, {
         method: 'POST',
-        body: { decision },
+        body: { decision, ...(remember ? { remember: true } : {}) },
       });
       onDone();
     } catch (err) {
@@ -111,9 +114,28 @@ export function PermissionSheet({
             disabled={!!busy || expired}
             onClick={() => void decide('allow')}
           >
-            <Check aria-hidden /> {busy === 'allow' ? 'Allowing…' : 'Allow'}
+            <Check aria-hidden /> {busy === 'allow' && !forSession ? 'Allowing…' : 'Allow'}
           </Button>
         </div>
+        {/* As in the app: allow it, and Claude Code stops asking for this in the chat. */}
+        {approval.remember && (
+          <button
+            type="button"
+            data-testid="allow-session"
+            aria-label={`Allow for this session: ${approval.remember}`}
+            disabled={!!busy || expired}
+            onClick={() => void decide('allow', true)}
+            className="flex w-full flex-col items-start gap-0.5 rounded-xl border border-success/45 px-3.5 py-2.5 text-left outline-none transition-colors hover:bg-success/8 focus-visible:ring-[3px] focus-visible:ring-ring/50 active:scale-[0.98] disabled:opacity-50"
+          >
+            <span className="flex items-center gap-2 text-sm font-medium text-success">
+              <CheckCheck className="size-4" strokeWidth={2.4} aria-hidden />
+              {busy === 'allow' && forSession ? 'Allowing for this session…' : 'Allow for this session'}
+            </span>
+            <span className="line-clamp-2 text-xs text-muted-foreground">
+              Won’t ask again for: {approval.remember}
+            </span>
+          </button>
+        )}
       </div>
     </section>
   );

@@ -43,6 +43,8 @@ export class CommandRouter {
       findConversation?: (sessionId: string) => Promise<{ cwd: string } | null>;
       observed: ObservedInstructions;
       wake?: IdleWake;
+      /** The mode picked for a session running in the editor, applied with its next remote Allow. */
+      wantMode?: (sessionId: string, mode: TurnMode) => void;
       /** Models Claude Code offers on this PC ([] = unknown: any well-formed id is passed on). */
       models?: () => Array<{ id: string }>;
       /** Downloads the files sent with a message. */
@@ -241,7 +243,9 @@ export class CommandRouter {
               ...withFiles,
             });
           }
-          // Delivered into the editor's own turn: its model can't be changed from here.
+          // Delivered into the editor's own turn: its model can't be changed from here, and the mode
+          // picked with it reaches Claude Code with the next request allowed from Pocket Agent.
+          if (turn.permissionMode) this.deps.wantMode?.(sid, turn.permissionMode);
           // A hook can only carry text, so Claude is told where the files were saved.
           this.deps.observed.enqueue(sid, {
             ...item,

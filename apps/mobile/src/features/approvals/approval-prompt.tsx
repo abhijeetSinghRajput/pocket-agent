@@ -13,9 +13,9 @@ function openChatId(pathname: string): string | null {
 }
 
 /**
- * A permission request pops up wherever you are. Inside that session's chat it is asked inline
- * instead, and on the Agents tab it is already listed (under "Needs you") — so no sheet there.
- * "Later" only hides it here; it stays pending on the Agents tab until decided or expired.
+ * A permission request pops up wherever you are, the Agents tab included: this sheet is the one
+ * place requests are asked. Inside that session's chat it is asked inline instead. "Later" only
+ * hides it here; it stays pending in its chat until decided or expired.
  */
 export function ApprovalPrompt() {
   const pathname = usePathname();
@@ -23,11 +23,7 @@ export function ApprovalPrompt() {
   const { state, refresh } = useApprovals('pending');
   const [dismissed, setDismissed] = useState<ReadonlySet<string>>(new Set());
   const chatId = openChatId(pathname);
-  const onAgentsTab = pathname === '/agents';
-
-  const next = onAgentsTab
-    ? undefined
-    : (state.data ?? []).find((a) => !dismissed.has(a.id) && a.sessionId !== chatId);
+  const next = (state.data ?? []).find((a) => !dismissed.has(a.id) && a.sessionId !== chatId);
   const dismiss = (id: string) => setDismissed((d) => new Set(d).add(id));
   // The last one shown stays while the sheet slides away.
   const [shown, setShown] = useState(next);

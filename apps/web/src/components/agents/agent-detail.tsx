@@ -19,6 +19,7 @@ import {
 import { QuestionSheet } from '@/components/approvals/question-sheet';
 import { PermissionSheet } from '@/components/approvals/permission-sheet';
 import { useApprovals } from '@/lib/use-approvals';
+import { routes } from '@/lib/nav';
 import { pendingQuestion } from '@/lib/commands';
 import { Button } from '@/components/ui/button';
 import { apiRequest, NOT_FOUND_MESSAGE } from '@/lib/api';
@@ -226,7 +227,7 @@ export function AgentDetail({ id }: { id: string }) {
           </h1>
           <p className="mt-2 text-sm text-muted-foreground">{state.error}</p>
           <Button asChild variant="outline" className="mt-6">
-            <Link href="/agents">Back to agents</Link>
+            <Link href={routes.chats}>Back to chats</Link>
           </Button>
         </div>
       </div>
@@ -255,8 +256,8 @@ export function AgentDetail({ id }: { id: string }) {
         className="z-10 flex shrink-0 items-center gap-1 border-b bg-card/90 px-1.5 pt-[env(safe-area-inset-top)] backdrop-blur-md sm:gap-2 sm:px-3"
       >
         <Link
-          href="/agents"
-          aria-label="Back to agents"
+          href={routes.chats}
+          aria-label="Back to chats"
           className="grid size-10 shrink-0 place-items-center rounded-full text-muted-foreground outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50 lg:hidden"
         >
           <ArrowLeft className="size-5" aria-hidden />

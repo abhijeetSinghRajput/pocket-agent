@@ -139,7 +139,7 @@ export function SubagentDetail({ sessionId, toolUseId }: { sessionId: string; to
   return (
     <div className="flex h-[var(--chat-height,100dvh)] flex-col overflow-hidden bg-background">
       <Bar
-        back="/agents"
+        back={routes.chat(sessionId)}
         title={agent?.description || 'Agent'}
         subtitle={
           agent

@@ -14,7 +14,7 @@ describe('isActive', () => {
     expect(isActive('/agentsx', '/agents')).toBe(false);
   });
   it('keeps the bottom bar to 3 sections plus the profile button; settings live in the profile', () => {
-    expect(NAV_ITEMS.map((i) => i.label)).toEqual(['Chats', 'Approvals', 'Devices']);
+    expect(NAV_ITEMS.map((i) => i.label)).toEqual(['Chats', 'Agents', 'Devices']);
   });
 });
 

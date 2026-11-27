@@ -1,6 +1,8 @@
 import {
   AGENT_RELEASES_URL,
   LATEST_AGENT_VERSION,
+  ProviderId,
+  providerAgentVersion,
   versionBelow,
   type DeviceDto,
 } from '@pocket-agent/protocol';
@@ -99,4 +101,74 @@ export function pcHealth(d: DeviceDto, now = Date.now()): HealthCheck[] {
           command: 'pocket-agent approvals enable',
         },
   ];
+}
+
+const models = (n: number) => `${n} model${n === 1 ? '' : 's'}`;
+
+/** Where one coding agent stands on a PC: ready to chat, or what is in the way. */
+export interface PcAgent {
+  provider: ProviderId;
+  state: 'ready' | 'signed-out' | 'update' | 'missing';
+  /** The state in a word or two, as the list shows it. */
+  label: string;
+  /** One line under the name: the plan or version when ready, otherwise what to do. */
+  detail: string;
+  /** Run on the PC to fix it. */
+  command?: string;
+}
+
+/**
+ * Every coding agent Pocket Agent works with, as one PC has it: Claude Code first, then the
+ * others in the order the app lists them. Only what the PC reports: whether each is installed and
+ * signed in (never the account itself), its version and models, and Claude's plan.
+ */
+export function pcAgents(d: DeviceDto): PcAgent[] {
+  const plan = d.usage?.plan;
+  const claude: PcAgent = {
+    provider: 'claude-code',
+    state: 'ready',
+    label: 'Ready',
+    detail: [
+      plan ? `Claude ${plan}` : 'Your Claude Code sign-in',
+      d.models.length ? models(d.models.length) : null,
+    ]
+      .filter(Boolean)
+      .join(' · '),
+  };
+  const others = ProviderId.options
+    .filter((p) => p !== 'claude-code')
+    .map((provider): PcAgent => {
+      const name = agentProduct(provider);
+      const found = d.agents.find((a) => a.provider === provider);
+      if (versionBelow(d.agentVersion, providerAgentVersion(provider)))
+        return {
+          provider,
+          state: 'update',
+          label: 'Update needed',
+          detail: `Pocket Agent on the PC is too old for ${name}. Update it there.`,
+          command: 'pocket-agent update',
+        };
+      if (!found)
+        return {
+          provider,
+          state: 'missing',
+          label: 'Not installed',
+          detail: `${name} isn’t on this PC. Install it there and it shows up here.`,
+        };
+      if (!found.signedIn)
+        return {
+          provider,
+          state: 'signed-out',
+          label: 'Signed out',
+          detail: `Sign in to ${name} on the PC to chat with it from here.`,
+          command: signInCommand(provider),
+        };
+      return {
+        provider,
+        state: 'ready',
+        label: 'Ready',
+        detail: `Version ${found.version}${found.models.length ? ` · ${models(found.models.length)}` : ''}`,
+      };
+    });
+  return [claude, ...others];
 }

@@ -274,22 +274,16 @@ export default function HomePage() {
 
         <section id="trust" className="scroll-mt-20 border-b">
           <div className="mx-auto max-w-6xl px-5 py-20 sm:px-8 sm:py-28">
-            <h2 className="display max-w-3xl text-5xl leading-[0.9] uppercase sm:text-7xl">
-              In control, at a glance
-            </h2>
-            <p className="mt-6 max-w-2xl text-[15px] text-pretty text-muted-foreground">
-              Pocket Agent is a remote for Claude Code, not a copy of it. Your code, your tools and your
-              Claude account stay on your computer, and your limits sit on your home screen.
-            </p>
-            <div className="mt-14 grid items-start gap-14 lg:grid-cols-[400px_1fr] lg:gap-20">
-              <figure
-                className="mx-auto w-full max-w-[380px]"
-                aria-label="Claude usage widget on an Android home screen"
-              >
-                <WidgetDemo />
-              </figure>
-              <div className="min-w-0 lg:pt-2">
-                <h3 className="text-2xl font-semibold tracking-tight text-balance">
+            <div className="grid items-start gap-14 lg:grid-cols-[400px_1fr] lg:gap-20">
+              <div className="min-w-0 lg:order-2">
+                <h2 className="display text-5xl leading-[0.9] uppercase sm:text-7xl lg:text-6xl">
+                  In control, at a glance
+                </h2>
+                <p className="mt-6 max-w-2xl text-[15px] text-pretty text-muted-foreground">
+                  Pocket Agent is a remote for Claude Code, not a copy of it. Your code, your tools and your
+                  Claude account stay on your computer, and your limits sit on your home screen.
+                </p>
+                <h3 className="mt-12 text-2xl font-semibold tracking-tight text-balance">
                   What you get over Claude Code Remote Control
                 </h3>
                 <ul className="mt-6 divide-y rounded-3xl border bg-card">
@@ -309,6 +303,13 @@ export default function HomePage() {
                   See the full comparison
                 </a>
               </div>
+              {/* Beside the heading on wide screens; under the list on a phone */}
+              <figure
+                className="mx-auto w-full max-w-95 lg:order-1"
+                aria-label="Claude usage widget on an Android home screen"
+              >
+                <WidgetDemo />
+              </figure>
             </div>
           </div>
         </section>

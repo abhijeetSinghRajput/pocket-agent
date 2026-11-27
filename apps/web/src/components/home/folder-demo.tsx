@@ -1,7 +1,20 @@
 'use client';
 
-import { ArrowLeft, ChevronRight, CircleCheck, Copy, Folder, FolderPlus, Monitor, Plus } from 'lucide-react';
-import { Bar, Camera, Caret, Collapse, Phone, Prompt, Stage, States, Window, type Act, type Rect } from './kit';
+import {
+  ArrowLeft,
+  Bot,
+  ChevronRight,
+  CircleCheck,
+  Copy,
+  Folder,
+  FolderPlus,
+  Monitor,
+  Plus,
+  Search,
+} from 'lucide-react';
+import { Camera, Caret, Collapse, Phone, Prompt, Stage, States, Window, type Act, type Rect } from './kit';
+import type { ProviderId } from '@pocket-agent/protocol';
+import { AgentLogo, AGENT_LOGOS } from '@/components/agents/agent-logos';
 import { useStageLook } from './look';
 import './home.css';
 
@@ -220,6 +233,51 @@ function AddView({ s }: { s: F }) {
   );
 }
 
+/**
+ * The chats already on the phone, behind the sheet: one per agent Pocket Agent connects to, some
+ * working, some waiting on you, some finished (the states the app's chat list shows).
+ */
+// Words and colours from the app's chat list (apps/mobile/src/features/sessions/badges.tsx).
+type ChatState = 'running' | 'permission' | 'input' | 'ended';
+const CHATS: { agent: ProviderId; folder: string; last: string; time: string; state: ChatState }[] = [
+  {
+    agent: 'antigravity',
+    folder: 'my-app',
+    last: 'Use the logo from the brand kit',
+    time: '1:16 AM',
+    state: 'running',
+  },
+  {
+    agent: 'claude-code',
+    folder: 'my-app',
+    last: 'Fix the failing login test',
+    time: '1:15 AM',
+    state: 'permission',
+  },
+  {
+    agent: 'codex',
+    folder: 'projects',
+    last: 'Add rate limits to the API',
+    time: '12:58 AM',
+    state: 'input',
+  },
+  {
+    agent: 'cursor',
+    folder: 'projects',
+    last: 'Refactor the settings page',
+    time: '12:40 AM',
+    state: 'running',
+  },
+  { agent: 'copilot', folder: 'my-app', last: 'Tests for the CSV parser', time: 'Yesterday', state: 'ended' },
+  { agent: 'opencode', folder: 'projects', last: 'Update the README', time: 'Yesterday', state: 'ended' },
+];
+const STATE_LABEL: Record<ChatState, string> = {
+  running: 'Running',
+  permission: 'Needs permission',
+  input: 'Waiting for input',
+  ended: 'Ended',
+};
+
 /** The phone: the chats, and New chat's sheet rising over them (the chats dim under it). */
 function Screen({ s }: { s: F }) {
   return (
@@ -231,10 +289,37 @@ function Screen({ s }: { s: F }) {
             <Plus size={16} strokeWidth={2.6} aria-hidden /> New chat
           </span>
         </div>
-        {[150, 120, 170, 135, 160, 110, 145, 125].map((w, i) => (
-          <div key={i} className="pa-f-behind-row">
-            <span className="pa-f-behind-dot" />
-            <Bar w={w} h={10} />
+        <div className="pa-f-tabs">
+          <span>Active</span>
+          <span data-on="">All</span>
+          <span>Archived</span>
+        </div>
+        <div className="pa-f-search">
+          <Search size={15} strokeWidth={2.2} aria-hidden /> Search
+        </div>
+        {CHATS.map((chat) => (
+          <div key={chat.agent} className="pa-f-chat" data-state={chat.state}>
+            <span
+              className="pa-f-chat-avatar"
+              style={{ background: `color-mix(in srgb, ${AGENT_LOGOS[chat.agent].hex} 16%, #f4efe9)` }}
+            >
+              <AgentLogo provider={chat.agent} className="pa-f-chat-logo" />
+              <span className="pa-f-chat-dot" />
+            </span>
+            <span className="pa-f-chat-text">
+              <span className="pa-f-chat-line">
+                <span className="pa-f-chat-title">{chat.folder}</span>
+                <span className="pa-f-chat-time">{chat.time}</span>
+              </span>
+              <span className="pa-f-chat-last">{chat.last}</span>
+              <span className="pa-f-chat-line pa-f-chat-meta">
+                <span className="pa-f-chat-state">{STATE_LABEL[chat.state]}</span>
+                <span className="pa-f-chat-pc">
+                  <Bot size={11} strokeWidth={2.4} aria-hidden />
+                </span>
+                Studio-PC
+              </span>
+            </span>
           </div>
         ))}
       </div>

@@ -1789,7 +1789,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 18px;
+  margin-bottom: 14px;
 }
 
 .pa-f-newchat {
@@ -1811,18 +1811,193 @@
   letter-spacing: -0.02em;
 }
 
-.pa-f-behind-row {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  height: 64px;
+/* The chats behind the sheet, as the app's chat list draws them: tabs, search, then each chat
+   with its agent (and a status dot), folder, time, last message, status and PC */
+.pa-f-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  padding: 3px;
+  margin-bottom: 10px;
+  border-radius: 12px;
+  background: #ebe4dc;
+  color: #77706a;
+  font-size: 13px;
+  font-weight: 500;
+  text-align: center;
 }
 
-.pa-f-behind-dot {
-  width: 40px;
-  height: 40px;
+.pa-f-tabs > span {
+  padding: 6px 0;
+  border-radius: 9px;
+}
+
+.pa-f-tabs > span[data-on] {
+  background: #fffdfa;
+  color: var(--ss-text);
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(40, 25, 10, 0.08);
+}
+
+.pa-f-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 12px;
+  margin-bottom: 8px;
+  border-radius: 12px;
+  background: #ebe4dc;
+  color: #8f877f;
+  font-size: 13.5px;
+}
+
+.pa-f-chat {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 0;
+}
+
+.pa-f-chat-avatar {
+  position: relative;
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  margin-top: 4px;
   border-radius: 50%;
-  background: #ddd3ca;
+}
+
+.pa-f-chat-logo {
+  width: 22px;
+  height: 22px;
+}
+
+/* The status dot on the avatar: a turning ring while it works, a plain dot otherwise */
+.pa-f-chat-dot {
+  position: absolute;
+  right: -2px;
+  bottom: -1px;
+  width: 13px;
+  height: 13px;
+  border: 2.5px solid #f4efe9;
+  border-radius: 50%;
+  background: #b9b2ab;
+  box-sizing: content-box;
+}
+
+.pa-f-chat[data-state='running'] .pa-f-chat-dot {
+  border-color: #f4efe9;
+  background: conic-gradient(#1c985a 0 75%, transparent 75% 100%);
+  -webkit-mask: radial-gradient(circle, transparent 3.2px, #000 3.6px);
+  mask: radial-gradient(circle, transparent 3.2px, #000 3.6px);
+  animation: pa-f-spin 1s linear infinite;
+}
+
+.pa-f-chat[data-state='permission'] .pa-f-chat-dot {
+  background: #da950b;
+}
+
+.pa-f-chat[data-state='input'] .pa-f-chat-dot {
+  background: var(--ss-accent);
+}
+
+@keyframes pa-f-spin {
+  to {
+    rotate: 1turn;
+  }
+}
+
+.pa-f-chat-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.pa-f-chat-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.pa-f-chat-title {
+  flex: 1;
+  overflow: hidden;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pa-f-chat-time {
+  flex: none;
+  color: #8f877f;
+  font-size: 11.5px;
+}
+
+/* Chats that moved recently: the time in the accent, as in the app */
+.pa-f-chat:not([data-state='ended']) .pa-f-chat-time {
+  color: var(--ss-accent);
+}
+
+.pa-f-chat-last {
+  overflow: hidden;
+  color: #4d4741;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pa-f-chat-meta {
+  margin-top: 2px;
+  color: #77706a;
+  font-size: 11.5px;
+}
+
+.pa-f-chat-state {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #ebe4dc;
+  color: #77706a;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.pa-f-chat[data-state='running'] .pa-f-chat-state {
+  background: rgba(28, 152, 90, 0.13);
+  color: #1c985a;
+}
+
+.pa-f-chat[data-state='permission'] .pa-f-chat-state {
+  background: rgba(218, 149, 11, 0.16);
+  color: #a46d00;
+}
+
+.pa-f-chat[data-state='input'] .pa-f-chat-state {
+  background: color-mix(in srgb, var(--ss-accent) 13%, transparent);
+  color: var(--ss-accent);
+}
+
+.pa-f-chat-pc {
+  display: grid;
+  place-items: center;
+  width: 19px;
+  height: 19px;
+  border-radius: 50%;
+  background: #ebe4dc;
+  color: var(--ss-accent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pa-f-chat[data-state='running'] .pa-f-chat-dot {
+    animation: none;
+  }
 }
 
 .pa-f-screen::before {

@@ -5,8 +5,8 @@ import './agent-row.css';
 /**
  * The agents Pocket Agent connects to, in a loose row above the headline: Claude Code in the
  * middle with Cursor, GitHub Copilot, Antigravity, Codex and OpenCode around it, all working
- * today (dark tiles, live lines), and the one still to come at the end, faded. Lines run from each
- * down to Pocket Agent.
+ * today (dark tiles, live lines). A tile with `live: false` shows faded, with a "coming soon" note.
+ * Lines run from each down to Pocket Agent.
  */
 
 type Tile = {
@@ -30,11 +30,10 @@ const TILES: Tile[] = [
   { name: 'Claude Code', live: true, logo: 'claude-code', main: true },
   { name: 'Codex', live: true, mark: 'codex' },
   { name: 'OpenCode', live: true, logo: 'opencode-dark' },
-  { name: 'Qwen Code', live: false, logo: 'qwen_light', dark: 'qwen_dark' },
 ];
 
 // Where each tile sits along the row (0-100), and the hub below the middle the lines meet at
-const X = [8, 22, 36, 50, 64, 78, 92];
+const X = [15, 29, 43, 57, 71, 85];
 const HUB = { x: 50, y: 92 };
 
 const list = (names: string[]) =>
@@ -71,7 +70,7 @@ export function AgentRow() {
   return (
     <figure
       className="agents"
-      aria-label={`Works with ${list(live)} today. ${list(soon)} ${soon.length > 1 ? 'are' : 'is'} coming soon.`}
+      aria-label={`Works with ${list(live)} today.${soon.length ? ` ${list(soon)} ${soon.length > 1 ? 'are' : 'is'} coming soon.` : ''}`}
     >
       <svg className="agents__lines" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden>
         {TILES.map((t, i) => (
@@ -104,17 +103,19 @@ export function AgentRow() {
       </ul>
 
       <span className="agents__note agents__note--today" aria-hidden>
-        <span>works today</span>
+        <span>pick any one</span>
         <svg viewBox="0 0 40 30" width="34" height="26">
           <path d="M3 4c12 0 24 6 28 20M24 20l7 5 3-8" />
         </svg>
       </span>
-      <span className="agents__note agents__note--soon" aria-hidden>
-        <svg viewBox="0 0 40 30" width="30" height="22">
-          <path d="M37 4C25 4 12 9 7 22M14 20l-7 4-2-8" />
-        </svg>
-        coming soon
-      </span>
+      {soon.length > 0 && (
+        <span className="agents__note agents__note--soon" aria-hidden>
+          <svg viewBox="0 0 40 30" width="30" height="22">
+            <path d="M37 4C25 4 12 9 7 22M14 20l-7 4-2-8" />
+          </svg>
+          coming soon
+        </span>
+      )}
 
       <span className="agents__hub" style={{ left: `${HUB.x}%`, top: `${HUB.y}%` }}>
         <svg className="agents__scribble" viewBox="0 0 100 100" aria-hidden>

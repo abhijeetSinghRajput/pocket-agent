@@ -22,9 +22,9 @@ import {
   type TurnMode,
 } from '@pocket-agent/protocol';
 import { useRouter } from 'expo-router';
-import { ArrowLeft } from 'lucide-react-native';
+import { ArrowLeft, Folder, Monitor } from 'lucide-react-native';
 import { useEffect, useEffectEvent, useMemo, useRef, useState, type ComponentRef } from 'react';
-import { findNodeHandle, Keyboard, Pressable, TextInput, View } from 'react-native';
+import { findNodeHandle, Keyboard, Pressable, ScrollView, TextInput, View } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import Animated, {
   interpolateColor,
@@ -33,6 +33,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { AgentPicker } from '@/features/chat/agent-picker';
 import { AttachButton, MicButton, SendButton } from '@/features/chat/composer';
 import { canDictate, useDictation } from '@/features/chat/dictation';
 import { DraftFiles } from '@/features/chat/draft-files';
@@ -41,35 +42,14 @@ import { AttachMenu, ModelPicker, ModePicker } from '@/features/chat/pickers';
 import { newId } from '@/features/chat/upload';
 import { useDraftFiles } from '@/features/chat/use-draft-files';
 import { enableImagePaste, type PastedImage } from '../../../modules/image-paste';
-import { AgentLogo, AGENT_LOGOS } from '@/features/sessions/badges';
 import { apiRequest } from '@/lib/api';
 import { useDevices } from '@/lib/data';
 import { dur, ease, enter, exit, layout } from '@/lib/motion';
 import { alpha, fonts, radius, useTheme } from '@/lib/theme';
 import { buzz, IconButton, T, thud } from '@/ui/core';
 import { Notice, Roll } from '@/ui/feedback';
-import { Segmented } from '@/ui/form';
 
 const fetchCommand = (id: string) => apiRequest(`/commands/${id}`, CommandResponse).then((r) => r.command);
-
-function AgentAvatar({ size, provider }: { size: number; provider: ProviderId }) {
-  return (
-    <View
-      accessibilityElementsHidden
-      importantForAccessibility="no-hide-descendants"
-      style={{
-        width: size,
-        height: size,
-        borderRadius: size / 2,
-        backgroundColor: alpha(AGENT_LOGOS[provider].hex, 0.14),
-        alignItems: 'center',
-        justifyContent: 'center',
-      }}
-    >
-      <AgentLogo provider={provider} size={Math.round(size * 0.55)} />
-    </View>
-  );
-}
 
 /**
  * A chat that has not started yet, in a folder picked from New chat. Sending the first message
@@ -224,7 +204,6 @@ export function NewChatScreen({ deviceId, path, name }: { deviceId: string; path
           disabled={starting}
           onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))}
         />
-        <AgentAvatar size={36} provider={agent} />
         <View style={{ flex: 1, minWidth: 0, marginLeft: 4 }}>
           <T variant="subheading" numberOfLines={1} accessibilityRole="header">
             {name}
@@ -256,30 +235,14 @@ export function NewChatScreen({ deviceId, path, name }: { deviceId: string; path
           {starting ? (
             <ChatMessages items={items} typing="starting" bottomInset={dock} />
           ) : (
-            <Animated.View
-              entering={enter.rise()}
-              style={{
-                flex: 1,
-                alignItems: 'center',
-                justifyContent: 'center',
-                paddingHorizontal: 32,
-                paddingBottom: dock,
-                gap: 8,
-              }}
+            <ScrollView
+              keyboardShouldPersistTaps="handled"
+              contentContainerStyle={{ flexGrow: 1, paddingBottom: dock }}
             >
-              <AgentAvatar size={64} provider={agent} />
               {others.length > 0 && (
-                <View style={{ alignSelf: 'stretch', marginTop: 4 }}>
-                  <Segmented
-                    label="Agent"
-                    testID="agent-choice"
-                    options={[
-                      { value: 'claude-code' as ProviderId, label: 'Claude' },
-                      ...others.map((a) => ({
-                        value: a.provider as ProviderId,
-                        label: agentName(a.provider),
-                      })),
-                    ]}
+                <View style={{ paddingHorizontal: 12, paddingTop: 12 }}>
+                  <AgentPicker
+                    agents={['claude-code', ...others.map((a) => a.provider)]}
                     value={agent}
                     onChange={(next) => {
                       setProvider(next);
@@ -290,25 +253,55 @@ export function NewChatScreen({ deviceId, path, name }: { deviceId: string; path
                   />
                 </View>
               )}
-              <T variant="subheading" center style={{ marginTop: 8 }}>
-                What should {agentName(agent)} do in {name}?
-              </T>
-              <T variant="caption" tone="muted" center style={{ fontFamily: fonts.mono }}>
-                {path}
-              </T>
-              <T variant="small" tone="muted" center style={{ marginTop: 4 }}>
-                {agentProduct(agent)} starts on {device?.name ?? 'your PC'} when you send your first message.{' '}
-                {agent === 'claude-code'
-                  ? 'Anything that needs permission asks you here.'
-                  : agent !== 'codex'
-                    ? device?.remoteApprovalEnabled
-                      ? 'It keeps its own permission settings; anything it asks before doing comes to you here.'
-                      : 'It keeps its own permission settings; anything it asks before doing is declined, because remote approval is off on this PC.'
-                    : device?.remoteApprovalEnabled
-                      ? 'It works in its sandbox: it changes files in this folder and asks you here for anything more.'
-                      : 'It works in its sandbox: it changes files in this folder. Anything more is declined, because remote approval is off on this PC.'}
-              </T>
-            </Animated.View>
+              <Animated.View
+                entering={enter.rise(others.length + 1)}
+                style={{
+                  flex: 1,
+                  justifyContent: 'center',
+                  paddingHorizontal: 20,
+                  paddingVertical: 24,
+                  gap: 10,
+                }}
+              >
+                <View accessibilityRole="header">
+                  <Roll text={`What should ${agentName(agent)} do?`} variant="title" />
+                </View>
+                <View style={{ gap: 6, marginTop: 2 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                    <Folder size={16} color={c.mutedForeground} />
+                    <T
+                      variant="caption"
+                      numberOfLines={1}
+                      ellipsizeMode="head"
+                      style={{ flex: 1, fontFamily: fonts.mono }}
+                      accessibilityLabel={`Folder ${path}`}
+                    >
+                      {path}
+                    </T>
+                  </View>
+                  {device && (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                      <Monitor size={16} color={c.mutedForeground} />
+                      <T variant="caption" numberOfLines={1} style={{ flex: 1 }}>
+                        {device.name}
+                      </T>
+                    </View>
+                  )}
+                </View>
+                <T variant="small" tone="muted" style={{ marginTop: 4 }}>
+                  {agentProduct(agent)} starts when you send your first message.{' '}
+                  {agent === 'claude-code'
+                    ? 'Anything that needs permission asks you here.'
+                    : agent !== 'codex'
+                      ? device?.remoteApprovalEnabled
+                        ? 'It keeps its own permission settings; anything it asks before doing comes to you here.'
+                        : 'It keeps its own permission settings; anything it asks before doing is declined, because remote approval is off on this PC.'
+                      : device?.remoteApprovalEnabled
+                        ? 'It works in its sandbox: it changes files in this folder and asks you here for anything more.'
+                        : 'It works in its sandbox: it changes files in this folder. Anything more is declined, because remote approval is off on this PC.'}
+                </T>
+              </Animated.View>
+            </ScrollView>
           )}
 
           <View

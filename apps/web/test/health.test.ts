@@ -1,4 +1,4 @@
-import { pcHealth } from '@pocket-agent/core';
+import { pcAgents, pcHealth } from '@pocket-agent/core';
 import { LATEST_AGENT_VERSION, pairingRequestId, type DeviceDto } from '@pocket-agent/protocol';
 import { describe, expect, it } from 'vitest';
 
@@ -77,5 +77,47 @@ describe('pairingRequestId', () => {
     expect(pairingRequestId('hello')).toBeNull();
     expect(pairingRequestId(`https://x.example/chat/${id}`)).toBeNull();
     expect(pairingRequestId(`https://x.example/pair/${id}/extra`)).toBeNull();
+  });
+});
+
+describe('pcAgents', () => {
+  const model = { id: 'm', name: 'M', description: '' };
+  const by = (d: DeviceDto) => Object.fromEntries(pcAgents(d).map((a) => [a.provider, a]));
+
+  it('lists every agent, Claude first, with what fixes each one', () => {
+    const agents = by(
+      pc({
+        usage: {
+          session: null,
+          weekly: null,
+          models: [],
+          plan: 'Max 5x',
+          updatedAt: new Date().toISOString(),
+        },
+        models: [model, model],
+        agents: [
+          { provider: 'codex', version: '0.172.0', signedIn: true, models: [model] },
+          { provider: 'cursor', version: '1.0.0', signedIn: false, models: [] },
+        ],
+      }),
+    );
+    expect(pcAgents(pc({}))[0]!.provider).toBe('claude-code');
+    expect(Object.keys(agents)).toHaveLength(6);
+    expect(agents['claude-code']).toMatchObject({ state: 'ready', detail: 'Claude Max 5x · 2 models' });
+    expect(agents['codex']).toMatchObject({ state: 'ready', detail: 'Version 0.172.0 · 1 model' });
+    expect(agents['cursor']).toMatchObject({ state: 'signed-out', command: 'agent login' });
+    expect(agents['opencode']).toMatchObject({ state: 'missing' });
+    expect(agents['opencode']!.command).toBeUndefined();
+  });
+
+  it('asks for a Pocket Agent update before anything else on an old PC', () => {
+    const agents = by(
+      pc({
+        agentVersion: '2.0.0',
+        agents: [{ provider: 'codex', version: '1', signedIn: false, models: [] }],
+      }),
+    );
+    expect(agents['codex']).toMatchObject({ state: 'update', command: 'pocket-agent update' });
+    expect(agents['claude-code']!.state).toBe('ready');
   });
 });

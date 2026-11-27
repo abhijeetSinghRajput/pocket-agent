@@ -9,8 +9,9 @@ import { AllowAllButton, allowable } from '@/features/approvals/allow-all';
 import { ApprovalCard } from '@/features/approvals/approval-card';
 import { APPROVAL_STATUS } from '@/features/approvals/shared';
 import { NewChatSheet } from '@/features/sessions/new-chat-sheet';
-import { useApprovals, useWorkers } from '@/lib/data';
+import { useApprovals, useDevices, useWorkers } from '@/lib/data';
 import { AgentMap } from './agent-map';
+import { ConnectedAgents } from './connected-agents';
 import { enter, exit, layout } from '@/lib/motion';
 import { alpha, fonts, radius, useTheme } from '@/lib/theme';
 import { Button, Card, Divider, Press, T, tap, toneColor } from '@/ui/core';
@@ -19,8 +20,8 @@ import { Segmented } from '@/ui/form';
 import { SwipePages } from '@/ui/pages';
 import { Screen, TAB_BAR_HEIGHT } from '@/ui/screen';
 
-type Page = 'active' | 'finished';
-const PAGES: readonly Page[] = ['active', 'finished'];
+type Page = 'active' | 'finished' | 'connected';
+const PAGES: readonly Page[] = ['active', 'finished', 'connected'];
 
 /** How long a decided request stays, showing its result, before the list closes over its place. */
 const SETTLE_MS = 1400;
@@ -142,6 +143,7 @@ export function AgentsScreen() {
   const workers = useWorkers();
   const pending = useApprovals('pending');
   const history = useApprovals('all');
+  const devices = useDevices();
   const [creating, setCreating] = useState(false);
   // Running agents first; the ones that finished (and decisions made) are a tab away.
   const [tab, setTab] = useState<Page>('active');
@@ -156,8 +158,8 @@ export function AgentsScreen() {
     return () => map.forEach((t) => clearTimeout(t));
   }, []);
   const refreshAll = useCallback(
-    () => Promise.all([workers.refresh(), pending.refresh(), history.refresh()]),
-    [workers, pending, history],
+    () => Promise.all([workers.refresh(), pending.refresh(), history.refresh(), devices.refresh()]),
+    [workers, pending, history, devices],
   );
   const decided = (a: ApprovalDto, index: number) => {
     setSettling((s) => (s.some((x) => x.approval.id === a.id) ? s : [...s, { approval: a, index }]));
@@ -303,6 +305,7 @@ export function AgentsScreen() {
           options={[
             { value: 'active', label: running.length ? `Active · ${running.length}` : 'Active' },
             { value: 'finished', label: finished.length ? `Finished · ${finished.length}` : 'Finished' },
+            { value: 'connected', label: 'Connected' },
           ]}
           value={tab}
           onChange={setTab}
@@ -332,7 +335,17 @@ export function AgentsScreen() {
             }
             testID={`agents-${page}`}
           >
-            {page === 'active' ? activePage : finishedPage}
+            {page === 'active' ? (
+              activePage
+            ) : page === 'finished' ? (
+              finishedPage
+            ) : (
+              <ConnectedAgents
+                devices={devices.state.data}
+                loading={devices.state.status === 'loading'}
+                error={devices.state.status === 'error' ? devices.state.error : null}
+              />
+            )}
           </ScrollView>
         )}
       </SwipePages>

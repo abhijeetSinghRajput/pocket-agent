@@ -172,7 +172,7 @@
   position: absolute;
   display: inline-flex;
   align-items: flex-end;
-  gap: 2px;
+  gap: 6px;
   color: var(--foreground);
   font-family: var(--font-hand), cursive;
   font-size: 21px;

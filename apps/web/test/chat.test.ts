@@ -328,6 +328,8 @@ describe('openChatId', () => {
     expect(openChatId('/agents/abc')).toBe('abc');
     expect(openChatId('/agents')).toBeNull();
     expect(openChatId('/agents/abc/x')).toBeNull();
+    expect(openChatId('/agents/abc/sub/toolu_1')).toBe('abc');
+    expect(openChatId('/agents/abc/sub/toolu_1/transcript')).toBe('abc');
     expect(openChatId('/approvals')).toBeNull();
   });
 });

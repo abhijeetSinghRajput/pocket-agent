@@ -1,7 +1,7 @@
 'use client';
 
 import { agentProduct, nowDoing } from '@pocket-agent/core';
-import type { WorkerDto, WorkerStatus } from '@pocket-agent/protocol';
+import type { SubagentInfo, WorkerDto, WorkerStatus } from '@pocket-agent/protocol';
 import { ChevronRight } from 'lucide-react';
 import Link from 'next/link';
 import type { ReactNode } from 'react';
@@ -12,7 +12,7 @@ import { useSubagent } from '@/lib/use-workers';
 import { cn } from '@/lib/utils';
 
 // The web port of the app's agent map (apps/mobile/src/features/agents/agent-map.tsx,
-// worker-row.tsx, tree.tsx). On the web a sub-agent opens the chat it runs in.
+// worker-row.tsx, tree.tsx). A sub-agent opens its own page (subagent-detail.tsx); a workflow, its chat.
 
 /** Running is green; finished work steps back (muted); a failure stands out. */
 const STATUS: Record<WorkerStatus, { label: string; pill: string; dot: string }> = {
@@ -44,54 +44,135 @@ function TreeBranch({ last, children }: { last: boolean; children: ReactNode }) 
   );
 }
 
-const when = (w: WorkerDto) =>
-  w.status === 'running' ? `for ${duration(w.startedAt, null)}` : timeAgo(w.finishedAt ?? w.startedAt);
+const whenOf = (status: WorkerStatus, startedAt: string, endedAt: string | null) =>
+  status === 'running' ? `for ${duration(startedAt, null)}` : timeAgo(endedAt ?? startedAt);
 
-/** A background worker of a chat (sub-agent or workflow): its task, what it is, how it ended. */
-function WorkerRow({ w, now }: { w: WorkerDto; now: string | null }) {
-  const s = STATUS[w.status];
-  const kind = w.kind === 'workflow' ? 'Workflow' : 'Sub-agent';
-  const meta = [w.label && w.label !== w.title ? w.label : kind, w.background ? 'background' : null]
-    .filter(Boolean)
-    .join(' · ');
-  const running = w.status === 'running';
+/** A sub-agent's page in a chat, and its whole transcript. */
+export const subagentHref = (sessionId: string, toolUseId: string) =>
+  `/agents/${sessionId}/sub/${encodeURIComponent(toolUseId)}`;
+
+/** A worker's status as a pill; a running one breathes. */
+export function WorkerBadge({ status }: { status: WorkerStatus }) {
+  const s = STATUS[status];
+  return (
+    <span className={cn('inline-flex h-6 items-center gap-1.5 rounded-full px-2.5 text-xs font-medium', s.pill)}>
+      {status === 'running' && <span aria-hidden className="size-1.5 animate-pulse rounded-full bg-success" />}
+      <span key={s.label} className="roll-in">
+        {s.label}
+      </span>
+    </span>
+  );
+}
+
+/**
+ * One agent in the map: a status dot where its branch meets it, its task across the whole width,
+ * then what it is and when, how it ended, and its status.
+ */
+function AgentRow({
+  href,
+  title,
+  meta,
+  time,
+  summary,
+  now,
+  status,
+  label,
+}: {
+  href: string;
+  title: string;
+  meta: string;
+  time: string | null;
+  summary?: string | null;
+  now?: string | null;
+  status: WorkerStatus;
+  label: string;
+}) {
+  const s = STATUS[status];
+  const running = status === 'running';
   return (
     <Link
-      href={`/agents/${w.sessionId}`}
+      href={href}
       data-testid="worker-row"
-      aria-label={`${kind}: ${w.title}, ${s.label}, in ${w.projectName}. Open chat`}
+      aria-label={label}
       className="flex items-start gap-2.5 rounded-lg py-3 pr-1 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 active:scale-[0.99]"
     >
       <span aria-hidden className={cn('mt-[7px] size-2 shrink-0 rounded-full', s.dot)} />
       <span className="flex min-w-0 flex-1 flex-col gap-[3px]">
-        <span className="line-clamp-2 text-[15px] leading-[21px] font-semibold">{w.title}</span>
+        <span className="line-clamp-2 text-[15px] leading-[21px] font-semibold">{title}</span>
         <span className="truncate text-xs text-muted-foreground tabular-nums">{meta}</span>
-        {running && now && (
-          <span key={now} data-testid="agent-now" className="truncate font-mono text-[12.5px] text-success">
+        {now && (
+          <span key={now} data-testid="agent-now" className="roll-in truncate font-mono text-[12.5px] text-success">
             {now}
           </span>
         )}
-        {!running && w.summary && (
-          <span className="line-clamp-2 text-sm text-foreground/75">{w.summary}</span>
-        )}
+        {summary && <span className="line-clamp-2 text-sm text-foreground/75">{summary}</span>}
         <span className="mt-1 flex items-center gap-2">
-          <span
-            className={cn(
-              'inline-flex h-6 items-center gap-1.5 rounded-full px-2.5 text-xs font-medium',
-              s.pill,
-            )}
-          >
-            {running && <span aria-hidden className="size-1.5 animate-pulse rounded-full bg-success" />}
-            {s.label}
-          </span>
-          <span className={cn('text-xs tabular-nums', running ? 'text-success' : 'text-muted-foreground')}>
-            {when(w)}
-          </span>
+          <WorkerBadge status={status} />
+          {time && (
+            <span className={cn('text-xs tabular-nums', running ? 'text-success' : 'text-muted-foreground')}>
+              {time}
+            </span>
+          )}
         </span>
       </span>
       <ChevronRight className="mt-0.5 size-[18px] shrink-0 text-muted-foreground/60" aria-hidden />
     </Link>
   );
+}
+
+/** A background worker of a chat: a sub-agent opens its own page, a workflow its chat. */
+function WorkerRow({ w, now }: { w: WorkerDto; now: string | null }) {
+  const kind = w.kind === 'workflow' ? 'Workflow' : 'Sub-agent';
+  const meta = [w.label && w.label !== w.title ? w.label : kind, w.background ? 'background' : null]
+    .filter(Boolean)
+    .join(' · ');
+  const running = w.status === 'running';
+  const sub = w.kind === 'subagent';
+  return (
+    <AgentRow
+      href={sub ? subagentHref(w.sessionId, w.id) : `/agents/${w.sessionId}`}
+      title={w.title}
+      meta={meta}
+      time={whenOf(w.status, w.startedAt, w.finishedAt)}
+      summary={running ? null : w.summary}
+      now={running ? now : null}
+      status={w.status}
+      label={`${kind}: ${w.title}, ${STATUS[w.status].label}, in ${w.projectName}. ${sub ? 'Open' : 'Open chat'}`}
+    />
+  );
+}
+
+/** A sub-agent another agent started, as its page lists them. */
+export function SubagentRow({ sessionId, agent: a }: { sessionId: string; agent: SubagentInfo }) {
+  const status: WorkerStatus = a.finished ? 'done' : 'running';
+  return (
+    <AgentRow
+      href={subagentHref(sessionId, a.toolUseId)}
+      title={a.description || a.type}
+      meta={`${a.type} · ${a.toolCalls} tool call${a.toolCalls === 1 ? '' : 's'}`}
+      time={a.startedAt ? whenOf(status, a.startedAt, a.lastActivityAt) : null}
+      now={nowDoing(a)}
+      status={status}
+      label={`${a.type}: ${a.description}, ${STATUS[status].label}. Open`}
+    />
+  );
+}
+
+/** Rows hanging off a parent, each on its own branch of the tree. */
+export function TreeChildren<T>({
+  items,
+  keyOf,
+  render,
+}: {
+  items: readonly T[];
+  keyOf: (item: T) => string;
+  render: (item: T) => ReactNode;
+}) {
+  return items.map((item, i) => (
+    <TreeBranch key={keyOf(item)} last={i === items.length - 1}>
+      {render(item)}
+    </TreeBranch>
+  ));
 }
 
 interface Chat {

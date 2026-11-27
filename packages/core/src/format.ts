@@ -47,7 +47,7 @@ export function daysAgo(iso: string, now: number = Date.now()): number {
 
 /** "3:04 PM" — the time on a chat message. */
 export function clockTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  return new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
 }
 
 /** Chat list stamp, like a messenger: time today, "Yesterday", weekday this week, else the date. */

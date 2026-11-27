@@ -786,6 +786,46 @@
   border-radius: 20px;
 }
 
+/* The how-it-works cards: no well inside the card. The demo sits on the card itself, and the
+   edges where the terminal and the phones are cut off fade into it. */
+.pa-steps .pa-feat .ss-stage {
+  background: transparent;
+  border-radius: 0;
+  mask-image:
+    linear-gradient(to bottom, #000 calc(100% - 72px), transparent),
+    linear-gradient(to right, #000 calc(100% - 56px), transparent);
+  mask-composite: intersect;
+}
+
+/* Alive on scroll: the card rises in (staggered along the row), then the terminal or phone
+   inside it rises a beat later. */
+@media (prefers-reduced-motion: no-preference) {
+  .pa-reveal {
+    opacity: 0;
+    translate: 0 28px;
+    transition:
+      opacity 600ms var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1)),
+      translate 700ms cubic-bezier(0.23, 1, 0.32, 1);
+    transition-delay: calc(var(--i, 0) * 110ms);
+  }
+  .pa-reveal .pa-reveal-inner {
+    opacity: 0;
+    translate: 0 48px;
+    scale: 0.96;
+    transition:
+      opacity 700ms cubic-bezier(0.23, 1, 0.32, 1),
+      translate 900ms cubic-bezier(0.23, 1, 0.32, 1),
+      scale 900ms cubic-bezier(0.23, 1, 0.32, 1);
+    transition-delay: calc(var(--i, 0) * 110ms + 180ms);
+  }
+  .pa-reveal[data-in],
+  .pa-reveal[data-in] .pa-reveal-inner {
+    opacity: 1;
+    translate: 0 0;
+    scale: 1;
+  }
+}
+
 /* Connect: a terminal a gutter in from the top, left and bottom, off the right */
 .pa-feat--connect .pa-term {
   position: absolute;

@@ -101,11 +101,12 @@ export function Segmented<T extends string>({
       ref={box}
       role={as === 'radio' ? 'radiogroup' : 'tablist'}
       aria-label={label}
-      className={cn('relative inline-flex rounded-xl bg-foreground/[0.07] p-1 dark:bg-black/30', className)}
+      // The app's colours: the muted track, the choice on a card-coloured pill.
+      className={cn('relative inline-flex rounded-xl bg-muted p-1', className)}
     >
       <span
         aria-hidden
-        className="pointer-events-none absolute top-0 left-0 rounded-lg bg-white shadow-sm ring-1 ring-black/5 dark:bg-white/15 dark:ring-white/10"
+        className="pointer-events-none absolute top-0 left-0 rounded-lg bg-card shadow-sm ring-1 ring-black/5 dark:shadow-none dark:ring-border"
         style={followStyle(rect, moving, last)}
       />
       {options.map(({ value: v, label: text, icon: Icon }) => {

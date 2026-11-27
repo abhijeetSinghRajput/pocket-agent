@@ -14,7 +14,7 @@ export function resetLabel(iso: string | null, now = new Date()): string | null 
   if (!iso) return null;
   const d = new Date(iso);
   if (Number.isNaN(d.getTime()) || d.getTime() <= now.getTime()) return null;
-  const time = d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  const time = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
   if (d.toDateString() === now.toDateString()) return `Resets at ${time}`;
   const day = d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
   return `Resets ${day} at ${time}`;

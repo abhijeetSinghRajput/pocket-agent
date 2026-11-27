@@ -9,6 +9,7 @@ import { FaqChat } from '@/components/home/faq-chat';
 import { ConnectDemo, NotifyDemo, SteerDemo } from '@/components/home/feature-demos';
 import { HeroDemo } from '@/components/home/hero-demo';
 import { HeroHeadline } from '@/components/home/hero-headline';
+import { RevealItem } from '@/components/home/reveal';
 import { buttonVariants } from '@/components/ui/button';
 import { CopyButton } from '@/components/ui/copy-button';
 import { FolderDemo } from '@/components/home/folder-demo';
@@ -227,17 +228,22 @@ export default function HomePage() {
               </h2>
             </div>
             <div className="mt-12">
-              <ol className="mx-auto grid max-w-md gap-6 lg:max-w-none lg:grid-cols-3">
+              <ol className="pa-steps mx-auto grid max-w-md gap-6 lg:max-w-none lg:grid-cols-3">
                 {STEPS.map((s, i) => (
-                  <li key={s.title} className="flex flex-col overflow-hidden rounded-3xl border bg-card">
-                    <div className="flex items-center gap-3 p-5 pb-4">
+                  <RevealItem
+                    key={s.title}
+                    index={i}
+                    className="flex flex-col overflow-hidden rounded-3xl border bg-card"
+                  >
+                    <div className="flex items-center gap-3 p-5 pb-2">
                       <span className="grid size-7 shrink-0 place-items-center rounded-full bg-primary/12 text-sm font-semibold text-primary">
                         {i + 1}
                       </span>
                       <h3 className="text-lg font-semibold tracking-tight">{s.title}</h3>
                     </div>
-                    <div className="mt-auto px-3 pb-3">{s.demo}</div>
-                  </li>
+                    {/* The demo sits straight on the card (no well inside it), its cut edges fading out. */}
+                    <div className="pa-reveal-inner mt-auto">{s.demo}</div>
+                  </RevealItem>
                 ))}
               </ol>
               <div className="mx-auto mt-20 max-w-190 min-w-0 sm:mt-24">

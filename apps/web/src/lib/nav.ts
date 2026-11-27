@@ -15,9 +15,12 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { href: '/devices', label: 'Devices', icon: MonitorSmartphone },
 ];
 
-/** The session whose chat is open (`/agents/<id>`), if any. */
+/**
+ * The session whose chat is open (`/agents/<id>`), if any. A sub-agent's page and its transcript
+ * (`/agents/<id>/sub/<toolUseId>[/transcript]`) belong to that chat too.
+ */
 export function openChatId(pathname: string): string | null {
-  return /^\/agents\/([^/]+)\/?$/.exec(pathname)?.[1] ?? null;
+  return /^\/agents\/([^/]+)(?:\/sub\/[^/]+(?:\/transcript)?)?\/?$/.exec(pathname)?.[1] ?? null;
 }
 
 /** The chat list (`/`) or an open chat (`/agents/<id>`). */

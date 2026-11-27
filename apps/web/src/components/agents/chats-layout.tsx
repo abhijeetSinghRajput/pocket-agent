@@ -11,14 +11,16 @@ import { cn } from '@/lib/utils';
  * on phones the list and the chat are separate full screens.
  */
 export function ChatsLayout({ children }: { children: ReactNode }) {
-  const chatId = openChatId(usePathname());
+  const pathname = usePathname();
+  const chatId = openChatId(pathname);
   return (
     <div className="lg:grid lg:h-dvh lg:grid-cols-[minmax(320px,400px)_minmax(0,1fr)]">
       <div className={cn('bg-card lg:block lg:min-h-0 lg:border-r', chatId && 'hidden')}>
         <AgentsView activeId={chatId} />
       </div>
       <div
-        key={chatId ?? 'none'}
+        // A new page (a chat, one of its sub-agents, a transcript) slides in like a pushed screen.
+        key={chatId ? pathname : 'none'}
         className={cn('min-w-0 lg:min-h-0', chatId ? 'chat-enter' : 'hidden content-in lg:block')}
       >
         {children}

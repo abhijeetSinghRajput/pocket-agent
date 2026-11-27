@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { ApiStatus } from '@/components/api-status';
 import { ClaudeUsageCard } from '@/components/claude-usage';
+import { HealthCheckCard } from '@/components/health-check';
 import { NotificationSettings } from '@/components/notifications/notification-settings';
 import { ProfileHeader, SignOutButton } from '@/components/profile-view';
 import { ThemeSelector } from '@/components/theme';
@@ -28,6 +29,7 @@ export default function ProfilePage() {
           </h2>
           <NotificationSettings />
         </section>
+        <HealthCheckCard />
         <ApiStatus />
         <SignOutButton />
       </div>

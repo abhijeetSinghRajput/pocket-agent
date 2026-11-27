@@ -6,22 +6,23 @@ import {
   type NotificationCategory,
   type NotificationSettingsDto as Settings,
 } from '@pocket-agent/protocol';
-import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
+import { BellRing } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Notice } from '@/components/ui/notice';
+import { Switch } from '@/components/ui/switch';
 import { apiRequest } from '@/lib/api';
 import {
-  browserPushSupport,
   disablePush,
   enablePush,
-  hasLocalRegistration,
+  PUSH_UNSUPPORTED_TEXT,
+  pushChanged,
   refreshPushRegistration,
-  type PushSupport,
+  usePushStatus,
 } from '@/lib/push';
 import { usePoll } from '@/lib/use-poll';
 import { cn } from '@/lib/utils';
-
-const noopSubscribe = () => () => undefined;
 
 const LABELS: Record<NotificationCategory, { title: string; hint: string }> = {
   permission_required: {
@@ -37,126 +38,85 @@ const LABELS: Record<NotificationCategory, { title: string; hint: string }> = {
   agent_started: { title: 'Chat started', hint: 'Every new chat.' },
 };
 
-function Switch({
-  on,
-  label,
-  disabled,
-  onChange,
-  testId,
-}: {
-  on: boolean;
-  label: string;
-  disabled?: boolean;
-  onChange: () => void;
-  testId?: string;
-}) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={on}
-      aria-label={label}
-      disabled={disabled}
-      data-testid={testId}
-      onClick={onChange}
-      className={cn(
-        'relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border-2 border-transparent transition-colors outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:opacity-50',
-        on ? 'bg-primary' : 'bg-input',
-      )}
-    >
-      <span
-        aria-hidden
-        className={cn(
-          'size-5 rounded-full bg-white shadow-sm transition-transform',
-          on ? 'translate-x-5' : 'translate-x-0',
-        )}
-      />
-    </button>
-  );
-}
-
-const SUPPORT_TEXT: Record<Exclude<PushSupport['kind'], 'supported'>, string> = {
-  not_configured: 'Push isn’t set up on this server.',
-  insecure: 'Push needs HTTPS.',
-  ios_install_required: 'On iPhone/iPad: Share → Add to Home Screen, then enable push in that app.',
-  unsupported: 'This browser doesn’t support push.',
-};
-
+/**
+ * Notifications on this device: one switch, as in the app. Off by default; turning it on asks the
+ * browser for permission and registers it with the account (web push through the service worker).
+ */
 function PushThisDevice({ serverAvailable, onChanged }: { serverAvailable: boolean; onChanged: () => void }) {
-  // Browser-only facts: read on the client, null during server rendering.
-  const kind = useSyncExternalStore(
-    noopSubscribe,
-    () => browserPushSupport().kind,
-    () => null,
-  );
-  const localReg = useSyncExternalStore(noopSubscribe, hasLocalRegistration, () => false);
-  const [override, setEnabled] = useState<boolean | null>(null);
-  const enabled = override ?? localReg;
+  const status = usePushStatus();
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<{ kind: 'error' | 'ok'; text: string } | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
+  // Keep this browser's registration current (tokens rotate; the account may have changed).
+  const refreshed = useRef(false);
   useEffect(() => {
-    // Keep this browser's registration current (tokens rotate; the account may have changed).
-    if (localReg && kind === 'supported') void refreshPushRegistration().catch(() => undefined);
-  }, [localReg, kind]);
+    if (status !== 'on' || refreshed.current) return;
+    refreshed.current = true;
+    void refreshPushRegistration().catch(() => undefined);
+  }, [status]);
 
-  if (!kind) return null;
-  const support = { kind } as PushSupport;
-  const text =
-    support.kind !== 'supported'
-      ? SUPPORT_TEXT[support.kind]
-      : !serverAvailable
-        ? 'This server can’t send push yet.'
-        : null;
-
-  const run = async (fn: () => Promise<void>, ok: string, next: boolean) => {
+  const toggle = async (on: boolean) => {
+    if (!status || busy) return;
     setBusy(true);
-    setMessage(null);
+    setError(null);
     try {
-      await fn();
-      setEnabled(next);
-      setMessage({ kind: 'ok', text: ok });
+      if (on) await enablePush();
+      else await disablePush();
       onChanged();
     } catch (err) {
-      setMessage({ kind: 'error', text: (err as Error).message });
+      setError((err as Error).message);
     } finally {
+      pushChanged();
       setBusy(false);
     }
   };
 
+  if (!status) return null;
+  const unsupported = status !== 'on' && status !== 'off' && status !== 'denied';
+  const on = status === 'on';
+  const hint = unsupported
+    ? PUSH_UNSUPPORTED_TEXT[status]
+    : !serverAvailable
+      ? 'Push is not set up on the server.'
+      : status === 'denied'
+        ? 'Notifications are blocked for this site. Allow them in your browser’s site settings.'
+        : on
+          ? 'Permission requests and activity reach you here.'
+          : 'Get permission requests and activity when the app is closed.';
+
   return (
-    <div className="flex flex-col gap-3" data-testid="push-this-device" data-support={support.kind}>
-      {text && <p className="text-sm text-muted-foreground">{text}</p>}
-      <div className="flex flex-wrap gap-2">
-        {support.kind === 'supported' &&
-          (enabled ? (
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={busy}
-              onClick={() => run(disablePush, 'Push turned off on this device.', false)}
-            >
-              Turn off notifications
-            </Button>
-          ) : (
-            <Button
-              size="sm"
-              disabled={busy}
-              data-testid="enable-push"
-              onClick={() => run(enablePush, 'Push is on for this device.', true)}
-            >
-              Turn on notifications
-            </Button>
-          ))}
-      </div>
-      {message && (
-        <p
-          role={message.kind === 'error' ? 'alert' : 'status'}
-          className={cn('text-sm', message.kind === 'error' ? 'text-destructive' : 'text-success')}
+    <div
+      className="flex flex-col gap-3"
+      data-testid="push-this-device"
+      data-support={unsupported ? status : 'supported'}
+      data-status={status}
+    >
+      <div className="flex items-center gap-3">
+        <span
+          aria-hidden
+          className={cn(
+            'grid size-10 shrink-0 place-items-center rounded-xl transition-colors',
+            on ? 'bg-primary/13 text-primary' : 'bg-muted text-muted-foreground',
+          )}
         >
-          {message.text}
-        </p>
-      )}
+          <BellRing className="size-[18px]" strokeWidth={2} />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="font-medium">Notifications on this device</p>
+          <p className="text-xs text-pretty text-muted-foreground" data-testid="push-hint">
+            {hint}
+          </p>
+        </div>
+        <Switch
+          on={on}
+          label="Notifications on this device"
+          disabled={busy || unsupported || !serverAvailable || status === 'denied'}
+          onChange={(next) => void toggle(next)}
+          testId="push-switch"
+        />
+      </div>
+      {/* Blocked: the line above already says where to allow it. */}
+      {error && status !== 'denied' && <Notice>{error}</Notice>}
     </div>
   );
 }
@@ -228,7 +188,7 @@ export function NotificationSettings() {
                 <p className="text-xs text-pretty text-muted-foreground">{LABELS[c].hint}</p>
               </div>
               <Switch
-                on={settings.categories[c]}
+                on={settings.categories[c] ?? false}
                 label={LABELS[c].title}
                 disabled={saving}
                 testId={`category-${c}`}
@@ -289,6 +249,7 @@ export function NotificationSettings() {
                 value={q.end}
                 onChange={(e) => setQuiet({ ...q, end: e.target.value })}
                 className="w-32"
+                data-testid="quiet-end"
               />
             </label>
             <Button type="submit" size="sm" variant="outline" disabled={saving} data-testid="quiet-save">
@@ -300,11 +261,7 @@ export function NotificationSettings() {
           </form>
         )}
       </div>
-      {error && (
-        <p role="alert" className="text-sm text-destructive">
-          {error}
-        </p>
-      )}
+      {error && <Notice>{error}</Notice>}
     </div>
   );
 }

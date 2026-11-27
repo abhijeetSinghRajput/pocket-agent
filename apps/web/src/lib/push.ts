@@ -1,5 +1,6 @@
 'use client';
 
+import { useSyncExternalStore } from 'react';
 import { apiBaseUrl, apiRequest } from '@/lib/api';
 
 /** Firebase web config from the environment. Null when push isn't configured for this deployment. */
@@ -150,3 +151,46 @@ export async function refreshPushRegistration(): Promise<void> {
   });
   storeToken(token);
 }
+
+/**
+ * Where push stands in this browser, as the app's `PushState`: on (registered with this account),
+ * off, denied (blocked in the browser's site settings) or a reason it can't work here.
+ */
+export type PushStatus = 'on' | 'off' | 'denied' | Exclude<PushSupport['kind'], 'supported'>;
+
+export function currentPushStatus(): PushStatus {
+  const { kind } = browserPushSupport();
+  if (kind !== 'supported') return kind;
+  if (Notification.permission === 'denied') return 'denied';
+  return hasLocalRegistration() ? 'on' : 'off';
+}
+
+const pushListeners = new Set<() => void>();
+
+/** Tells every view of this browser's push (Notifications, Health check) to read it again. */
+export function pushChanged(): void {
+  pushListeners.forEach((l) => l());
+}
+
+/** For `useSyncExternalStore`: changes made here, or in the browser's settings while away. */
+export function subscribePush(listener: () => void): () => void {
+  pushListeners.add(listener);
+  document.addEventListener('visibilitychange', listener);
+  return () => {
+    pushListeners.delete(listener);
+    document.removeEventListener('visibilitychange', listener);
+  };
+}
+
+/** This browser's push status, kept current; null while rendering on the server. */
+export function usePushStatus(): PushStatus | null {
+  return useSyncExternalStore(subscribePush, currentPushStatus, () => null);
+}
+
+/** Why push can't work in this browser, in words. */
+export const PUSH_UNSUPPORTED_TEXT: Record<Exclude<PushSupport['kind'], 'supported'>, string> = {
+  not_configured: 'Push isn’t set up on this server.',
+  insecure: 'Push needs HTTPS.',
+  ios_install_required: 'On iPhone/iPad: Share → Add to Home Screen, then enable push in that app.',
+  unsupported: 'This browser doesn’t support push.',
+};

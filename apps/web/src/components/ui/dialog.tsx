@@ -33,6 +33,8 @@ export function useBackToClose(open: boolean, close: () => void) {
     }, 0);
     const onPop = () => {
       if (!pushed) return;
+      // Back landed on our own entry: an overlay opened over this one went away, not this one.
+      if ((window.history.state as { pocketAgentOverlay?: string } | null)?.pocketAgentOverlay === id) return;
       popped = true;
       closeRef.current();
     };
@@ -55,6 +57,7 @@ export function Modal({
   description,
   children,
   role,
+  header,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -62,6 +65,11 @@ export function Modal({
   description?: ReactNode;
   children: ReactNode;
   role?: 'dialog' | 'alertdialog';
+  /**
+   * Drawn in place of the visible title and description (a step inside the dialog with its own
+   * heading, e.g. a folder being browsed). `title` still names the dialog for screen readers.
+   */
+  header?: ReactNode;
 }) {
   useBackToClose(open, () => onOpenChange(false));
   return (
@@ -79,14 +87,22 @@ export function Modal({
           )}
         >
           <div className="mb-4 flex items-start justify-between gap-4">
-            <div className="min-w-0">
-              <D.Title className="text-base font-semibold">{title}</D.Title>
-              {description ? (
-                <D.Description className="mt-1 text-sm text-muted-foreground">{description}</D.Description>
-              ) : (
+            {header ? (
+              <div className="min-w-0 flex-1">
+                <D.Title className="sr-only">{title}</D.Title>
                 <D.Description className="sr-only">{title}</D.Description>
-              )}
-            </div>
+                {header}
+              </div>
+            ) : (
+              <div className="min-w-0">
+                <D.Title className="text-base font-semibold">{title}</D.Title>
+                {description ? (
+                  <D.Description className="mt-1 text-sm text-muted-foreground">{description}</D.Description>
+                ) : (
+                  <D.Description className="sr-only">{title}</D.Description>
+                )}
+              </div>
+            )}
             <D.Close
               aria-label="Close"
               className="-m-2 grid size-10 shrink-0 place-items-center rounded-md text-muted-foreground outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50"

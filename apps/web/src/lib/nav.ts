@@ -18,6 +18,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
 /**
  * The web app's addresses, in one place:
  *   /chat                                       the chat list (Chats)
+ *   /chat/new?deviceId&path&name                a new chat in a folder
  *   /chat/<id>                                  a chat
  *   /chat/<id>/agents/<toolUseId>               one of its sub-agents
  *   /chat/<id>/agents/<toolUseId>/transcript    that sub-agent's whole transcript
@@ -26,6 +27,9 @@ export const NAV_ITEMS: readonly NavItem[] = [
  */
 export const routes = {
   chats: '/chat',
+  /** A new chat in a folder: its screen counts as an open chat (openChatId gives "new"). */
+  newChat: (place: { deviceId: string; path: string; name: string }) =>
+    `/chat/new?${new URLSearchParams({ deviceId: place.deviceId, path: place.path, name: place.name })}`,
   chat: (id: string) => `/chat/${id}`,
   subagent: (id: string, toolUseId: string) => `/chat/${id}/agents/${encodeURIComponent(toolUseId)}`,
   transcript: (id: string, toolUseId: string) =>

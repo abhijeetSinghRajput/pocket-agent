@@ -28,13 +28,12 @@ import {
 } from '@pocket-agent/protocol';
 import { ArrowUp, Check, ChevronDown, CircleStop, Hand, Lock, Plus, Power, Square, Zap } from 'lucide-react';
 import { DropdownMenu } from 'radix-ui';
-import { createPortal } from 'react-dom';
-import { DraftFiles, type DraftFile } from '@/components/agents/attachments';
+import { DraftFiles } from '@/components/agents/attachments';
+import { DropOverlay, useDraftFiles, useFileDrop } from '@/components/agents/draft-files';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/dialog';
 import { apiRequest } from '@/lib/api';
-import { attachmentProblem, discardAttachment, uploadAttachment } from '@/lib/attachments';
 import { commandError } from '@/lib/commands';
 import { useLiveRefresh } from '@/lib/live';
 import { usePoll } from '@/lib/use-poll';
@@ -126,7 +125,7 @@ function Choice({ name, description }: { name: string; description?: string }) {
 }
 
 /** Like the editor's mode menu: how Claude asks before acting, for turns run from here. */
-function ModePicker({
+export function ModePicker({
   value,
   onChange,
   locked,
@@ -174,7 +173,7 @@ function ModePicker({
   );
 }
 
-function ModelPicker({
+export function ModelPicker({
   models,
   value,
   onChange,
@@ -291,51 +290,6 @@ export function Composer({
   const key = useRef(crypto.randomUUID());
   const box = useRef<HTMLTextAreaElement>(null);
   const picker = useRef<HTMLInputElement>(null);
-  const [drafts, setDrafts] = useState<DraftFile[]>([]);
-  const uploads = useRef(new Map<string, AbortController>());
-  const uploading = drafts.some((d) => d.status === 'uploading');
-
-  /** Removed before sending: stop the upload, and delete what was already stored. */
-  function removeDraft(draftKey: string) {
-    uploads.current.get(draftKey)?.abort();
-    uploads.current.delete(draftKey);
-    const ref = drafts.find((d) => d.key === draftKey)?.ref;
-    if (ref) void discardAttachment(ref.id);
-    setDrafts((d) => d.filter((x) => x.key !== draftKey));
-  }
-  const ready = drafts.filter((d) => d.status === 'ready' && d.ref);
-
-  /** Picked or pasted files start uploading at once; each can be removed before sending. */
-  function addFiles(list: Iterable<File>) {
-    setError(null);
-    const room = maxFiles - drafts.length;
-    const files = [...list];
-    if (files.length > room) setError(`At most ${maxFiles} files per message.`);
-    for (const file of files.slice(0, Math.max(0, room))) {
-      const draftKey = crypto.randomUUID();
-      const problem = attachmentProblem(file);
-      if (problem) {
-        setDrafts((d) => [...d, { key: draftKey, file, status: 'error', error: problem }]);
-        continue;
-      }
-      setDrafts((d) => [...d, { key: draftKey, file, status: 'uploading' }]);
-      const abort = new AbortController();
-      uploads.current.set(draftKey, abort);
-      uploadAttachment(file, abort.signal)
-        .then((ref) => {
-          // Removed while the last step was in flight: don't keep the file.
-          if (abort.signal.aborted) return void discardAttachment(ref.id);
-          setDrafts((d) => d.map((x) => (x.key === draftKey ? { ...x, status: 'ready', ref } : x)));
-        })
-        .catch((err: Error) => {
-          if (abort.signal.aborted) return;
-          setDrafts((d) =>
-            d.map((x) => (x.key === draftKey ? { ...x, status: 'error', error: err.message } : x)),
-          );
-        })
-        .finally(() => uploads.current.delete(draftKey));
-    }
-  }
 
   // Grow with the text, up to a limit (then it scrolls).
   useLayoutEffect(() => {
@@ -349,6 +303,9 @@ export function Composer({
   // disabled and says why (never pretends a message could be delivered).
   const device = useDevice(session.deviceId);
   const maxFiles = attachmentLimit(device?.agentVersion);
+  // Picked or pasted files start uploading at once; each can be removed before sending.
+  const files = useDraftFiles(maxFiles, setError, { keepUploaded: true });
+  const { drafts, ready, uploading } = files;
   // Ended: sending continues the same conversation on the PC, when that's possible.
   const resuming = !!session.endedAt && resumeBlocker(session, device) === null;
   // Files go with the message that continues an ended session when the PC takes them (0.1.6+).
@@ -407,50 +364,7 @@ export function Composer({
   const stopMode = !hasContent && showStop;
 
   // Files dragged anywhere over the chat are attached here (native drag and drop).
-  const [dragging, setDragging] = useState(false);
-  const addRef = useRef<(files: Iterable<File>) => void>(() => undefined);
-  useEffect(() => {
-    if (locked || (resuming && !filesOnResume)) return;
-    let depth = 0;
-    const hasFiles = (e: DragEvent) => !!e.dataTransfer && [...e.dataTransfer.types].includes('Files');
-    const enter = (e: DragEvent) => {
-      if (!hasFiles(e)) return;
-      e.preventDefault();
-      depth += 1;
-      setDragging(true);
-    };
-    const over = (e: DragEvent) => {
-      if (!hasFiles(e)) return;
-      e.preventDefault();
-      e.dataTransfer!.dropEffect = 'copy';
-    };
-    const leave = (e: DragEvent) => {
-      if (!hasFiles(e)) return;
-      depth = Math.max(0, depth - 1);
-      if (!depth) setDragging(false);
-    };
-    const drop = (e: DragEvent) => {
-      if (!hasFiles(e)) return;
-      e.preventDefault();
-      depth = 0;
-      setDragging(false);
-      if (e.dataTransfer?.files.length) addRef.current(e.dataTransfer.files);
-    };
-    window.addEventListener('dragenter', enter);
-    window.addEventListener('dragover', over);
-    window.addEventListener('dragleave', leave);
-    window.addEventListener('drop', drop);
-    return () => {
-      window.removeEventListener('dragenter', enter);
-      window.removeEventListener('dragover', over);
-      window.removeEventListener('dragleave', leave);
-      window.removeEventListener('drop', drop);
-    };
-  }, [locked, resuming, filesOnResume]);
-
-  useEffect(() => {
-    addRef.current = addFiles;
-  });
+  const dragging = useFileDrop(!locked && (!resuming || filesOnResume), files.add);
 
   async function send() {
     // A message can be just files: Claude is then told what they are called.
@@ -487,7 +401,7 @@ export function Composer({
           });
       key.current = crypto.randomUUID();
       setText('');
-      setDrafts([]);
+      files.clear();
       if (command.status === 'Failed') setError(commandError(command));
       onSent();
     } catch (err) {
@@ -552,7 +466,7 @@ export function Composer({
           <span className="sr-only">Send an instruction</span>
         </label>
         <div className="pointer-events-none relative *:pointer-events-auto">
-          <DraftFiles drafts={drafts} onRemove={removeDraft} />
+          <DraftFiles drafts={drafts} onRemove={files.remove} />
           <textarea
             id="instruction"
             ref={box}
@@ -561,10 +475,10 @@ export function Composer({
             onKeyDown={onKey}
             onPaste={(e) => {
               // A screenshot pasted from the clipboard is attached like a picked file.
-              const files = [...e.clipboardData.files];
-              if (!files.length || (resuming && !filesOnResume)) return;
+              const pasted = [...e.clipboardData.files];
+              if (!pasted.length || (resuming && !filesOnResume)) return;
               e.preventDefault();
-              addFiles(files);
+              files.add(pasted);
             }}
             rows={1}
             maxLength={20_000}
@@ -619,7 +533,7 @@ export function Composer({
                   aria-label="Attach files"
                   data-testid="file-input"
                   onChange={(e) => {
-                    if (e.target.files) addFiles(e.target.files);
+                    if (e.target.files) files.add(e.target.files);
                     e.target.value = ''; // the same file can be picked again
                   }}
                 />
@@ -825,28 +739,5 @@ export function EndSessionButton({ session, onDone }: { session: AgentSessionDto
         </div>
       </Modal>
     </>
-  );
-}
-
-/** Shown while files are dragged over the window: drop them anywhere to attach them. */
-function DropOverlay() {
-  const corner = 'absolute size-14 border-primary';
-  // In <body>: a parent with a backdrop filter would otherwise confine a fixed overlay to itself.
-  return createPortal(
-    <div
-      aria-hidden
-      data-testid="drop-overlay"
-      className="content-in pointer-events-none fixed inset-0 z-50 grid place-items-center bg-background/80 backdrop-blur-sm"
-    >
-      <span className={cn(corner, 'top-6 left-6 rounded-tl-3xl border-t-[5px] border-l-[5px]')} />
-      <span className={cn(corner, 'top-6 right-6 rounded-tr-3xl border-t-[5px] border-r-[5px]')} />
-      <span className={cn(corner, 'bottom-6 left-6 rounded-bl-3xl border-b-[5px] border-l-[5px]')} />
-      <span className={cn(corner, 'right-6 bottom-6 rounded-br-3xl border-r-[5px] border-b-[5px]')} />
-      <div className="text-center">
-        <p className="text-3xl font-semibold tracking-tight">Drop files anywhere</p>
-        <p className="mt-2 text-sm text-muted-foreground">Photos, PDFs, documents, code… up to 10 MB each</p>
-      </div>
-    </div>,
-    document.body,
   );
 }

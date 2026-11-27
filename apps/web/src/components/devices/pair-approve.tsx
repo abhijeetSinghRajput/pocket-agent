@@ -28,6 +28,19 @@ const DONE: Partial<Record<PairingRequestDto['status'], { title: string; body: s
  */
 export function PairApprove() {
   const { id } = useParams<{ id: string }>();
+  return (
+    <div className="mx-auto grid max-w-md gap-4 py-6" data-testid="pair-approve">
+      <h1 className="text-xl font-semibold">Connect a PC</h1>
+      <PairRequest id={id} />
+    </div>
+  );
+}
+
+/**
+ * One pairing request: the PC, its check code, Approve / Decline, then the outcome. `onDone` (in
+ * the scanner) shows a Done button in place of the link to Devices.
+ */
+export function PairRequest({ id, onDone }: { id: string; onDone?: () => void }) {
   const fetcher = useCallback(
     (signal: AbortSignal) =>
       apiRequest(`/pairing/requests/${encodeURIComponent(id)}`, PairingRequestResponse, { signal }).then(
@@ -57,8 +70,7 @@ export function PairApprove() {
   const r = state.data;
   const done = r ? DONE[r.status] : undefined;
   return (
-    <div className="mx-auto grid max-w-md gap-4 py-6" data-testid="pair-approve">
-      <h1 className="text-xl font-semibold">Connect a PC</h1>
+    <>
       {state.status === 'loading' && <Card className="h-40 animate-pulse" aria-busy="true" />}
       {state.status === 'error' && (
         <Card>
@@ -91,10 +103,16 @@ export function PairApprove() {
             <div role="status" data-testid="pair-done">
               <p className="font-medium">{done.title}</p>
               <p className="text-sm text-muted-foreground">{done.body}</p>
-              {(r.status === 'paired' || r.status === 'approved') && (
-                <Button asChild variant="outline" className="mt-3">
-                  <Link href="/devices">Go to Devices</Link>
+              {onDone ? (
+                <Button className="mt-3 h-12 w-full rounded-[18px] text-base font-semibold" onClick={onDone}>
+                  Done
                 </Button>
+              ) : (
+                (r.status === 'paired' || r.status === 'approved') && (
+                  <Button asChild variant="outline" className="mt-3">
+                    <Link href="/devices">Go to Devices</Link>
+                  </Button>
+                )
               )}
             </div>
           ) : (
@@ -120,6 +138,6 @@ export function PairApprove() {
           )}
         </Card>
       )}
-    </div>
+    </>
   );
 }

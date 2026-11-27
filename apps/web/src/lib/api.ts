@@ -87,10 +87,13 @@ export const AGENT_DEFAULT_API_URL = 'https://pocket-agent-api.onrender.com';
 /** Installs the PC app (once per computer). */
 export const installCommand = () => `npm install -g ${AGENT_NPM_PACKAGE}`;
 
-/** Connects a PC with a pairing code. `--api` only when this deployment isn't the default server. */
-export function connectCommand(code: string): string {
+/**
+ * Connects a PC: with a pairing code, or without one (the PC then shows a QR code to scan). `--api`
+ * only when this deployment isn't the default server.
+ */
+export function connectCommand(code = ''): string {
   const api = agentApiUrl();
-  return `pocket-agent connect ${code}${api === AGENT_DEFAULT_API_URL ? '' : ` --api ${api}`}`;
+  return `pocket-agent connect${code ? ` ${code}` : ''}${api === AGENT_DEFAULT_API_URL ? '' : ` --api ${api}`}`;
 }
 
 export type HealthResult =

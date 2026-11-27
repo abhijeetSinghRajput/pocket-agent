@@ -12,7 +12,8 @@ import './home.css';
 // screen with a small bounce, then fills with the PC's usage. The widget itself is drawn as the app draws it
 // (apps/mobile/src/widget/usage-widget.tsx): "Claude usage" and the plan, a refresh button, one
 // meter per limit with when it resets, the PC it came from; past 75% amber, past 90% red. The loop
-// ends as it would on a phone: a long press on the widget, Remove.
+// opens on the widget already in place, removes it the way a phone does (a long press on it,
+// Remove), then adds it back, so it ends on the picture it began with.
 //
 
 type W = {
@@ -24,15 +25,16 @@ type W = {
   removeMenu: boolean;
 };
 
+// It starts (and ends) with the widget on the home screen, showing the PC's usage.
 const START: W = {
   press: { on: false, x: 0, y: 0 },
   shortcuts: false,
   drawer: false,
-  placed: false,
-  loaded: false,
+  placed: true,
+  loaded: true,
   removeMenu: false,
 };
-const POSTER: W = { ...START, placed: true, loaded: true };
+const POSTER: W = START;
 
 const USAGE = { session: 81, weekly: 34, model: 19 };
 
@@ -46,22 +48,9 @@ async function longPress(a: Act<W>, target: string, x = 0.5, y = 0.5) {
 }
 
 async function script(a: Act<W>) {
-  await a.wait(600);
-  // Long press on the app icon: its shortcuts
-  await longPress(a, 'app-icon');
-  await a.set({ shortcuts: true });
-  await a.wait(800);
-  // Widgets: the app's widget drawer rises from the bottom
-  await a.click({ at: 'shortcut-widgets', x: 0.7, y: 0.5 });
-  await a.set({ shortcuts: false, drawer: true });
-  await a.wait(1100);
-  // A tap on the widget: the drawer goes and the widget lands on the home screen
-  await a.click({ at: 'widget-preview', x: 0.5, y: 0.5 });
-  await a.set({ drawer: false, placed: true });
-  await a.wait(500);
-  await a.set({ loaded: true });
-  await a.wait(3000);
-  // Done with it: long press on the widget, Remove
+  // The widget as it sits on the home screen
+  await a.wait(1800);
+  // Removing it: long press on the widget, Remove
   await longPress(a, 'widget-spot', 0.5, 0.3);
   await a.set({ removeMenu: true });
   await a.wait(650);
@@ -69,7 +58,21 @@ async function script(a: Act<W>) {
   await a.set({ removeMenu: false, placed: false });
   await a.wait(500);
   await a.snap({ loaded: false });
-  await a.wait(150);
+  await a.wait(700);
+  // Adding it back: long press on the app icon opens its shortcuts
+  await longPress(a, 'app-icon');
+  await a.set({ shortcuts: true });
+  await a.wait(800);
+  // Widgets: the app's widget drawer rises from the bottom
+  await a.click({ at: 'shortcut-widgets', x: 0.7, y: 0.5 });
+  await a.set({ shortcuts: false, drawer: true });
+  await a.wait(1100);
+  // A tap on the widget: the drawer goes and the widget lands on the home screen, then fills
+  await a.click({ at: 'widget-preview', x: 0.5, y: 0.5 });
+  await a.set({ drawer: false, placed: true });
+  await a.wait(500);
+  await a.set({ loaded: true });
+  await a.wait(1600);
 }
 
 function tone(v: number) {

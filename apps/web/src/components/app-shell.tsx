@@ -1,8 +1,8 @@
 'use client';
 
 import type { UserDto } from '@pocket-agent/protocol';
-import { Moon, Sun } from 'lucide-react';
-import { BellIcon } from '@/components/nav-icons';
+import { Bell, Moon, Sun, type LucideIcon } from 'lucide-react';
+
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -57,7 +57,7 @@ function NotificationBell() {
       data-testid="notification-bell"
       className="relative grid size-9 place-items-center rounded-md text-muted-foreground outline-none hover:bg-accent hover:text-accent-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 aria-[current=page]:text-primary"
     >
-      <BellIcon className="size-[18px]" aria-hidden />
+      <Bell className="size-[18px]" aria-hidden />
       {n > 0 && (
         <span
           aria-hidden
@@ -169,7 +169,7 @@ function Sidebar({ pathname, user }: { pathname: string; user: UserDto }) {
                 active ? 'text-accent-foreground' : 'hover:bg-accent/50',
               )}
             >
-              <Icon className={cn('size-[18px]', active ? 'text-primary' : 'text-foreground')} aria-hidden />
+              <NavIcon icon={Icon} active={active} className="size-[18px]" />
               {label}
               {href === '/approvals' && <PendingBadge />}
             </Link>
@@ -198,7 +198,35 @@ function MobileTopBar() {
 }
 
 /** The bell as a bottom-nav item (phones). */
-const BELL = { href: '/notifications', label: 'Alerts', icon: BellIcon } as const;
+const BELL = { href: '/notifications', label: 'Alerts', icon: Bell } as const;
+
+/**
+ * A nav icon as the app draws it: the outline in one tone and the inside in a soft wash of the
+ * same tone, grey when idle and the accent (a touch bolder and bigger) when open.
+ */
+function NavIcon({
+  icon: Icon,
+  active,
+  className,
+}: {
+  icon: LucideIcon;
+  active: boolean;
+  className?: string;
+}) {
+  return (
+    <Icon
+      aria-hidden
+      fill="currentColor"
+      fillOpacity={active ? 0.24 : 0.14}
+      strokeWidth={active ? 2.3 : 2}
+      className={cn(
+        'transition-transform duration-200 ease-(--ease-out)',
+        active ? 'scale-106 text-primary' : 'text-muted-foreground',
+        className,
+      )}
+    />
+  );
+}
 
 function UnreadDot() {
   const n = useNotifications(1).state.data?.unread ?? 0;
@@ -217,31 +245,32 @@ function UnreadDot() {
 function BottomNav({ pathname, user }: { pathname: string; user: UserDto }) {
   const itemClass = (active: boolean) =>
     cn(
-      'flex min-h-14 flex-1 flex-col items-center justify-center gap-1 text-[11px] font-medium text-muted-foreground outline-none transition-colors focus-visible:bg-accent active:bg-accent/60',
-      active && 'text-primary',
+      'flex min-h-16 flex-1 flex-col items-center gap-1 pt-2 text-[11px] leading-[14px] text-muted-foreground outline-none focus-visible:bg-accent',
+      active ? 'font-semibold text-primary' : 'font-medium',
     );
   const profileActive = PROFILE_ROUTES.some((h) => isActive(pathname, h));
   const unread = useNotifications(1).state.data?.unread ?? 0;
   const nav = useRef<HTMLElement>(null);
   const { rect, moving } = useFollow(nav, '[aria-current="page"]', pathname);
-  const BAR = 36;
+  const PILL = 58;
 
   return (
     <nav
       ref={nav}
       aria-label="Main"
       data-testid="bottom-nav"
-      className="fixed inset-x-0 bottom-0 z-30 flex border-t bg-card/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-md lg:hidden"
+      className="fixed inset-x-0 bottom-0 z-30 flex border-t bg-sidebar pb-[env(safe-area-inset-bottom)] lg:hidden"
     >
-      {/* Flat against the top edge, rounded underneath; slides to the current section. */}
+      {/* As in the app: a soft accent pill behind the open section's icon, sliding to it. The
+          avatar has its own ring instead, so the pill fades out on Profile. */}
       <span
         aria-hidden
         data-testid="nav-indicator"
-        className="pointer-events-none absolute top-0 left-0 h-[3px] rounded-b-full bg-primary"
+        className="pointer-events-none absolute top-2 left-0 h-8 rounded-full bg-primary/14"
         style={{
-          width: BAR,
-          opacity: rect ? 1 : 0,
-          transform: `translateX(${rect ? rect.x + rect.w / 2 - BAR / 2 : 0}px)`,
+          width: PILL,
+          opacity: rect && !profileActive ? 1 : 0,
+          transform: `translateX(${rect ? rect.x + rect.w / 2 - PILL / 2 : 0}px)`,
           transition: moving ? 'transform 320ms var(--ease-move), opacity 160ms' : 'none',
         }}
       />
@@ -261,14 +290,8 @@ function BottomNav({ pathname, user }: { pathname: string; user: UserDto }) {
               : {})}
             className={itemClass(active)}
           >
-            <span className="relative">
-              <Icon
-                className={cn(
-                  'size-5 transition-transform duration-300 ease-(--ease-out)',
-                  active ? 'scale-110 text-primary' : 'text-foreground',
-                )}
-                aria-hidden
-              />
+            <span className="relative grid h-8 place-items-center">
+              <NavIcon icon={Icon} active={active} className="size-[21px]" />
               {href === '/approvals' && <PendingDot />}
               {href === BELL.href && <UnreadDot />}
             </span>
@@ -277,7 +300,7 @@ function BottomNav({ pathname, user }: { pathname: string; user: UserDto }) {
         );
       })}
       {/* Account, bottom right: just the picture. Settings live inside it. */}
-      <div className="flex min-h-14 flex-1 items-center justify-center">
+      <div className="flex min-h-16 flex-1 items-start justify-center pt-2">
         <ProfileLink user={user} active={profileActive} className="size-11" />
       </div>
     </nav>

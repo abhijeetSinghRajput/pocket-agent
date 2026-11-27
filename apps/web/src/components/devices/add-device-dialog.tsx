@@ -1,9 +1,11 @@
 'use client';
 
 import { CheckCircle2 } from 'lucide-react';
+import { useEffect } from 'react';
 import { ConnectSteps } from '@/components/devices/connect-steps';
 import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/dialog';
+import { playSound } from '@/components/ui/sound';
 import { usePairing } from '@/components/devices/use-pairing';
 
 export function AddDeviceDialog({
@@ -18,6 +20,11 @@ export function AddDeviceDialog({
   onPaired: () => void;
 }) {
   const { step, now, regenerate: createCode } = usePairing({ active: open, knownDeviceIds, onPaired });
+  const paired = step.kind === 'paired';
+  // The PC is in: the same sound as the app.
+  useEffect(() => {
+    if (open && paired) playSound('landed');
+  }, [open, paired]);
 
   return (
     <Modal

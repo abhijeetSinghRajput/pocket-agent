@@ -1,17 +1,16 @@
-import type { ComponentType, SVGProps } from 'react';
-import { ChatIcon, LaptopIcon, ShieldCheckIcon } from '@/components/nav-icons';
+import { MessageCircle, MonitorSmartphone, ShieldCheck, type LucideIcon } from 'lucide-react';
 
 export interface NavItem {
   href: string;
   label: string;
-  icon: ComponentType<SVGProps<SVGSVGElement>>;
+  icon: LucideIcon;
 }
 
-/** Chats is home. Settings, notifications and sign-out live in the profile menu. */
+/** Chats is home. Settings, notifications and sign-out live in the profile menu. Icons as in the app. */
 export const NAV_ITEMS: readonly NavItem[] = [
-  { href: '/chat', label: 'Chats', icon: ChatIcon },
-  { href: '/approvals', label: 'Approvals', icon: ShieldCheckIcon },
-  { href: '/devices', label: 'Devices', icon: LaptopIcon },
+  { href: '/chat', label: 'Chats', icon: MessageCircle },
+  { href: '/approvals', label: 'Approvals', icon: ShieldCheck },
+  { href: '/devices', label: 'Devices', icon: MonitorSmartphone },
 ];
 
 /** The session whose chat is open (`/agents/<id>`), if any. */

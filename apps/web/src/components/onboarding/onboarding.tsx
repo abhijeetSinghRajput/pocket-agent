@@ -4,11 +4,12 @@ import type { DeviceDto, UserDto } from '@pocket-agent/protocol';
 import { ArrowLeft, Download, KeyRound, LogOut, Monitor, Moon, Plus, Sun, Zap } from 'lucide-react';
 import Image from 'next/image';
 import { DropdownMenu } from 'radix-ui';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ConnectSteps } from '@/components/devices/connect-steps';
 import { usePairing } from '@/components/devices/use-pairing';
 import { useSmoothTheme } from '@/components/theme';
 import { Button } from '@/components/ui/button';
+import { playSound } from '@/components/ui/sound';
 import { UserAvatar } from '@/components/user-avatar';
 import { useAuth } from '@/lib/auth';
 import { cn } from '@/lib/utils';
@@ -159,6 +160,7 @@ function Welcome({ firstName, onStart }: { firstName: string | undefined; onStar
 
 /** The PC is online: a big tick that draws itself, then the way into the app. */
 function Connected({ device, onDone }: { device: DeviceDto; onDone: () => void }) {
+  useEffect(() => playSound('landed'), []);
   return (
     <div
       className="flex min-h-dvh flex-col items-center justify-center px-6 text-center"

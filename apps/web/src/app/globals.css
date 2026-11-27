@@ -32,28 +32,29 @@
   --shell-fg-faint: #6d6d6d;
 }
 
+/* Dark: the app's own palette (apps/mobile/src/lib/theme.ts), a neutral grey ladder on black. */
 .dark {
-  --background: oklch(0.13 0.004 270);
-  --foreground: oklch(0.95 0.003 270);
-  --card: hsl(240 4% 20%);
+  --background: #000000;
+  --foreground: #f2f2f2;
+  --card: #202020;
   --card-foreground: var(--foreground);
-  --popover: hsl(240 4% 23%);
+  --popover: #262626;
   --popover-foreground: var(--foreground);
   --primary: oklch(0.72 0.17 50);
-  --primary-foreground: oklch(0.16 0.004 270);
-  --secondary: hsl(240 4% 25%);
-  --secondary-foreground: oklch(0.92 0.003 270);
-  --muted: hsl(240 4% 26%);
-  --muted-foreground: oklch(0.76 0.01 270);
+  --primary-foreground: #0a0a0a;
+  --secondary: #2e2e2e;
+  --secondary-foreground: #e6e6e6;
+  --muted: #2e2e2e;
+  --muted-foreground: #a6a6a6;
   --accent: oklch(0.38 0.045 45);
   --accent-foreground: oklch(0.9 0.05 55);
   --destructive: oklch(0.65 0.19 25);
-  --border: hsl(240 4% 29%);
-  --input: hsl(240 4% 31%);
+  --border: #333333;
+  --input: #3a3a3a;
   --ring: oklch(0.72 0.17 50);
   --success: oklch(0.72 0.15 155);
   --warning: oklch(0.8 0.14 80);
-  --sidebar: hsl(240 5% 12%);
+  --sidebar: #121212;
   --shell-fg-muted: #d4d4d4;
   --shell-fg-faint: #8e8e8e;
 }
@@ -676,21 +677,20 @@
     --raise-shadow-pressed: inset 0 1px 3px rgb(0 0 0 / 0.2);
   }
 
-  .raise-neutral {
-    --raise-bg: linear-gradient(to bottom, var(--card), color-mix(in oklab, var(--card) 94%, black));
-    --raise-edge: color-mix(in oklab, var(--foreground) 14%, transparent);
-    --raise-shadow:
-      inset 0 1px 0 rgb(255 255 255 / 0.7), inset 0 -1px 0 rgb(0 0 0 / 0.05), 0 1px 2px rgb(0 0 0 / 0.08),
-      0 2px 6px -3px rgb(0 0 0 / 0.12);
-    --raise-shadow-pressed: inset 0 1px 2px rgb(0 0 0 / 0.08);
+  /* Grey buttons are flat, as in the app: secondary a plain fill, outline a hairline edge, no
+     gradient or shadow; pressing still squeezes the surface. */
+  .raise-flat {
+    --raise-bg: var(--secondary);
   }
 
-  .dark .raise-neutral {
-    --raise-bg: linear-gradient(to bottom, color-mix(in oklab, var(--card) 88%, white), var(--card));
-    --raise-edge: rgb(0 0 0 / 0.6);
-    --raise-shadow:
-      inset 0 1px 0 rgb(255 255 255 / 0.08), 0 1px 1px rgb(0 0 0 / 0.4), 0 3px 8px -3px rgb(0 0 0 / 0.5);
-    --raise-shadow-pressed: inset 0 1px 3px rgb(0 0 0 / 0.4);
+  .raise-outline {
+    --raise-edge: var(--border);
+  }
+
+  .raise-flat:hover::before,
+  .raise-outline:hover::before {
+    filter: none;
+    background: color-mix(in oklab, var(--foreground) 6%, var(--raise-bg, transparent));
   }
 
   /* Ink: the near-black raised button, for the one call to action on a light ground */

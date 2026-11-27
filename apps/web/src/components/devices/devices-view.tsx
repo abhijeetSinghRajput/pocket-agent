@@ -71,7 +71,7 @@ function AwayMode({ device }: { device: DeviceDto }) {
           <span
             aria-hidden
             className={cn(
-              'size-5 rounded-full bg-background shadow-xs transition-transform',
+              'size-5 rounded-full bg-white shadow-xs transition-transform',
               on ? 'translate-x-5' : 'translate-x-0',
             )}
           />

@@ -274,7 +274,7 @@ export default function HomePage() {
 
         <section id="trust" className="scroll-mt-20 border-b">
           <div className="mx-auto max-w-6xl px-5 py-20 sm:px-8 sm:py-28">
-            <div className="grid items-start gap-14 lg:grid-cols-[400px_1fr] lg:gap-20">
+            <div className="grid items-center gap-14 lg:grid-cols-[400px_1fr] lg:gap-20">
               <div className="min-w-0 lg:order-2">
                 <h2 className="display text-5xl leading-[0.9] uppercase sm:text-7xl lg:text-6xl">
                   In control, at a glance

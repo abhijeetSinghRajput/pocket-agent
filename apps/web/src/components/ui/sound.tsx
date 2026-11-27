@@ -13,6 +13,134 @@ const DEFAULT_VOLUME = 0.5;
 const PATCH = {
   name: 'kobra-ui',
   sounds: {
+    // The app's own sounds (apps/mobile/scripts/make-sounds.py), so web and app sound the same.
+    // Switches and segmented choices: a quick paper-feed ratchet.
+    print: {
+      layers: [
+        {
+          source: { type: 'noise', color: 'white' },
+          filter: { type: 'bandpass', frequency: 5200, resonance: 4 },
+          envelope: { attack: 0.001, decay: 0.005 },
+          gain: 0.12,
+          delay: 0.0,
+        },
+        {
+          source: { type: 'noise', color: 'white' },
+          filter: { type: 'bandpass', frequency: 4800, resonance: 4 },
+          envelope: { attack: 0.001, decay: 0.005 },
+          gain: 0.12,
+          delay: 0.022,
+        },
+        {
+          source: { type: 'noise', color: 'white' },
+          filter: { type: 'bandpass', frequency: 4400, resonance: 4 },
+          envelope: { attack: 0.001, decay: 0.005 },
+          gain: 0.12,
+          delay: 0.044,
+        },
+        {
+          source: { type: 'noise', color: 'white' },
+          filter: { type: 'bandpass', frequency: 5200, resonance: 4 },
+          envelope: { attack: 0.001, decay: 0.005 },
+          gain: 0.12,
+          delay: 0.066,
+        },
+        {
+          source: { type: 'noise', color: 'white' },
+          filter: { type: 'bandpass', frequency: 4800, resonance: 4 },
+          envelope: { attack: 0.001, decay: 0.005 },
+          gain: 0.12,
+          delay: 0.088,
+        },
+        {
+          source: { type: 'noise', color: 'white' },
+          filter: { type: 'bandpass', frequency: 4400, resonance: 4 },
+          envelope: { attack: 0.001, decay: 0.005 },
+          gain: 0.12,
+          delay: 0.11,
+        },
+        {
+          source: { type: 'noise', color: 'white' },
+          filter: { type: 'bandpass', frequency: 5200, resonance: 4 },
+          envelope: { attack: 0.001, decay: 0.005 },
+          gain: 0.12,
+          delay: 0.132,
+        },
+        {
+          source: { type: 'noise', color: 'white' },
+          filter: { type: 'bandpass', frequency: 4800, resonance: 4 },
+          envelope: { attack: 0.001, decay: 0.005 },
+          gain: 0.12,
+          delay: 0.154,
+        },
+        {
+          source: { type: 'noise', color: 'white' },
+          filter: { type: 'bandpass', frequency: 4400, resonance: 4 },
+          envelope: { attack: 0.001, decay: 0.005 },
+          gain: 0.12,
+          delay: 0.176,
+        },
+        {
+          source: { type: 'noise', color: 'white' },
+          filter: { type: 'bandpass', frequency: 5200, resonance: 4 },
+          envelope: { attack: 0.001, decay: 0.005 },
+          gain: 0.12,
+          delay: 0.198,
+        },
+        {
+          source: { type: 'noise', color: 'white' },
+          filter: { type: 'bandpass', frequency: 4800, resonance: 4 },
+          envelope: { attack: 0.001, decay: 0.005 },
+          gain: 0.12,
+          delay: 0.22,
+        },
+        {
+          source: { type: 'noise', color: 'white' },
+          filter: { type: 'bandpass', frequency: 4400, resonance: 4 },
+          envelope: { attack: 0.001, decay: 0.005 },
+          gain: 0.12,
+          delay: 0.242,
+        },
+      ],
+    },
+    // The PC came online: a rising glide, then three notes up and a shimmer.
+    landed: {
+      layers: [
+        {
+          source: { type: 'triangle', frequency: { start: 330, end: 620 } },
+          filter: { type: 'lowpass', frequency: 1400 },
+          envelope: { attack: 0.03, decay: 0.09 },
+          gain: 0.12,
+        },
+        {
+          source: { type: 'sine', frequency: 784 },
+          filter: { type: 'lowpass', frequency: 2600 },
+          envelope: { attack: 0.004, decay: 0.116 },
+          gain: 0.26,
+          delay: 0.07,
+        },
+        {
+          source: { type: 'sine', frequency: 1047 },
+          filter: { type: 'lowpass', frequency: 2800 },
+          envelope: { attack: 0.004, decay: 0.126 },
+          gain: 0.26,
+          delay: 0.14,
+        },
+        {
+          source: { type: 'sine', frequency: 1319 },
+          filter: { type: 'lowpass', frequency: 3000 },
+          envelope: { attack: 0.005, decay: 0.515 },
+          gain: 0.28,
+          delay: 0.21,
+        },
+        {
+          source: { type: 'sine', frequency: 2638 },
+          envelope: { attack: 0.008, decay: 0.312 },
+          gain: 0.05,
+          delay: 0.215,
+        },
+      ],
+    },
     tap: {
       source: { type: 'sine', frequency: 1300, fm: { ratio: 0.5, depth: 100 } },
       envelope: { attack: 0, decay: 0.015, sustain: 0, release: 0.005 },
@@ -225,6 +353,8 @@ export type SoundName = keyof (typeof PATCH)['sounds'];
 type Cue = { sound: SoundName; detune?: number; velocity?: number };
 
 const JITTER: Record<SoundName, number> = {
+  print: 0,
+  landed: 0,
   tap: 26,
   select: 22,
   toggleOn: 14,
@@ -256,6 +386,12 @@ function jitter(cents: number) {
 type Patch = { play: (name: string, opts?: object) => unknown };
 
 let audioWarm = false;
+
+/** Plays a sound now (while the sound effects are on and not muted), for moments no tap marks. */
+let playing: ((sound: SoundName) => void) | null = null;
+export function playSound(sound: SoundName) {
+  playing?.(sound);
+}
 
 function play(patch: Patch, cue: Cue) {
   const sound = () =>
@@ -301,15 +437,6 @@ const INTERACTIVE =
 const TEXT_ENTRY =
   'input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), textarea, [contenteditable]';
 
-function isOn(el: Element) {
-  if (el instanceof HTMLInputElement) return el.checked;
-  return (
-    el.getAttribute('aria-checked') === 'true' ||
-    el.getAttribute('aria-pressed') === 'true' ||
-    el.getAttribute('data-checked') !== null
-  );
-}
-
 function classify(el: HTMLElement): Cue | null {
   const slot = el.dataset.slot ?? '';
 
@@ -319,10 +446,10 @@ function classify(el: HTMLElement): Cue | null {
   if (
     TOGGLE_SLOTS.has(slot) ||
     el.matches(
-      'input[type="checkbox"], input[type="radio"], [aria-pressed], [role="menuitemcheckbox"], [role="menuitemradio"]',
+      'input[type="checkbox"], input[type="radio"], [role="switch"], [aria-pressed], [role="menuitemcheckbox"], [role="menuitemradio"]',
     )
   ) {
-    return { sound: isOn(el) ? 'toggleOff' : 'toggleOn' };
+    return { sound: 'print' };
   }
 
   if (el.dataset.variant === 'destructive') return { sound: 'destructive' };
@@ -365,6 +492,8 @@ function soundFor(target: Element, keyed = false): Cue | null {
 
   let el = labeled.closest<HTMLElement>(INTERACTIVE);
   while (el) {
+    // Silent on purpose (a segmented choice that is already selected).
+    if (el.dataset.sound === 'none') return null;
     if (el.matches(':disabled, [aria-disabled="true"], [data-disabled]')) {
       return { sound: 'blocked' };
     }
@@ -404,6 +533,14 @@ function SoundEffectListener() {
     wasMuted.current = muted;
     if (cameBack) play(patch, { sound: 'swoosh' });
   }, [muted, patch]);
+
+  useEffect(() => {
+    if (!patch.ready) return;
+    playing = (sound) => play(patch, { sound });
+    return () => {
+      playing = null;
+    };
+  }, [patch]);
 
   useEffect(() => {
     if (!patch.ready) return;

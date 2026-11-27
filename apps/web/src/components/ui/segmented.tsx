@@ -100,6 +100,7 @@ export function Segmented<T extends string>({
             role={as}
             {...(as === 'radio' ? { 'aria-checked': selected } : { 'aria-selected': selected })}
             data-selected={selected}
+            data-sound={selected ? 'none' : 'print'}
             onClick={() => onChange(v)}
             className={cn(
               'relative z-10 inline-flex h-9 items-center gap-2 rounded-lg px-3.5 text-sm font-medium outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 sm:h-8',

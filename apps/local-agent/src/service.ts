@@ -48,6 +48,7 @@ import { CodexSessions } from './providers/codex/sessions.js';
 import { readUsage } from './providers/claude-code/usage.js';
 import { readClaudeAccount } from './providers/claude-code/account.js';
 import os from 'node:os';
+import { watch as watch_, type FSWatcher } from 'node:fs';
 import { SessionRegistry, type SessionEventOut } from './sessions/registry.js';
 
 export interface ServiceOptions {
@@ -85,6 +86,9 @@ export interface ServiceOptions {
  * The running Local Agent: backend link + reliable outbox + session registry + Claude Code
  * integration (hooks, discovery, managed sessions) + remote commands + the local endpoint.
  */
+/** How long a sign-in file must be quiet before the agent is re-checked. */
+const SIGN_IN_SETTLE_MS = 3_000;
+
 export class AgentService {
   readonly outbox = new Outbox<SessionEventOut>();
   readonly registry: SessionRegistry;
@@ -128,6 +132,9 @@ export class AgentService {
   private agents: OtherAgent[] = [];
   /** The account Claude Code is signed in with on this PC (null: not known). */
   private claudeAccount: AgentAccount | null = null;
+  /** Watches on Codex's and Claude's sign-in files, so a new sign-in reaches the app in seconds. */
+  private signInWatchers: FSWatcher[] = [];
+  private signInTimers = new Map<string, NodeJS.Timeout>();
   private agentsTimer: NodeJS.Timeout | null = null;
 
   constructor(private readonly opts: ServiceOptions) {
@@ -437,6 +444,53 @@ export class AgentService {
     this.link.send(this.settingsEvent());
   }
 
+  /**
+   * Signing in to Codex or Claude Code (or switching account) on the PC rewrites a file of theirs
+   * (~/.codex/auth.json, ~/.claude.json): re-check just that agent a moment after it changes, so
+   * the app shows the new account within seconds instead of at the next 5-minute check. Bursts of
+   * writes count once; nothing is sent unless the account (or Codex's report) really changed.
+   */
+  private watchSignIns(): void {
+    const home = os.homedir();
+    const watch = (dir: string, file: string, key: string, run: () => Promise<void>) => {
+      try {
+        const w = watch_(dir, { persistent: false }, (_event, name) => {
+          if (name !== null && name !== file) return;
+          clearTimeout(this.signInTimers.get(key));
+          this.signInTimers.set(
+            key,
+            setTimeout(() => void run().catch(() => undefined), SIGN_IN_SETTLE_MS),
+          );
+        });
+        w.on('error', () => w.close());
+        this.signInWatchers.push(w);
+      } catch {
+        // The folder isn't there (the agent isn't installed): the 5-minute check still covers it.
+      }
+    };
+    watch(home, '.claude.json', 'claude', () => this.refreshClaudeAccount());
+    watch(path.join(home, '.codex'), 'auth.json', 'codex', () => this.refreshCodex());
+  }
+
+  private async refreshClaudeAccount(): Promise<void> {
+    const account = await readClaudeAccount(os.homedir());
+    if (JSON.stringify(account) === JSON.stringify(this.claudeAccount)) return;
+    this.claudeAccount = account;
+    this.link.send(this.settingsEvent());
+  }
+
+  private async refreshCodex(): Promise<void> {
+    const codex =
+      this.opts.codex || findCodex()
+        ? await detectCodex(this.opts.codex ?? spawnAppServer, this.opts.agentVersion, this.opts.log)
+        : null;
+    const agents = [...this.agents.filter((a) => a.provider !== 'codex'), ...(codex ? [codex] : [])];
+    const before = JSON.stringify(this.agents.find((a) => a.provider === 'codex') ?? null);
+    if (JSON.stringify(codex) === before) return;
+    this.agents = agents;
+    this.link.send(this.settingsEvent());
+  }
+
   /** Asks Claude Code which models it offers, then tells the backend (the app's model picker). */
   private async loadModels(): Promise<void> {
     const models = await listModels(this.opts.query, os.homedir());
@@ -492,6 +546,7 @@ export class AgentService {
       // Codex installed or signed in later shows up within a few minutes.
       void this.loadAgents();
       this.agentsTimer = setInterval(() => void this.loadAgents(), 5 * 60_000);
+      this.watchSignIns();
     }
   }
 
@@ -512,6 +567,8 @@ export class AgentService {
     if (this.expiryTimer) clearInterval(this.expiryTimer);
     if (this.usageTimer) clearInterval(this.usageTimer);
     if (this.agentsTimer) clearInterval(this.agentsTimer);
+    for (const w of this.signInWatchers) w.close();
+    for (const t of this.signInTimers.values()) clearTimeout(t);
     this.approvals.cancelAll();
     this.wake.stopAll();
     await this.managed.stopAll();
